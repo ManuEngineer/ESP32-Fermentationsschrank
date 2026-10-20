@@ -1921,9 +1921,9 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(completeBody(response).find("const U=true") !=
                      std::string::npos);
-    TEST_ASSERT_TRUE(
-        completeBody(response).find("document.documentElement.lang=lc") !=
-        std::string::npos);
+    TEST_ASSERT_TRUE(completeBody(response).find(
+                         "document.documentElement.lang=sw.value=lc") !=
+                     std::string::npos);
     // The raw JSON placeholder is gone; the board replaces it.
     TEST_ASSERT_TRUE(completeBody(response).find("id=\"board\"") !=
                      std::string::npos);
@@ -3348,10 +3348,10 @@ size_t occurrences(const std::string& text, const std::string& needle) {
     return count;
 }
 
-// Owner limit of the web shell (Issue #27 standby-information slice, D1 = D:
-// at most 11264 bytes, one time) and the required reserve below it, including
+// Owner limit of the web shell (Issue #27 language-selection slice, D1 = A:
+// at most 11456 bytes, one time) and the required reserve below it, including
 // the 19 byte reserve for the widest mutation sequence.
-constexpr size_t kShellLimit = 11264U;
+constexpr size_t kShellLimit = 11456U;
 constexpr size_t kShellMinimumReserve = 128U;
 
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
@@ -3415,11 +3415,17 @@ void test_unprovisioned_shell_explains_local_release_and_creates_no_session() {
     // The local-release hint is bound to the error code, not to every 403
     // (a rejected origin must not send the user to the device).
     TEST_ASSERT_TRUE(
-        contains(body, "j.error==='provisioning-not-allowed'?T.na"));
+        contains(body, "j.error==='provisioning-not-allowed'?'na'"));
     TEST_ASSERT_FALSE(contains(body, "r.status===403"));
-    TEST_ASSERT_TRUE(contains(body, "r.status===409?T.ap"));
-    TEST_ASSERT_TRUE(contains(body, "r.status===422?T.ic"));
-    TEST_ASSERT_TRUE(contains(body, "j.error==='recovery-required'?T.rc"));
+    // Every message goes through sm(): the page keeps the message key and
+    // re-renders it from the table when the language changes.
+    TEST_ASSERT_TRUE(
+        contains(body, "function sm(k){M=k;q('m').textContent=T[k];}"));
+    TEST_ASSERT_TRUE(contains(body, "q('m').textContent=M?T[M]:'';"));
+    TEST_ASSERT_FALSE(contains(body, "q('m').textContent=T."));
+    TEST_ASSERT_TRUE(contains(body, "r.status===409?'ap'"));
+    TEST_ASSERT_TRUE(contains(body, "r.status===422?'ic'"));
+    TEST_ASSERT_TRUE(contains(body, "j.error==='recovery-required'?'rc'"));
     TEST_ASSERT_TRUE(contains(body, "release web setup on the device first"));
     TEST_ASSERT_TRUE(contains(body, "am Geraet freigeben"));
     TEST_ASSERT_TRUE(contains(body, "en el equipo"));
@@ -3441,7 +3447,11 @@ void test_unprovisioned_shell_texts_are_complete_in_all_locales() {
     TEST_ASSERT_TRUE(contains(body, "de:{"));
     TEST_ASSERT_TRUE(contains(body, ",en:{"));
     TEST_ASSERT_TRUE(contains(body, ",es:{"));
-    TEST_ASSERT_TRUE(contains(body, "T=L[g]||L.en"));
+    // The language is chosen by the validated code (plan a671c33), not by any
+    // two letter table key.
+    TEST_ASSERT_TRUE(contains(body, "ok=/^(de|en|es)$/"));
+    TEST_ASSERT_TRUE(contains(body, "T=L[c]"));
+    TEST_ASSERT_FALSE(contains(body, "L[g]"));
 }
 
 std::string authenticatedShell(ComposedFixture& fixture,
@@ -3466,7 +3476,13 @@ void test_shell_run_controls_text_contract() {
             1U, occurrences(body, std::string("data-a=\"") + action + "\""));
     }
     TEST_ASSERT_FALSE(contains(body, "confirm("));
-    TEST_ASSERT_FALSE(contains(body, "localStorage"));
+    // The only browser storage is the validated language code (plan a671c33):
+    // one read and one guarded write of localStorage.lang; no cookie and no
+    // session storage.
+    TEST_ASSERT_EQUAL_UINT32(2U, occurrences(body, "localStorage"));
+    TEST_ASSERT_EQUAL_UINT32(2U, occurrences(body, "localStorage.lang"));
+    TEST_ASSERT_FALSE(contains(body, "sessionStorage"));
+    TEST_ASSERT_FALSE(contains(body, "document.cookie"));
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "/internal/ui/run"));
     TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
     TEST_ASSERT_FALSE(contains(body, "X-Mutation-Seq"));
@@ -3768,7 +3784,8 @@ void test_dashboard_shell_texts_are_complete_in_all_locales() {
     }
     // Value order de, en, es; English fallback is kept (lc falls back to 'en').
     TEST_ASSERT_TRUE(contains(body, "{de:0,en:1,es:2}[lc]"));
-    TEST_ASSERT_TRUE(contains(body, "lc=/^(de|en|es)$/.test(g)?g:'en'"));
+    TEST_ASSERT_TRUE(contains(body, "ok=/^(de|en|es)$/"));
+    TEST_ASSERT_TRUE(contains(body, "lc=ok.test(c)?c:'en'"));
     // The warning text of the disabled mode stays as before.
     TEST_ASSERT_TRUE(contains(body, "Password protection is disabled"));
 }
@@ -3889,6 +3906,71 @@ void installActiveRunForStatus(FermentationApplication& application,
 // check, application snapshot with the UI refresh tracker, encoding, response
 // takeover), measured over operator new and cJSON. The encoder-only window is
 // in test_run_detail_projection. Host measurement, not an ESP32 heap proof.
+void test_language_selector_is_in_every_shell_state_without_server_state() {
+    const std::string selector =
+        "<select id=lang aria-label=Language><option value=de>Deutsch<option "
+        "value=en>English<option value=es>Espa\xC3\xB1ol</select>";
+    const auto check = [&](const std::string& body) {
+        TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "<select id=lang"));
+        TEST_ASSERT_TRUE(contains(body, selector.c_str()));
+        TEST_ASSERT_TRUE(body.find(selector) < body.find("<h1>"));
+        // Exactly the three codes, validated and stored only in the browser.
+        TEST_ASSERT_TRUE(contains(body, "ok=/^(de|en|es)$/"));
+        TEST_ASSERT_TRUE(contains(body, "localStorage.lang"));
+        TEST_ASSERT_FALSE(contains(body, "sessionStorage"));
+        TEST_ASSERT_FALSE(contains(body, "document.cookie"));
+        TEST_ASSERT_FALSE(contains(body, "navigator.languages"));
+    };
+    {
+        ComposedFixture fixture;  // setup shell (unprovisioned)
+        check(shellBody(fixture));
+    }
+    {
+        ComposedFixture fixture;  // protected: anonymous and authenticated
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        check(shellBody(fixture));
+        const auto session = loginComposed(fixture);
+        check(authenticatedShell(fixture, session.cookie));
+        // No server-side language state: no language cookie, no extra header.
+        auto request = makeAuthenticatedRequest("GET", "/", session.cookie);
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    }
+    {
+        ComposedFixture fixture;  // password protection disabled
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::setWebPasswordEnabled(
+                fixture.application, false));
+        auto request = makeWebRequest("GET", "/");
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        check(completeBody(response));
+        TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
+        TEST_ASSERT_FALSE(response.metadata.setCookie->find("lang") !=
+                          std::string::npos);
+    }
+}
+
+void test_language_choice_never_reaches_the_api_or_the_polling_contract() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+    // The switch re-renders locally: same three polling paths, same single
+    // interval and the unchanged mutation headers; no request in sl().
+    TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
+    TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "setInterval("));
+    TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
+    TEST_ASSERT_TRUE(
+        contains(body, "sw.onchange=()=>{sl(sw.value);dr();ui();"));
+    TEST_ASSERT_TRUE(contains(body, "try{localStorage.lang=lc}catch(e){}"));
+    TEST_ASSERT_TRUE(contains(body, "b[X]=K===k?T.sure:T[k]+"));
+    // The labels of the selector are not translated and carry no table key.
+    TEST_ASSERT_FALSE(contains(body, "language:["));
+}
+
 void test_shell_device_info_is_bound_to_the_status_codec() {
     ComposedFixture fixture;
     const auto body = loggedInShell(fixture);
@@ -5043,6 +5125,10 @@ int main() {
     RUN_TEST(test_shell_start_flow_text_contract);
     RUN_TEST(
         test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit);
+    RUN_TEST(
+        test_language_selector_is_in_every_shell_state_without_server_state);
+    RUN_TEST(
+        test_language_choice_never_reaches_the_api_or_the_polling_contract);
     RUN_TEST(test_shell_run_controls_text_contract);
     RUN_TEST(test_shell_action_availability_and_confirmation_binding_contract);
     RUN_TEST(test_shell_embeds_mutation_sequence_per_session);

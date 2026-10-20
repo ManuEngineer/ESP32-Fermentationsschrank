@@ -163,6 +163,35 @@ Verbindliche Regeln:
   technischen Schluessel. Die Regel gilt gleichermassen fuer Touch und Web,
   ohne die browserindividuelle Sprachwahl zu veraendern.
 
+**Umsetzung (Issue #27, Plan a671c33).** Ein Auswahlfeld (Deutsch / English / Español,
+`aria-label` „Language“) steht am Seitenanfang der Setup- und der Anmelde-/Dashboard-
+Shell in jedem Authentifizierungszustand. Rein clientseitig und ohne Request:
+
+- Start: gespeicherter Code aus `localStorage.lang`, wenn er genau `de`, `en` oder `es`
+  ist; sonst die Browsersprache (erste zwei Zeichen, nur diese drei Codes), sonst
+  Englisch. Ungueltige oder manipulierte Werte werden ignoriert und nie weiterverwendet.
+- Wechsel: die Funktion `sl()` validiert erneut (ungueltig → Englisch), setzt `<html lang>`,
+  das Auswahlfeld und alle statischen Texte; danach rendern `dr()` und `ui()` die
+  dynamischen Texte und Knoepfe neu. Eine bereits aktive Bestaetigung („Sicher?“) wird in der
+  neuen Sprache neu gerendert, ohne `K`, `KC`, Aktionssperren oder Bestaetigungssemantik zu
+  aendern.
+- Speichern: nur der validierte Code, in `try/catch`. Fehlender oder blockierter Speicher
+  (Privatmodus, Quota) loest keine Exception aus; die Wahl bleibt fuer die Seite wirksam und
+  faellt beim naechsten Laden auf den Vorschlag zurueck. Der Schluessel gilt fuer Setup- und
+  Dashboard-Shell gemeinsam und je Browser und Ursprung; Browser/Endgeraete sind
+  unabhaengig voneinander und von der Sprache des Touchdisplays.
+- In der Setup-Shell behaelt eine sichtbare Ergebnis- oder Fehlermeldung beim Wechsel ihre
+  Art (Schluessel) und wird in der neuen Sprache neu gerendert; eine ausstehende Antwort
+  erscheint in der zum Antwortzeitpunkt gewaehlten Sprache. Der Wechsel veraendert keinen
+  Formularzustand und loest keinen Request aus.
+- Es gibt keinen serverseitigen Sprachzustand (kein Cookie, kein Header, keine API), keine
+  Aenderung an Geraetekonfiguration, Prozessdaten, Authentifizierung, Session, CSRF,
+  Polling oder Mutation. Der Ergebnistext der zuletzt ausgefuehrten Aktion behaelt bis zur
+  naechsten Aktion seine Sprache; Programm-/Geraetenamen, Meldungscodes und Zeitzonen-Id
+  bleiben unuebersetzt.
+- Browser- und Geraeteverhalten sind nicht qualifiziert (`NOT_PROVEN`); die Wahl ist nur im
+  ausfuehrenden Fake-DOM-Test belegt.
+
 ## Normale Webanmeldung
 
 Diese Regeln gelten, wenn der normale Webpasswortschutz aktiviert ist.
@@ -255,13 +284,14 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
   Bestaetigung; ohne Bestaetigung wird nichts gesendet;
 - ein getrenntes Feld fuer die vierstellige Service-PIN in beiden Optionen (die
   Service-PIN bleibt bei deaktiviertem Webpasswort geschuetzt);
-- Texte in Deutsch, Englisch und Spanisch nach Browsersprache, Englisch als
-  Rueckfall;
+- Texte in Deutsch, Englisch und Spanisch; die Sprache folgt der gespeicherten
+  Browserwahl, sonst der Browsersprache (Vorschlag), Englisch als Rueckfall; ein
+  Auswahlfeld am Seitenanfang erlaubt den Wechsel (siehe „Sprache je Browser“);
 - eine Meldung bei `403`, dass die Freigabe zuerst am Geraet erfolgen muss.
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
 Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-11264 Bytes (Ownerentscheid D1 = D fuer #27, Plan 9656a18, einmalig von 10752 Bytes erhoeht; zuvor D1-C von 8192 Bytes;
+11456 Bytes (Ownerentscheid D1 = A fuer #27, Plan a671c33, einmalig von 11264 Bytes erhoeht; zuvor 10752 Bytes und D1-C von 8192 Bytes;
 Gesamtlaenge aus besessenem Kopf und statischem Anhang, siehe unten).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
@@ -388,8 +418,8 @@ der Adapter gibt diesen Fehler zurück. Ohne Anhang gilt weiterhin der bisherige
 Content-Length; ihre zusammengesetzten HTML-/JS-Bytes bleiben gleich.
 
 Die normale Shell reserviert 1536 B für ihren variablen Kopf; ihr konstanter
-Anhang (9619 B, vor den Standbyinformationen 9013 B, vor den Laufinformationen 6662 B) liegt im Flash (`.flash.rodata`; der Zuwachs ändert DRAM/IRAM des Kandidaten nicht, siehe [RAM-Bilanz](audits/PR206_RAM_FEASIBILITY_20261019.md)). Die Provisionierungs-Shell teilt ebenfalls ihren
-konstanten Script-Anhang ab. Die 11264-B-Grenze (Ownerentscheid D1 = D, Plan 9656a18, zuvor 10752 B und 8192 B) gilt für Kopf **plus** Anhang.
+Anhang (9797 B, vor der Sprachwahl 9619 B, vor den Standbyinformationen 9013 B, vor den Laufinformationen 6662 B) liegt im Flash (`.flash.rodata`; der Zuwachs ändert DRAM/IRAM des Kandidaten nicht, siehe [RAM-Bilanz](audits/PR206_RAM_FEASIBILITY_20261019.md)). Die Provisionierungs-Shell teilt ebenfalls ihren
+konstanten Script-Anhang ab. Die 11456-B-Grenze (Ownerentscheid D1 = A, Plan a671c33, zuvor 11264 B, 10752 B und 8192 B) gilt für Kopf **plus** Anhang.
 Alle Antwort-Ersetzungen löschen den Anhang, insbesondere JSON und Fehler:
 auch eine zunächst aufgebaute, anschließend zu große Shell liefert ausschließlich
 Status 503, `application/json; charset=utf-8` und
@@ -462,11 +492,11 @@ unveraendert). Es gibt keinen neuen Endpunkt und keine Codec-Aenderung.
   (`H`) wird verworfen, ohne Wirkung auf Stand, Alter oder Verbindungsstatus.
 - **Darstellung:** einspaltig mit grossen Bedienflaechen, ab 40 rem zwei
   Spalten; dynamischer Text nur ueber `textContent`.
-- **Groessenschranke:** 11264 Bytes (Ownerentscheid D1 = D, Plan 9656a18,
-  einmalig; zuvor 10752 Bytes); die gemessene authentifizierte Shell hat
-  11016 Bytes (Reserve 248 Bytes, davon 128 Bytes Normalreserve, die die 19
-  Bytes fuer die breiteste Mutationssequenz enthaelt, und 120 Bytes
-  Bindungsspielraum, der unverbraucht ist). Keine weitere Erhoehung vorgesehen.
+- **Groessenschranke:** 11456 Bytes (Ownerentscheid D1 = A, Plan a671c33,
+  einmalig; zuvor 11264 Bytes); die gemessene authentifizierte Shell hat
+  11312 Bytes (Reserve 144 Bytes, davon 128 Bytes Normalreserve, die die 19
+  Bytes fuer die breiteste Mutationssequenz enthaelt, und 16 Bytes darueber).
+  Keine weitere Erhoehung vorgesehen.
 
 ### Laufinformationen (Issue #27, Plan 3376a19)
 
