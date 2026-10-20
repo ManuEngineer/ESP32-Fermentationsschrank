@@ -477,9 +477,8 @@ bool updateProductUi(
         return false;
     }
     const auto& loopSnapshot = renderGate.snapshot();
-    const auto loopNetworkStatus =
-        device_platform::toDeviceUiNetworkStatus(
-            networkLifecycle.status().state);
+    const auto loopNetworkStatus = device_platform::toDeviceUiNetworkStatus(
+        networkLifecycle.status().state);
 
     // The existing #26 target/interaction path (calibrated touch
     // -> targetAt()/Workspace::press() -> existing typed
@@ -757,8 +756,7 @@ extern "C" void app_main(void) {
         // safe defaults (English, empty catalog), as before.
         auto uiPresentation = application.uiPresentationSource().value_or(
             fermentation::FermentationUiPresentationSource{});
-        const auto uiNetworkStatus =
-            device_platform::toDeviceUiNetworkStatus(
+        const auto uiNetworkStatus = device_platform::toDeviceUiNetworkStatus(
             networkLifecycle.status().state);
         const device_platform::ClockViewInput uiClock{
             timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId,
