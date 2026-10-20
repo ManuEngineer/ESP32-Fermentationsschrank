@@ -3415,11 +3415,17 @@ void test_unprovisioned_shell_explains_local_release_and_creates_no_session() {
     // The local-release hint is bound to the error code, not to every 403
     // (a rejected origin must not send the user to the device).
     TEST_ASSERT_TRUE(
-        contains(body, "j.error==='provisioning-not-allowed'?T.na"));
+        contains(body, "j.error==='provisioning-not-allowed'?'na'"));
     TEST_ASSERT_FALSE(contains(body, "r.status===403"));
-    TEST_ASSERT_TRUE(contains(body, "r.status===409?T.ap"));
-    TEST_ASSERT_TRUE(contains(body, "r.status===422?T.ic"));
-    TEST_ASSERT_TRUE(contains(body, "j.error==='recovery-required'?T.rc"));
+    // Every message goes through sm(): the page keeps the message key and
+    // re-renders it from the table when the language changes.
+    TEST_ASSERT_TRUE(
+        contains(body, "function sm(k){M=k;q('m').textContent=T[k];}"));
+    TEST_ASSERT_TRUE(contains(body, "q('m').textContent=M?T[M]:'';"));
+    TEST_ASSERT_FALSE(contains(body, "q('m').textContent=T."));
+    TEST_ASSERT_TRUE(contains(body, "r.status===409?'ap'"));
+    TEST_ASSERT_TRUE(contains(body, "r.status===422?'ic'"));
+    TEST_ASSERT_TRUE(contains(body, "j.error==='recovery-required'?'rc'"));
     TEST_ASSERT_TRUE(contains(body, "release web setup on the device first"));
     TEST_ASSERT_TRUE(contains(body, "am Geraet freigeben"));
     TEST_ASSERT_TRUE(contains(body, "en el equipo"));

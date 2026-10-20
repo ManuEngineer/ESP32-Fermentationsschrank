@@ -10,7 +10,8 @@
 // 9656a18 (PR 207 C3, limit 11264 B). Language selector, sl() and the
 // re-rendered confirmation text applied explicitly for plan a671c33 (PR 208
 // C1, limit 11456 B). The provisioning generator receives the same selector
-// and sl() explicitly for plan a671c33 (PR 208 C2).
+// and sl() explicitly for plan a671c33 (PR 208 C2); the visible result message
+// is kept by key (sm()) and re-rendered on a language change (review fix).
 namespace shell_golden {
 using fermentation::WebAuthenticationState;
 constexpr std::size_t kMaximumWebShellBytes = 11456U;
@@ -81,26 +82,27 @@ std::string provisioningShell() {
            "iguracion web en el equipo y reintente.',ic:'Contrasena o PIN re"
            "chazados.',ap:'Ya configurado.',rc:'Requiere recuperacion local."
            "',fl:'Fallo la configuracion.'}};const q=i=>document.getElementB"
-           "yId(i),sw=q('lang'),ok=/^(de|en|es)$/;let T,s;try{s=localStorage"
-           ".lang}catch(e){}function sl(c){c=ok.test(c)?c:'en';T=L[c];docume"
-           "nt.documentElement.lang=sw.value=c;for(const i of ['a','b','c','"
-           "e','x','y','g'])q(i).textContent=T[i];return c;}sl(ok.test(s)?s:"
-           "(navigator.language||'en').slice(0,2));sw.onchange=()=>{const c="
-           "sl(sw.value);try{localStorage.lang=c}catch(e){}};const d=()=>doc"
-           "ument.querySelector('input[name=o]:checked').value==='d';const u"
-           "=()=>{q('lw').hidden=d();q('x').hidden=q('lk').hidden=!d();};doc"
-           "ument.querySelectorAll('input[name=o]').forEach(i=>i.onchange=u)"
-           ";q('f').onsubmit=async e=>{e.preventDefault();if(d()&&!q('k').ch"
-           "ecked){q('m').textContent=T.y;return;}const b=d()?{mode:'disable"
-           "',servicePin:q('n').value,confirmDisable:true}:{mode:'protect',p"
-           "assword:q('w').value,servicePin:q('n').value};try{const r=await "
-           "fetch('/api/v1/provision',{method:'POST',credentials:'same-origi"
-           "n',headers:{'Content-Type':'application/json'},body:JSON.stringi"
-           "fy(b)});const j=await r.json().catch(()=>({}));q('m').textConten"
-           "t=r.ok?T.ok:j.error==='provisioning-not-allowed'?T.na:r.status=="
-           "=409?T.ap:r.status===422?T.ic:j.error==='recovery-required'?T.rc"
-           ":T.fl;if(r.ok){q('w').value=q('n').value='';}}catch(x){q('m').te"
-           "xtContent=T.fl;}};u();</script></body></html>";
+           "yId(i),sw=q('lang'),ok=/^(de|en|es)$/;let T,s,M;try{s=localStora"
+           "ge.lang}catch(e){}function sl(c){c=ok.test(c)?c:'en';T=L[c];docu"
+           "ment.documentElement.lang=sw.value=c;for(const i of ['a','b','c'"
+           ",'e','x','y','g'])q(i).textContent=T[i];q('m').textContent=M?T[M"
+           "]:'';return c;}function sm(k){M=k;q('m').textContent=T[k];}sl(ok"
+           ".test(s)?s:(navigator.language||'en').slice(0,2));sw.onchange=()"
+           "=>{const c=sl(sw.value);try{localStorage.lang=c}catch(e){}};cons"
+           "t d=()=>document.querySelector('input[name=o]:checked').value==="
+           "'d';const u=()=>{q('lw').hidden=d();q('x').hidden=q('lk').hidden"
+           "=!d();};document.querySelectorAll('input[name=o]').forEach(i=>i."
+           "onchange=u);q('f').onsubmit=async e=>{e.preventDefault();if(d()&"
+           "&!q('k').checked){sm('y');return;}const b=d()?{mode:'disable',se"
+           "rvicePin:q('n').value,confirmDisable:true}:{mode:'protect',passw"
+           "ord:q('w').value,servicePin:q('n').value};try{const r=await fetc"
+           "h('/api/v1/provision',{method:'POST',credentials:'same-origin',h"
+           "eaders:{'Content-Type':'application/json'},body:JSON.stringify(b"
+           ")});const j=await r.json().catch(()=>({}));sm(r.ok?'ok':j.error="
+           "=='provisioning-not-allowed'?'na':r.status===409?'ap':r.status=="
+           "=422?'ic':j.error==='recovery-required'?'rc':'fl');if(r.ok){q('w"
+           "').value=q('n').value='';}}catch(x){sm('fl');}};u();</script></b"
+           "ody></html>";
 }
 
 std::string webShell(WebAuthenticationState state, const std::string& csrfToken,

@@ -571,19 +571,21 @@ assert.ok(provisioningLiteral, 'extract the actual provisioning suffix');
 const provisioningScript = [...provisioningLiteral[1].matchAll(/"(?:[^"\\]|\\.)*"/g)].map(x => JSON.parse(x[0])).join('').split('</script>')[0];
 const provisioningIds = ['a', 'b', 'c', 'e', 'x', 'y', 'g'];
 
-function provisioning(language, storage) {
+function provisioning(language, storage, options = {}) {
   const elements = new Map();
   const id = name => { if (!elements.has(name)) elements.set(name, { textContent: '', hidden: false, value: '', checked: false }); return elements.get(name); };
+  const fetches = [];
   const context = vm.createContext({
     document: {
       getElementById: id, documentElement: {},
-      querySelector: () => ({ value: 'p' }), querySelectorAll: () => [],
+      querySelector: () => ({ value: options.mode || 'p' }), querySelectorAll: () => [],
     },
-    navigator: { language }, fetch: () => { throw new Error('no request'); },
+    navigator: { language },
+    fetch: (...args) => { fetches.push(args); if (!options.fetch) throw new Error('no request'); return options.fetch(...args); },
     ...(storage ? { localStorage: storage } : {}),
   });
   vm.runInContext(provisioningScript, context);
-  return { id, run: code => vm.runInContext(code, context), context };
+  return { id, fetches, run: code => vm.runInContext(code, context), context };
 }
 
 test('language (setup shell): suggestion, stored choice, validation and independent texts', async () => {
@@ -618,6 +620,64 @@ test('language (setup shell): switching sets every text, stores only validated c
   const shared = memory(); provisioning('en-US', shared).id('lang').onchange;
   const setup = provisioning('en-US', shared); setup.id('lang').value = 'es'; setup.id('lang').onchange();
   assert.equal((await fixture('en-US', shared)).run('lc'), 'es');
+});
+
+
+// Setup shell: the visible result message keeps its kind across language changes.
+const setupOutcomes = [
+  ['ok', { ok: true, status: 200, json: async () => ({}) }],
+  ['na', { ok: false, status: 403, json: async () => ({ error: 'provisioning-not-allowed' }) }],
+  ['ap', { ok: false, status: 409, json: async () => ({}) }],
+  ['ic', { ok: false, status: 422, json: async () => ({}) }],
+  ['rc', { ok: false, status: 503, json: async () => ({ error: 'recovery-required' }) }],
+  ['fl', { ok: false, status: 500, json: async () => ({}) }],
+];
+const submitSetup = async p => { await p.id('f').onsubmit({ preventDefault() {} }); await drain(); };
+const switchSetup = (p, language) => { p.id('lang').value = language; p.id('lang').onchange(); };
+const formState = p => JSON.stringify(['lw', 'x', 'lk', 'w', 'n', 'k'].map(k => [p.id(k).hidden, p.id(k).value, p.id(k).checked]));
+
+for (const [key, response] of setupOutcomes) {
+  test(`language (setup shell): visible message "${key}" is re-rendered DE -> ES -> EN, form state kept, no request`, async () => {
+    const p = provisioning('de-DE', memory(), { fetch: async () => response });
+    assert.equal(p.id('m').textContent, '', 'no message before an action');
+    switchSetup(p, 'es'); assert.equal(p.id('m').textContent, '', 'without a message the element stays empty');
+    switchSetup(p, 'de');
+    p.id('w').value = 'pw'; p.id('n').value = '1234';
+    await submitSetup(p);
+    assert.equal(p.fetches.length, 1);
+    assert.equal(p.id('m').textContent, p.run(`L.de.${key}`));
+    const form = formState(p);
+    for (const language of ['es', 'en', 'de', 'es', 'en']) {
+      switchSetup(p, language);
+      assert.equal(p.id('m').textContent, p.run(`L.${language}.${key}`), `${key} in ${language}`);
+      assert.equal(formState(p), form, 'form state is untouched by the language');
+    }
+    assert.equal(p.fetches.length, 1, 'the language change sends no request');
+  });
+}
+
+test('language (setup shell): the unconfirmed-disable hint and a transport error follow the language', async () => {
+  const p = provisioning('de-DE', memory(), { mode: 'd' });
+  await submitSetup(p);                                   // confirmation checkbox not ticked
+  assert.equal(p.id('m').textContent, p.run('L.de.y'));
+  switchSetup(p, 'es'); assert.equal(p.id('m').textContent, p.run('L.es.y'));
+  assert.equal(p.fetches.length, 0);
+  const t = provisioning('en-GB', memory(), { fetch: async () => { throw new TypeError('offline'); } });
+  await submitSetup(t); assert.equal(t.id('m').textContent, t.run('L.en.fl'));
+  switchSetup(t, 'de'); assert.equal(t.id('m').textContent, t.run('L.de.fl'));
+});
+
+test('language (setup shell): a pending request answers in the language selected at response time', async () => {
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  const p = provisioning('de-DE', memory(), { fetch: () => gate });
+  const pending = p.id('f').onsubmit({ preventDefault() {} });
+  await drain(); assert.equal(p.id('m').textContent, '', 'no message while pending');
+  switchSetup(p, 'es'); assert.equal(p.id('m').textContent, '');
+  release({ ok: false, status: 409, json: async () => ({}) });
+  await pending; await drain();
+  assert.equal(p.id('m').textContent, p.run('L.es.ap'), 'answered in the language chosen meanwhile');
+  assert.equal(p.fetches.length, 1);
+  switchSetup(p, 'en'); assert.equal(p.id('m').textContent, p.run('L.en.ap'));
 });
 
 
