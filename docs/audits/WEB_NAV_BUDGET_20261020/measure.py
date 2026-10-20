@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Misst die Optionen des Navigations-Plans (Plan issue-27-r1-web-navigation-plan.md).
+"""Misst die Optionen des Navigations-Plans (Plans issue-27-r1-web-remaining-scope-plan.md (fruehere Revision: reiner Navigationsplan)).
 
 Aufruf aus dem Repo-Root: python3 -I docs/audits/WEB_NAV_BUDGET_20261020/measure.py
 Basisabgleich: kWebShellSuffix aus web_application_routes.cpp = 9797 B, Shell 11312 B
