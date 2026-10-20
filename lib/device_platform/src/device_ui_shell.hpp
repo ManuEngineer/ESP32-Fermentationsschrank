@@ -39,7 +39,7 @@ struct BottomSlot {
     TextKey label;
     bool enabled{true};
 
-    [[nodiscard]] bool visible() const noexcept { return true; }
+    [[nodiscard]] static bool visible() noexcept { return true; }
 };
 
 enum class PageExitRequirement : std::uint8_t {
