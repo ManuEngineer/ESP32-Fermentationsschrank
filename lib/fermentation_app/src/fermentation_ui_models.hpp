@@ -10,9 +10,11 @@
 #include "application_lifecycle.hpp"
 #include "device_ui_contracts.hpp"
 #include "device_ui_session.hpp"
+#include "device_ui_shell.hpp"
 #include "device_ui_theme.hpp"
 #include "network_mode.hpp"
 #include "factory_reset_flow.hpp"
+#include "local_time.hpp"
 #include "presentation_state.hpp"
 #include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
@@ -143,6 +145,24 @@ struct FermentationNetworkModeView {
     std::array<device_platform::NetworkMode, 2U> selectableModes{
         device_platform::NetworkMode::AP_ONLY,
         device_platform::NetworkMode::HOME_WIFI};
+};
+
+// Read-only device information for the web status (Issue #27): the visible
+// device name, the canonical time zone with the local wall-clock time of the
+// single local-time owner, and the actual network transport state. It is a
+// transient application read, deliberately not part of FermentationUiSnapshot
+// (a minute clock must not drive the display refresh revision). It carries
+// no SSID, password, SoftAP data or address.
+struct FermentationDeviceInfoView {
+    // nullopt: the configuration read lease was not granted.
+    std::optional<std::string> deviceName;
+    std::string timeZoneId;
+    // nullopt without trusted UTC, with an unavailable zone rule or for a
+    // value that is not representable; never a substitute time.
+    std::optional<device_platform::LocalTime> localTime;
+    // Unavailable unless the lifecycle runs the configured network mode.
+    device_platform::DeviceUiNetworkStatus connection{
+        device_platform::DeviceUiNetworkStatus::Unavailable};
 };
 
 // Secret-free state of the local release for the web first-time setup, as

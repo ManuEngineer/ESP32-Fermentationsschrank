@@ -751,7 +751,8 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
         encoded = source.has_value() && encodeWebApiPrograms(*source, body);
     } else {
         const auto snapshot = application_.uiSnapshot();
-        encoded = status         ? encodeWebApiStatus(snapshot, body)
+        encoded = status ? encodeWebApiStatus(
+                               snapshot, application_.deviceInfoView(), body)
                   : temperatures ? encodeWebApiTemperatures(snapshot, body)
                                  : encodeWebApiAlerts(snapshot, body);
     }

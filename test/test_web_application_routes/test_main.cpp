@@ -1597,7 +1597,8 @@ void test_read_only_api_projection_bounds_and_untrusted_values() {
     }
 
     std::string status;
-    TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, status));
+    TEST_ASSERT_TRUE(
+        encodeWebApiStatus(snapshot, FermentationDeviceInfoView{}, status));
     TEST_ASSERT_TRUE(status.size() <= kMaximumWebApiResponseBodyBytes);
     TEST_ASSERT_NOT_NULL(std::strstr(
         status.c_str(), "\"userConfiguration\":\"18446744073709551615\""));
@@ -3792,7 +3793,8 @@ void test_shell_run_information_is_bound_to_the_status_codec() {
     detail.time.remainingKind = RunDetailRemainingKind::Timed;
     snapshot.home.runDetail = detail;
     std::string status;
-    TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, status));
+    TEST_ASSERT_TRUE(
+        encodeWebApiStatus(snapshot, FermentationDeviceInfoView{}, status));
     for (const char* member :
          {"programName", "sourceKind", "targetCelsius", "completion",
           "coolingTargetCelsius", "holdDurationMinutes", "elapsedSeconds",
@@ -3813,7 +3815,8 @@ void test_shell_run_information_is_bound_to_the_status_codec() {
                 static_cast<RunDetailRemainingKind>(kind);
             snapshot.home.runDetail = detail;
             std::string encoded;
-            TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, encoded));
+            TEST_ASSERT_TRUE(encodeWebApiStatus(
+                snapshot, FermentationDeviceInfoView{}, encoded));
             for (const auto& token : jsonTokens(encoded, "mode")) {
                 modes.insert(token);
             }
@@ -3826,7 +3829,7 @@ void test_shell_run_information_is_bound_to_the_status_codec() {
         FermentationUiSnapshot plain;
         plain.home.processState = static_cast<ProcessState>(value);
         std::string encoded;
-        if (encodeWebApiStatus(plain, encoded)) {
+        if (encodeWebApiStatus(plain, FermentationDeviceInfoView{}, encoded)) {
             for (const auto& token : jsonTokens(encoded, "processState")) {
                 states.insert(token);
             }
@@ -3886,6 +3889,150 @@ void installActiveRunForStatus(FermentationApplication& application,
 // check, application snapshot with the UI refresh tracker, encoding, response
 // takeover), measured over operator new and cJSON. The encoder-only window is
 // in test_run_detail_projection. Host measurement, not an ESP32 heap proof.
+void test_device_info_view_reports_name_zone_local_time_and_connection() {
+    ComposedFixture fixture(true);
+    auto info = fixture.application.deviceInfoView();
+    TEST_ASSERT_TRUE(info.deviceName.has_value());
+    TEST_ASSERT_FALSE(info.deviceName->empty());
+    TEST_ASSERT_EQUAL_STRING("Europe/Zurich", info.timeZoneId.c_str());
+    // No trusted UTC: no substitute time.
+    TEST_ASSERT_FALSE(info.localTime.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiNetworkStatus::Connected),
+        static_cast<int>(info.connection));
+
+    // 2026-10-20 12:03:00 UTC is 14:03 CEST (EU rule, 7 days before the
+    // switch back).
+    fixture.timeSource.setUnixTimeSeconds(1792497780);
+    info = fixture.application.deviceInfoView();
+    TEST_ASSERT_TRUE(info.localTime.has_value());
+    TEST_ASSERT_EQUAL_INT(2026, info.localTime->year);
+    TEST_ASSERT_EQUAL_UINT8(10U, info.localTime->month);
+    TEST_ASSERT_EQUAL_UINT8(20U, info.localTime->day);
+    TEST_ASSERT_EQUAL_UINT8(14U, info.localTime->hour);
+    TEST_ASSERT_EQUAL_UINT8(3U, info.localTime->minute);
+    fixture.timeSource.setUnixTimeSeconds(std::nullopt);
+    TEST_ASSERT_FALSE(
+        fixture.application.deviceInfoView().localTime.has_value());
+}
+
+void test_device_info_connection_requires_the_configured_network_mode() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(
+            fixture.application
+                .applyNetworkMode(device_platform::NetworkMode::HOME_WIFI)
+                .status));
+    using device_platform::DeviceUiNetworkStatus;
+    const auto connection = [&] {
+        return fixture.application.deviceInfoView().connection;
+    };
+    TEST_ASSERT_EQUAL(static_cast<int>(DeviceUiNetworkStatus::Connected),
+                      static_cast<int>(connection()));
+    // The lifecycle runs another mode than the configured one: its state
+    // must not be shown as the state of the chosen mode.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkOperationStatus::Applied),
+        static_cast<int>(
+            fixture.network.start(device_platform::NetworkMode::AP_ONLY, {})
+                .status));
+    TEST_ASSERT_EQUAL(static_cast<int>(DeviceUiNetworkStatus::Unavailable),
+                      static_cast<int>(connection()));
+    // Same mode, transition in progress: Disconnected.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkOperationStatus::Applied),
+        static_cast<int>(
+            fixture.network.start(device_platform::NetworkMode::HOME_WIFI, {})
+                .status));
+    TEST_ASSERT_EQUAL(static_cast<int>(DeviceUiNetworkStatus::Disconnected),
+                      static_cast<int>(connection()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkOperationStatus::Applied),
+        static_cast<int>(fixture.network.stop().status));
+    TEST_ASSERT_EQUAL(static_cast<int>(DeviceUiNetworkStatus::Unavailable),
+                      static_cast<int>(connection()));
+}
+
+void test_status_endpoint_adds_device_info_without_network_secrets() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto session = loginComposed(fixture);
+    const auto status = [&] {
+        auto request =
+            makeAuthenticatedRequest("GET", "/api/v1/status", session.cookie);
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        return completeBody(response);
+    };
+    auto body = status();
+    TEST_ASSERT_TRUE(contains(body, "\"deviceName\":\""));
+    TEST_ASSERT_TRUE(contains(body, "\"networkState\":\"connected\""));
+    TEST_ASSERT_TRUE(contains(body, "\"clock\":null"));
+    TEST_ASSERT_TRUE(contains(body, "\"networkMode\":\"ap-only\""));
+    fixture.timeSource.setUnixTimeSeconds(1792497780);
+    body = status();
+    TEST_ASSERT_TRUE(contains(body,
+                              "\"clock\":{\"local\":\"2026-10-20 14:03\","
+                              "\"zone\":\"Europe/Zurich\"}"));
+    // No SoftAP password or address in the status. The SoftAP SSID is derived
+    // from the device name, which is displayed on purpose, so it is not a
+    // separate secret here.
+    TEST_ASSERT_FALSE(
+        contains(body, fixture.network.accessPointPassword().c_str()));
+    TEST_ASSERT_FALSE(contains(body, "192.168"));
+    TEST_ASSERT_TRUE(body.size() <= kMaximumWebApiResponseBodyBytes);
+}
+
+void test_status_codec_device_info_tokens_and_unavailable_parts() {
+    FermentationUiSnapshot snapshot;
+    const auto encode = [&](const FermentationDeviceInfoView& view) {
+        std::string out;
+        TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, view, out));
+        TEST_ASSERT_TRUE(out.size() <= kMaximumWebApiResponseBodyBytes);
+        return out;
+    };
+    FermentationDeviceInfoView view;
+    auto body = encode(view);
+    TEST_ASSERT_TRUE(contains(body, "\"deviceName\":null"));
+    TEST_ASSERT_TRUE(contains(body, "\"networkState\":\"unavailable\""));
+    TEST_ASSERT_TRUE(contains(body, "\"clock\":null"));
+    using device_platform::DeviceUiNetworkStatus;
+    view.connection = DeviceUiNetworkStatus::Connected;
+    TEST_ASSERT_TRUE(contains(encode(view), "\"networkState\":\"connected\""));
+    view.connection = DeviceUiNetworkStatus::Disconnected;
+    TEST_ASSERT_TRUE(
+        contains(encode(view), "\"networkState\":\"disconnected\""));
+    // A time without a zone, or outside the four digit year range, is not
+    // shown; the response itself stays a success.
+    device_platform::LocalTime local;
+    local.year = 2026;
+    local.month = 10;
+    local.day = 20;
+    local.hour = 9;
+    local.minute = 5;
+    view.localTime = local;
+    TEST_ASSERT_TRUE(contains(encode(view), "\"clock\":null"));
+    view.timeZoneId = "Europe/Zurich";
+    TEST_ASSERT_TRUE(contains(encode(view),
+                              "\"clock\":{\"local\":\"2026-10-20 09:05\","
+                              "\"zone\":\"Europe/Zurich\"}"));
+    view.localTime->year = 10000;
+    TEST_ASSERT_TRUE(contains(encode(view), "\"clock\":null"));
+    view.localTime->year = -1;
+    TEST_ASSERT_TRUE(contains(encode(view), "\"clock\":null"));
+    // The 96 byte maximum name with a 64 byte zone id stays well inside the
+    // bounded body.
+    view.deviceName = std::string(96U, 'n');
+    view.timeZoneId = std::string(64U, 'z');
+    view.localTime->year = 2026;
+    body = encode(view);
+    TEST_ASSERT_TRUE(contains(body, std::string(96U, 'n').c_str()));
+    TEST_ASSERT_TRUE(contains(body, std::string(64U, 'z').c_str()));
+}
+
 void test_status_handler_allocation_window_covers_snapshot_encode_and_response() {
     ComposedFixture fixture(true);
     TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
@@ -3956,7 +4103,8 @@ void test_dashboard_shell_labels_cover_every_codec_token() {
         FermentationUiSnapshot snapshot;
         snapshot.home.mode = static_cast<FermentationHomeMode>(value);
         std::string status;
-        if (encodeWebApiStatus(snapshot, status)) {
+        if (encodeWebApiStatus(snapshot, FermentationDeviceInfoView{},
+                               status)) {
             for (const auto& token : jsonTokens(status, "homeMode")) {
                 modes.insert(token);
             }
@@ -4046,7 +4194,8 @@ void test_dashboard_feed_fields_in_standby_and_constructed_states() {
         std::string status;
         std::string temperatures;
         std::string alerts;
-        TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, status));
+        TEST_ASSERT_TRUE(
+            encodeWebApiStatus(snapshot, FermentationDeviceInfoView{}, status));
         TEST_ASSERT_TRUE(encodeWebApiTemperatures(snapshot, temperatures));
         TEST_ASSERT_TRUE(encodeWebApiAlerts(snapshot, alerts));
         for (const char* field :
@@ -4840,6 +4989,10 @@ int main() {
     RUN_TEST(test_dashboard_shell_texts_are_complete_in_all_locales);
     RUN_TEST(test_dashboard_shell_labels_cover_every_codec_token);
     RUN_TEST(test_shell_run_information_is_bound_to_the_status_codec);
+    RUN_TEST(test_device_info_view_reports_name_zone_local_time_and_connection);
+    RUN_TEST(test_device_info_connection_requires_the_configured_network_mode);
+    RUN_TEST(test_status_endpoint_adds_device_info_without_network_secrets);
+    RUN_TEST(test_status_codec_device_info_tokens_and_unavailable_parts);
     RUN_TEST(
         test_status_handler_allocation_window_covers_snapshot_encode_and_response);
     RUN_TEST(test_dashboard_feed_fields_in_standby_and_constructed_states);
