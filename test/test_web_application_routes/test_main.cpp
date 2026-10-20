@@ -3348,10 +3348,10 @@ size_t occurrences(const std::string& text, const std::string& needle) {
     return count;
 }
 
-// Owner limit of the web shell (Issue #27 dashboard slice, D1-C: at most
-// 10752 bytes) and the required reserve below it, including the 19 byte reserve
-// for the widest mutation sequence.
-constexpr size_t kShellLimit = 10752U;
+// Owner limit of the web shell (Issue #27 standby-information slice, D1 = D:
+// at most 11264 bytes, one time) and the required reserve below it, including
+// the 19 byte reserve for the widest mutation sequence.
+constexpr size_t kShellLimit = 11264U;
 constexpr size_t kShellMinimumReserve = 128U;
 
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
@@ -3889,6 +3889,69 @@ void installActiveRunForStatus(FermentationApplication& application,
 // check, application snapshot with the UI refresh tracker, encoding, response
 // takeover), measured over operator new and cJSON. The encoder-only window is
 // in test_run_detail_projection. Host measurement, not an ESP32 heap proof.
+void test_shell_device_info_is_bound_to_the_status_codec() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+    FermentationUiSnapshot snapshot;
+    FermentationDeviceInfoView device;
+    device.deviceName = "Fermenter";
+    device.timeZoneId = "Europe/Zurich";
+    device_platform::LocalTime local;
+    local.year = 2026;
+    local.month = 10;
+    local.day = 20;
+    local.hour = 14;
+    local.minute = 3;
+    device.localTime = local;
+    std::string status;
+    TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, device, status));
+    // Every member the codec writes is read by the shell.
+    for (const char* member : {"deviceName", "networkState", "networkMode",
+                               "clock", "local", "zone"}) {
+        TEST_ASSERT_TRUE(
+            contains(status, (std::string("\"") + member + "\":").c_str()));
+        TEST_ASSERT_TRUE(contains(body, member));
+    }
+    // Every token the encoders can write has a label in all three locales; the
+    // network words are their own keys, never the poll words online/offline.
+    std::set<std::string> states;
+    std::set<std::string> modes;
+    for (unsigned value = 0U; value < 16U; ++value) {
+        FermentationDeviceInfoView probe;
+        probe.connection =
+            static_cast<device_platform::DeviceUiNetworkStatus>(value);
+        FermentationUiSnapshot plain;
+        plain.network.selectionRequired = false;
+        plain.network.currentMode =
+            static_cast<device_platform::NetworkMode>(value);
+        std::string encoded;
+        if (encodeWebApiStatus(plain, probe, encoded)) {
+            for (const auto& token : jsonTokens(encoded, "networkState")) {
+                states.insert(token);
+            }
+            for (const auto& token : jsonTokens(encoded, "networkMode")) {
+                modes.insert(token);
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(3U, static_cast<std::uint32_t>(states.size()));
+    TEST_ASSERT_TRUE(states.count("connected") == 1U);
+    TEST_ASSERT_TRUE(states.count("disconnected") == 1U);
+    TEST_ASSERT_TRUE(states.count("unavailable") == 1U);
+    TEST_ASSERT_TRUE(modes.count("ap-only") == 1U);
+    TEST_ASSERT_TRUE(modes.count("home-wifi") == 1U);
+    for (const char* key :
+         {"network", "clock", "net-connected", "net-disconnected",
+          "clock-untrusted", "ap-only", "home-wifi"}) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, key));
+    }
+    TEST_ASSERT_TRUE(contains(body, "T['net-'+a.networkState]"));
+    // The shell reads only the fetched status; no browser clock is used for
+    // the device time.
+    TEST_ASSERT_FALSE(contains(body, "new Date("));
+    TEST_ASSERT_FALSE(contains(body, "toLocale"));
+}
+
 void test_device_info_view_reports_name_zone_local_time_and_connection() {
     ComposedFixture fixture(true);
     auto info = fixture.application.deviceInfoView();
@@ -4989,6 +5052,7 @@ int main() {
     RUN_TEST(test_dashboard_shell_texts_are_complete_in_all_locales);
     RUN_TEST(test_dashboard_shell_labels_cover_every_codec_token);
     RUN_TEST(test_shell_run_information_is_bound_to_the_status_codec);
+    RUN_TEST(test_shell_device_info_is_bound_to_the_status_codec);
     RUN_TEST(test_device_info_view_reports_name_zone_local_time_and_connection);
     RUN_TEST(test_device_info_connection_requires_the_configured_network_mode);
     RUN_TEST(test_status_endpoint_adds_device_info_without_network_secrets);
