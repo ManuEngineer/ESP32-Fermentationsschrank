@@ -1,6 +1,6 @@
 # PR #209 – R1-Web-Restumfang: Implementierungsnachweis
 
-Stand: 2026-10-21; C0 umgesetzt und gezielt geprueft; C1/C2/C3/C5 nicht begonnen.
+Stand: 2026-10-21; C0/C1 umgesetzt und gezielt geprueft; C2/C3/C5 nicht begonnen.
 Freigegebener Plan: `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2`,
 [`issue-27-r1-web-remaining-scope-plan.md`](../tasks/issue-27-r1-web-remaining-scope-plan.md).
 Der Owner hat diese exakte SHA und die Implementierung C0 → C1 → C2 → C3 → C5
@@ -40,3 +40,19 @@ Keine Hardware-, Flash-, Browser-, UART-, Reset- oder Aktorfreigabe.
   Chunk-/Sendefehlervertrag und Immutable-/Default-/Invalid-Cache geprueft.
 - Architekturguard PASS, `git diff --check` PASS. Keine Firmware-/Hardware-
   Qualifikation daraus; vollstaendige Offline-Ressourcenmessung in C5.
+
+## C1 – historischer Schnittnachweis
+
+Navigation Uebersicht/Meldungen nur mit LP, Fragment-Allowlist und aria-current,
+umbrechende Leiste; Sichtwechsel ohne Request. Meldungsansicht zeigt alle
+maximal 16 gelieferten Eintraege in API-Reihenfolge mit Schweregrad und Zustand;
+Zeilenaktionen sind bei Busy/Stale/Offline/erledigt/erreichtem Zustand gesperrt.
+Die Uebersichts-Aktionsleiste bleibt erhalten.
+
+JS 77/77 PASS (74 bestehende plus DE/EN/ES-Faelle fuer Navigation und 16 Meldungen,
+korrekte ID/Intent sowie Sperren); native Webtests 111/111 PASS.
+Asset 11023 B, Delta gegen C0 +1250 B. **D2-Warnsignal:** mehr als 25 % ueber der
+0,6-KB-Schaetzung; die Messbasis enthielt weder Fragment-/aria-current-Vertrag
+noch vollstaendige Zustandsanzeige. Diese erforderlichen Ergaenzungen erklaeren
+das Delta; kein zusaetzlicher Scope. 5361 B bis Absolutlimit; C5 muss weiterhin
+mindestens 1024 B Reserve nachweisen. Kein automatischer HOLD gemaess D2.

@@ -23,6 +23,9 @@ function deferred() {
 class Element {
   constructor() { this.children = []; this.dataset = {}; this.value = ''; }
   addEventListener() {}
+  append(...children) { this.children.push(...children); }
+  after(...children) { this.afterNodes = children; }
+  setAttribute(name, value) { (this.attributes ||= {})[name] = value; }
   replaceChildren(...children) {
     this.children = children;
     this.value = children[0]?.value || '';
@@ -59,7 +62,7 @@ async function fixture(language = 'en', storage) {
   };
   const context = vm.createContext({
     document: { querySelector: element, createElement: () => new Element(), documentElement: {} },
-    navigator: { language }, window: { __WEB_CSRF__: csrfToken },
+    navigator: { language }, window: { __WEB_CSRF__: csrfToken, addEventListener: (event, cb) => { h[event] = cb; } },
     ...(storage ? { localStorage: storage } : {}),
     location: { reload: () => { ++h.reloads; } },
     Option: class extends Element { constructor(name, id) { super(); this.textContent = name; this.value = id; } },
@@ -678,6 +681,33 @@ test('language (setup shell): a pending request answers in the language selected
   assert.equal(p.id('m').textContent, p.run('L.es.ap'), 'answered in the language chosen meanwhile');
   assert.equal(p.fetches.length, 1);
   switchSetup(p, 'en'); assert.equal(p.id('m').textContent, p.run('L.en.ap'));
+});
+
+for (const language of ['de','en','es']) test('C1 navigation/alerts '+language, async () => {
+  const h=await fixture(language); const data=snapshot();
+  data[2].alerts=Array.from({length:16},(_,i)=>({id:String(i+1),code:'code-'+i,severity:i?'information':'safety-fault',active:true,acknowledged:i===1,muted:i===2,resolved:i===3,decisionRequired:i===4}));
+  await h.finish(data);
+  assert.equal(h.run('nv.hidden'),false);
+  const requests=h.requests.length;
+  h.run("nb[1].onclick()");
+  assert.equal(h.requests.length,requests);
+  assert.equal(h.run('H'),'alerts');
+  assert.equal(h.run('nb[1].attributes["aria-current"]'),'page');
+  assert.equal(h.run('ls.children.length'),17);
+  assert.equal(h.run('ls.children[1].textContent').split(' · ')[0],'code-0');
+  assert.equal(h.run('ls.children[16].textContent').split(' · ')[0],'code-15');
+  assert.equal(h.run('ls.children[2].children[0].disabled'),true);
+  assert.equal(h.run('ls.children[3].children[1].disabled'),true);
+  assert.equal(h.run('ls.children[4].children[0].disabled'),true);
+  h.run("location.hash='#invalid';fragment()");assert.equal(h.run('H'),'alerts');
+  h.run("location.hash='#overview';fragment()");assert.equal(h.run('H'),'overview');
+  h.run("location.hash='#alerts';fragment();P=null;ui()");
+  assert.equal(h.run('ls.children[1].children[0].disabled'),true);
+  h.run('P=LP;B=true;ui()');assert.equal(h.run('ls.children[1].children[0].disabled'),true);
+  h.run('B=false;ui();ls.children[1].children[0].onclick()');
+  assert.equal(JSON.parse(h.posts[0].options.body).i.id,'1');
+  assert.equal(JSON.parse(h.posts[0].options.body).i.t,'ack-message');
+  assert.equal(h.run('ls.children[1].children[0].disabled'),true);
 });
 
 

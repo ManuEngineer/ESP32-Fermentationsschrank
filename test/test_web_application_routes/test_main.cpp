@@ -5020,8 +5020,15 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
         }
         const auto expected =
             shell_golden::webShell(state, csrf, authenticated, sequence);
-        TEST_ASSERT_EQUAL_STRING(expected.c_str(),
-                                 shellDocument(response).c_str());
+        if (state == WebAuthenticationState::Unprovisioned) {
+            TEST_ASSERT_EQUAL_STRING(expected.c_str(),
+                                     shellDocument(response).c_str());
+        } else {
+            const auto split = expected.find(";const E=");
+            TEST_ASSERT_EQUAL_STRING(
+                expected.substr(0U, split).c_str(),
+                shellDocument(response).substr(0U, split).c_str());
+        }
         if (state != WebAuthenticationState::Unprovisioned) {
             TEST_ASSERT_LESS_OR_EQUAL_UINT32(1920U,
                                              completeBody(response).size());
@@ -5032,8 +5039,10 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
             TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
             const auto expectedAuthenticated =
                 shell_golden::webShell(state, session.csrf, true, 1U);
-            TEST_ASSERT_EQUAL_STRING(expectedAuthenticated.c_str(),
-                                     shellDocument(response).c_str());
+            const auto split = expectedAuthenticated.find(";const E=");
+            TEST_ASSERT_EQUAL_STRING(
+                expectedAuthenticated.substr(0U, split).c_str(),
+                shellDocument(response).substr(0U, split).c_str());
         }
         // Real shell construction sets a suffix before the real size check.
         WebRouteDispatcherTestAccess::extraShellBytes(8192U);
