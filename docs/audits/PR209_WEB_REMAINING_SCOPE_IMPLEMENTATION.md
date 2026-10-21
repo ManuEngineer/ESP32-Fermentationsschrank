@@ -1,6 +1,6 @@
 # PR #209 – R1-Web-Restumfang: Implementierungsnachweis
 
-Stand: 2026-10-21; C0/C1/C2/C3 umgesetzt und gezielt geprueft; C5 offen.
+Stand: 2026-10-21; C0/C1/C2/C3 umgesetzt; C5 Software integriert, abschliessende Nachweise laufen.
 Freigegebener Plan: `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2`,
 [`issue-27-r1-web-remaining-scope-plan.md`](../tasks/issue-27-r1-web-remaining-scope-plan.md).
 Der Owner hat diese exakte SHA und die Implementierung C0 → C1 → C2 → C3 → C5
@@ -97,3 +97,34 @@ Lease, Editable aus demselben Application-Lock; keine schreibende Zeitzonen-API.
   C2-Delta +3176 B gegen C1 ist ebenfalls ein D2-Warnsignal gegen die 1,5–2-KB-
   Schaetzung: Bestaetigungs-/Stale-Bindung und editierbare Felder benoetigen mehr
   Code als geschaetzt. Grenzen und Scope bleiben unveraendert.
+
+## C5 – Integration und abschliessende Nachweise
+
+C0 `d1170b2`, C1 `d2446ee`, C2 `27aa12c`, C3 `57fa250`.
+Die neue UI teilt Elementerzeugung, Konfigurations-/Katalog-Lesehelper und
+Bestaetigungs-/Renderpfade; keine Abhaengigkeit oder Minifier in Build/Laufzeit.
+Die feste Asset-Grenze und ihre Abschlussreserve wurden nicht erhoeht.
+
+Aktueller Script-Nachweis: JS 87/87 PASS (einschliesslich der bisherigen 74);
+Webtests 117/117 PASS. Asset **15360 B**, Reserve **1024 B**. Normale Shell
+1751 B authentifiziert (20-stellige Sequenz: 1770 B), 1750 B Passwortschutz aus;
+Setup-Shell unveraendert 3916 B. Beide Shells halten die 128-B-Normalreserve,
+Setup 180 B frei. Asset-CRC `c29ab140`, exakt aus den ausgelieferten Bytes.
+
+Host-Allokationsfenster (64-Bit, angeforderte Bytes ohne Allocatoroverhead;
+keine ESP32-Messung, alle cJSON-Allokationen freigegeben; kalt/warm identisch):
+
+| Handler | Anzahl | angefordert | groesster Block | max. lebend | Body |
+|---|---:|---:|---:|---:|---:|
+| Shell (gueltige Session) | 13 | 3025 B | 2049 B | 2082 B | 1751 B |
+| Asset | 1 | 51 B | 51 B | 51 B | 15360 B Flash, 0 B besessener Koerper |
+| Settings | 28 | 1598 B | 193 B | 604 B | 111 B |
+| Programmdetail (aktueller 4-Eintrag-Katalog) | 64 | 4027 B | 928 B | 2769 B | 347 B |
+
+Programmdetail-Worst-Case-Body mit 16 Eintraegen, 96-B-Name und max. Revision
+ist separat nativ geprueft. Das Handlerfenster oben ist kein Maximal-Heapnachweis
+fuer alle moeglichen 16-Eintrag-Kataloge; deren Kopien und Fragmentierung bleiben
+bei der Hardware-/R1-Qualifikation zu bewerten. Kein `RAM_PASS` daraus.
+
+Offline-Builds beider Profile, Sektions-/Stackvergleich und abschliessender
+Builder-Self-Check stehen noch aus. Pre-Ready und D9 bleiben NOT_RUN.

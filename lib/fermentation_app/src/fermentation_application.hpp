@@ -316,12 +316,13 @@ class FermentationApplication {
         const std::string& languageId,
         const std::optional<UserConfigurationRevision>& expectedRevision);
     // Persists normal user settings (Issue #172 S10, D5/O4) through preview,
-    // revision validation and confirmation, surface-neutral like
-    // applyDisplayLanguage. The visible device name is validated by the
-    // configuration text rules before a preview slot is taken and is only
-    // changeable while no run is active; this is decided here, not by the UI.
-    // The network (hostname, SoftAP SSID, QR) is neither stopped nor
-    // restarted: derived names follow at the next normal network start.
+    // revision validation and confirmation; this entry is LocalDisplay.
+    // The separate typed web entry fixes WebInterface as its origin. The
+    // visible device name is validated by the configuration text rules before a
+    // preview slot is taken and is only changeable while no run is active; this
+    // is decided here, not by the UI. The network (hostname, SoftAP SSID, QR)
+    // is neither stopped nor restarted: derived names follow at the next normal
+    // network start.
     [[nodiscard]] ApplicationConfigurationChangeResult
     applyWebConfigurationChange(
         const WebConfigurationChange& change,

@@ -805,6 +805,20 @@ Vor Release 1:
 - Service-PIN- und Vollreset-Tests gehoeren zu den spaeteren Service-/Hardware-
   Gates, nicht zum #24-R1-`ActuationInterlock`
 
+## R1-Web-Restumfang (PR #209, Software-Nachweise)
+
+Die folgenden Nachweise sind nativ/Fake-DOM; Browser/Geraet bleiben NOT_PROVEN.
+
+| ID | Nachweis |
+|---|---|
+| SIM-27-A-01 | Asset-CRC, oeffentliche bytegleiche Antwort in allen Authzustaenden, Cache nur exakt, GET-only, alte/falsche URL/Query/Unterpfad verworfen: `test_asset_route_crc_cache_and_public_bytes`; echter IDF-Adapterhost fuer Cache-/Sendefehlervertrag. |
+| SIM-27-A-02 | Getrennte Shell-/Setup-/Asset-Grenze und +1, JSON ohne Anhang, Reserven mit Maximal-Sequenz, finales Asset plus 1024 B <= 16384 B: `test_independent_shell_and_asset_boundaries`, `test_new_handler_allocation_windows_and_final_budgets`. |
+| SIM-27-N-01 | Ausgefuehrtes Produktionsscript in getrennten VM-Skripten: vorhandene Polling-/Single-Flight-/Locale-Faelle plus Navigation, 16 geordnete Meldungen, Zeilenaktionen/ID, Stale/Busy/erledigt und Fragment-Allowlist: `scripts/test_web_shell_polling.mjs`. |
+| SIM-27-P-01 | Detail-API Session/Methode/Body/ID, 400/404/503, 96-B-Name/Escaping, null/startable, max. Revision, vier Completion-Tokenbindungen: `test_program_detail_route_contract_and_session_gate`, `test_program_detail_projection_bounds_nulls_and_completion_binding`; JS fuer Eingaben, Revisions- und Bestaetigungsbindung. |
+| SIM-27-S-01 | Geschlossene Settings-Dekodierung, Q2-Negativtest, getrennte 480-/1024-B-Budgets: `test_settings_decode_closed_schema_and_separate_run_budget`; alle Preview-/Commit-Status: `test_settings_all_preview_and_commit_outcomes`. |
+| SIM-27-S-02 | Gates ohne Application-Aufruf, Replay ohne Zweitmutation, Payload-Konflikt, Store-Manifest WebInterface/3 und Touch/2, NoChange/stale/Laufsperre ohne neues Manifest, Netzwerk unveraendert und Session gueltig: `test_settings_route_gate_replay_origin_and_network_characterization`. |
+| SIM-27-S-03 | JS DE/EN/ES, nameEditable/Stale/Busy, nur Name schreibbar; unbestimmtes Ergebnis sperrt Sequenz, zeigt Pruefhinweis und laedt Status/Settings neu. D9 bleibt separat autorisiert. |
+
 ## Hardware-Abnahme
 
 Jeder relevante Hardwarestand dokumentiert mindestens:

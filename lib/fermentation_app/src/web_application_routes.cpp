@@ -33,7 +33,8 @@ constexpr char kHtmlContentType[] = "text/html; charset=utf-8";
 constexpr std::size_t kMaximumWebShellBytes = 2048U;
 constexpr std::size_t kMaximumWebSetupShellBytes = 4096U;
 constexpr std::size_t kMaximumWebAssetBytes = 16384U;
-static_assert(sizeof(kWebApplicationAsset) - 1U <= kMaximumWebAssetBytes);
+static_assert(sizeof(kWebApplicationAsset) - 1U + 1024U <=
+              kMaximumWebAssetBytes);
 
 const std::array<char, 24U>& assetPath() {
     static const auto path = [] {
@@ -161,19 +162,8 @@ std::string retryAfterSeconds(std::uint64_t retryAfterMs) {
     return std::to_string(seconds);
 }
 
-// Shell for the Unprovisioned state: the first-time web access setup form.
-// Login, status polling and the session controls have no function in this
-// state (the API answers 503), so this page replaces them within the same
-// shell size limit. The form only collects input and posts it to
-// POST /api/v1/provision; the Application decides everything (release
-// window, credential rules, state). It issues no session.
-// Browser-only state: F holds the complete fetch/body group, C its abort
-// controller, W one reserved post-mutation refresh. G invalidates old results.
-// Shared locale keys and short aliases keep the 11456-B shell budget (owner
-// decision D1 = A of the language-selection plan a671c33; formerly 11264 B
-// from plan 9656a18 and 10752 B from plan 3376a19). One-time limit, no
-// further increase. The language is chosen client side (sl()), validated
-// against /^(de|en|es)$/ and kept only in the browser (localStorage.lang).
+// First-time access setup remains inline and independently bounded. The
+// normal shell keeps session constants inline and loads the public asset.
 std::string provisioningShell(std::string_view& staticBodySuffix) {
     static constexpr char kSuffix[] =
         "const L={de:{a:'Mit Passwort schuetzen (empfohlen)',b:'Passworts"
@@ -263,7 +253,7 @@ std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
     // run actions below. All three API requests are repeated together so
     // a reconnect receives a full snapshot.
     std::string html;
-    html.reserve(1536U);
+    html.reserve(kMaximumWebShellBytes);
     html +=
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta"
         " name=\"viewport\" content=\"width=device-width,initial-scale=1\"><t"

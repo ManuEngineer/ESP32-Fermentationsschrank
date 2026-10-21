@@ -3357,7 +3357,7 @@ void test_dispatcher_run_mutation_sequence_contract() {
 
 std::string rawShell(ComposedFixture& fixture, const std::string& cookie = {}) {
     auto request = makeWebRequest("GET", "/");
-    if (!cookie.empty()) request.metadata.cookie = cookie;
+    if (!cookie.empty()) request.metadata.cookie = "FSSESSION=" + cookie;
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
@@ -3527,19 +3527,21 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_TRUE(contains(body, "X-CSRF-Token"));
     // Ack/Mute are sent directly; Stop, Done and Start are armed first (D1).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
-    TEST_ASSERT_TRUE(contains(body, "if(K!==a){K=a;KC='';"));
+    TEST_ASSERT_TRUE(contains(body, "if(!cf(a))return;"));
     TEST_ASSERT_TRUE(contains(body, "T.sure"));
     // Intents match the fixed wire contract.
     TEST_ASSERT_TRUE(contains(body, "t:a+'-message'"));
     TEST_ASSERT_TRUE(contains(body, "{t:'stop-run',o:'abort-and-turn-off'}"));
     TEST_ASSERT_TRUE(contains(body, "{t:'complete-run',c:false}"));
-    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:candidate()}"));
-    // Only a clearly completed outcome advances the sequence; otherwise reload.
-    TEST_ASSERT_TRUE(contains(body,
-                              "applied|stale|busy|confirmation-required|"
-                              "rejected|too-large|write-failed"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:sc()}"));
+    // Closed outcomes; an unavailable/indeterminate result locks the
+    // sequence and refreshes state, never implies a successful commit.
+    for (const auto* token : {"applied:", "stale:", "busy:", "rejected:",
+                              "'confirmation-required':", "'too-large':",
+                              "'write-failed':", "unavailable:"})
+        TEST_ASSERT_TRUE(contains(body, token));
     TEST_ASSERT_TRUE(contains(body, "location.reload()"));
-    TEST_ASSERT_TRUE(contains(body, "r.status!==503"));
+    TEST_ASSERT_TRUE(contains(body, "Q=j.outcome==='unavailable'?0:n+1"));
     TEST_ASSERT_TRUE(contains(body, "t<2&&!r"));
     // All locales carry the confirmation and result texts.
     TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "sure"));
@@ -3559,17 +3561,16 @@ void test_shell_action_availability_and_confirmation_binding_contract() {
     TEST_ASSERT_TRUE(contains(body, "r=h==='active-run'||h==='waiting'"));
     TEST_ASSERT_TRUE(contains(body,
                               "stop:!r,done:h!=='completed',"
-                              "start:h!=='standby'||!pg.value"));
+                              "start:ps.disabled"));
     // A pending confirmation is bound to mode, run and catalog revision and
     // the selected program; it is dropped on change, on send and without a
     // valid snapshot. Unchanged polls keep it.
-    TEST_ASSERT_TRUE(
-        contains(body,
-                 "c=P?[h,P[0].revisions.run,P[0]."
-                 "revisions[Z],PC,pg.value,JSON.stringify(candidate())]"
-                 ".join():''"));
+    TEST_ASSERT_TRUE(contains(body,
+                              "c=P?[h,rv().run,rv()[Z],PC,pg.value,JSON."
+                              "stringify(sc()),SD?.revision,sn.value]"
+                              ".join():''"));
     TEST_ASSERT_TRUE(contains(body, "if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';"));
-    TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>loadProgram();"));
+    TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ld();"));
     TEST_ASSERT_TRUE(contains(body, "send(i){K='';B=true;"));
     // A failed refresh makes the snapshot unusable until a fresh one arrives.
     // Abort the siblings, then check the generation before display effects
@@ -3802,7 +3803,7 @@ void test_dashboard_shell_structure_and_responsive_contract() {
     TEST_ASSERT_TRUE(contains(body,
                               "['status','temperatures','alerts'].map(async "
                               "x=>{const a=await fetch('/api/v1/'+x,"));
-    TEST_ASSERT_EQUAL_UINT32(7U, occurrences(body, "fetch('"));
+    TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
 }
 
 void test_dashboard_shell_texts_are_complete_in_all_locales() {
@@ -3999,11 +4000,10 @@ void test_language_choice_never_reaches_the_api_or_the_polling_contract() {
     const auto body = loggedInShell(fixture);
     // The switch re-renders locally: same three polling paths, same single
     // interval and the unchanged mutation headers; no request in sl().
-    TEST_ASSERT_EQUAL_UINT32(7U, occurrences(body, "fetch('"));
+    TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "setInterval("));
     TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
-    TEST_ASSERT_TRUE(
-        contains(body, "sw.onchange=()=>{sl(sw.value);dr();ui();"));
+    TEST_ASSERT_TRUE(contains(body, "sw.onchange=()=>{sl(sw.value);ui();"));
     TEST_ASSERT_TRUE(contains(body, "try{localStorage.lang=lc}catch(e){}"));
     TEST_ASSERT_TRUE(contains(body, "b[X]=K===k?T.sure:T[k]+"));
     // The labels of the selector are not translated and carry no table key.
@@ -4593,10 +4593,10 @@ void test_shell_start_flow_text_contract() {
     const auto body = shellBody(fixture);
     // Names are shown, ids are sent; the list is only requested with a
     // usable sequence and its result never makes Start available by itself.
-    TEST_ASSERT_TRUE(contains(body, "fetch('/api/v1/programs'"));
+    TEST_ASSERT_TRUE(contains(body, "get('programs')"));
     TEST_ASSERT_TRUE(contains(body, "new Option(x.name,x.id)"));
-    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:candidate()}"));
-    TEST_ASSERT_TRUE(contains(body, "start:h!=='standby'||!pg.value"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:sc()}"));
+    TEST_ASSERT_TRUE(contains(body, "start:ps.disabled"));
     // Start needs two clicks like Stop/Complete (no direct-send branch).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
     TEST_ASSERT_FALSE(contains(body, "a==='start'&&"));
@@ -4604,13 +4604,15 @@ void test_shell_start_flow_text_contract() {
     // enabled only while list and status revision agree, a mismatch or failed
     // load clears the selection and reloads, and the intent carries the
     // list revision instead of the latest status revision.
-    TEST_ASSERT_TRUE(contains(body, "!PC||P[0].revisions[Z]!==PC"));
+    TEST_ASSERT_TRUE(contains(body, "!PC||!va()") &&
+                     contains(body, "rv()[Z]!==PC"));
     TEST_ASSERT_TRUE(contains(body, "v&&v!==PC)lp();"));
     TEST_ASSERT_TRUE(contains(body, "PC='';pg[Y]();"));
     TEST_ASSERT_TRUE(contains(body, "PC=j.catalogRevision;"));
     TEST_ASSERT_TRUE(contains(body, "if(i.t==='start-program')o.c=PC;"));
     TEST_ASSERT_TRUE(contains(
-        body, "revisions[Z],PC,pg.value,JSON.stringify(candidate())]"));
+        body,
+        "rv()[Z],PC,pg.value,JSON.stringify(sc()),SD?.revision,sn.value]"));
 }
 
 void test_other_states_get_no_provisioning_form_or_bypass() {
@@ -5550,8 +5552,50 @@ void test_settings_route_gate_replay_origin_and_network_characterization() {
             .version == touched.version);
 }
 
+void test_new_handler_allocation_windows_and_final_budgets() {
+    ComposedFixture fixture;
+    const auto session = composedRunSession(fixture);
+    const auto source = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(source.has_value());
+    const auto& id = source->programCatalog.programs.front().program.id;
+    char asset[24]{};
+    std::snprintf(asset, sizeof(asset), "/assets/app.%08x.js",
+                  static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(
+                      kWebApplicationAsset)));
+    for (const auto& path :
+         {std::string("/"), std::string(asset), std::string("/api/v1/settings"),
+          std::string("/api/v1/programs/") + id})
+        for (unsigned pass = 0; pass < 2; ++pass) {
+            const auto request =
+                makeAuthenticatedRequest("GET", path, session.web.cookie);
+            device_platform::HttpResponse response;
+            bool handled = false;
+            const auto w = alloc_window::measure([&] {
+                handled = fixture.http.routes()->handle(request, response);
+            });
+            TEST_ASSERT_TRUE(handled);
+            TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+            TEST_ASSERT_EQUAL_UINT32(0U, w.cJsonLiveBytes);
+            if (path == asset) TEST_ASSERT_TRUE(response.body.empty());
+            std::printf(
+                "PR209_ALLOC %s pass=%u count=%zu bytes=%zu largest=%zu "
+                "peak_live=%zu cjson_count=%zu body=%zu\n",
+                path.c_str(), pass, w.count, w.requestedBytes, w.largestBlock,
+                w.peakLiveBytes, w.cJsonCount, completeBody(response).size());
+        }
+    const auto shell = rawShell(fixture, session.web.cookie);
+    TEST_ASSERT_TRUE(shell.size() + 19U + 128U <= 2048U);
+    TEST_ASSERT_TRUE(sizeof(kWebApplicationAsset) - 1U + 1024U <= 16384U);
+    std::printf(
+        "PR209_FINAL_BYTES shell=%zu shell_max_sequence=%zu asset=%zu "
+        "asset_reserve=%zu\n",
+        shell.size(), shell.size() + 19U, sizeof(kWebApplicationAsset) - 1U,
+        16384U - (sizeof(kWebApplicationAsset) - 1U));
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_new_handler_allocation_windows_and_final_budgets);
     RUN_TEST(test_settings_decode_closed_schema_and_separate_run_budget);
     RUN_TEST(test_settings_all_preview_and_commit_outcomes);
     RUN_TEST(

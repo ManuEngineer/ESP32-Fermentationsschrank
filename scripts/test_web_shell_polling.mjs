@@ -22,7 +22,7 @@ function deferred() {
 
 class Element {
   constructor() { this.children = []; this.dataset = {}; this.value = ''; }
-  checkValidity() { const n=Number(this.value);return (this.min===undefined||n>=this.min)&&(this.max===undefined||n<=this.max); }
+  checkValidity() { if(this.disabled)return true;const n=Number(this.value);return (!this.required||this.value!=='')&&(this.min===undefined||n>=this.min)&&(this.max===undefined||n<=this.max); }
   addEventListener() {}
   append(...children) { this.children.push(...children); }
   after(...children) { this.afterNodes = children; }
@@ -82,8 +82,8 @@ async function fixture(language = 'en', storage) {
       }
       if (url === '/internal/ui/run') {
         const response = deferred(), body = deferred();
-        h.posts.push({ url, options, started: h.time, reply: outcome => {
-          response.resolve({ status: 200, json: () => body.promise });
+        h.posts.push({ url, options, started: h.time, reply: (outcome, status = 200) => {
+          response.resolve({ status, json: () => body.promise });
           body.resolve({ outcome });
         } });
         return response.promise;
@@ -705,9 +705,9 @@ for (const language of ['de','en','es']) test('C1 navigation/alerts '+language, 
   assert.equal(h.run('ls.children[2].children[0].disabled'),true);
   assert.equal(h.run('ls.children[3].children[1].disabled'),true);
   assert.equal(h.run('ls.children[4].children[0].disabled'),true);
-  h.run("location.hash='#invalid';fragment()");assert.equal(h.run('H'),'alerts');
-  h.run("location.hash='#overview';fragment()");assert.equal(h.run('H'),'overview');
-  h.run("location.hash='#alerts';fragment();P=null;ui()");
+  h.run("location.hash='#invalid';fr()");assert.equal(h.run('H'),'alerts');
+  h.run("location.hash='#overview';fr()");assert.equal(h.run('H'),'overview');
+  h.run("location.hash='#alerts';fr();P=null;ui()");
   assert.equal(h.run('ls.children[1].children[0].disabled'),true);
   h.run('P=LP;B=true;ui()');assert.equal(h.run('ls.children[1].children[0].disabled'),true);
   h.run('B=false;ui();ls.children[1].children[0].onclick()');
@@ -720,7 +720,7 @@ test('C2 program details, overrides and confirmation binding', async()=>{
   const h=await fixture();await h.finish(snapshot('standby'));
   assert.equal(h.run('PD.id'),'p1');
   h.run("nb[2].onclick()");assert.equal(h.run('pd.hidden'),false);
-  assert.deepEqual(JSON.parse(h.run('JSON.stringify(candidate())')),{p:'p1'});
+  assert.deepEqual(JSON.parse(h.run('JSON.stringify(sc())')),{p:'p1'});
   h.run("pf.x.value='43';pf.x.onchange();ps.onclick()");
   assert.equal(h.posts.length,0);assert.equal(h.run('K'),'start');
   h.run("pf.d.value='90';pf.d.onchange()");assert.equal(h.run('K'),'');
@@ -731,7 +731,7 @@ test('C2 null/not-startable and stale program details cannot start',async()=>{
   const h=await fixture();h.detail={catalogRevision:'1',program:{id:'p1',name:'TBD',startable:false,targetCelsius:null,durationMinutes:null,preheat:false,defaultSensorMode:'air',completion:{mode:'finish',coolingTargetCelsius:null,holdDurationMinutes:null}}};
   await h.finish(snapshot('standby'));assert.equal(h.run('ps.disabled'),true);
   assert.equal(h.run('pf.x.value'),'');assert.equal(h.run('pf.d.value'),'');
-  h.detail.catalogRevision='2';await h.run('loadProgram()');
+  h.detail.catalogRevision='2';await h.run('ld()');
   assert.equal(h.run('PD'),null);assert.equal(h.run('pg.value'),'');assert.equal(h.run('PC'),'');
   assert.equal(h.posts.length,0);
 });
@@ -751,6 +751,24 @@ test('C3 settings nameEditable false and stale lock writes',async()=>{
  const h=await fixture();await h.finish();h.settings={revision:'1',deviceName:'Fixed',timeZone:'Europe/Zurich',nameEditable:false};
  h.run('nb[3].onclick()');await drain();assert.equal(h.run('sn.disabled'),true);h.run('sb.onclick()');assert.equal(h.posts.length,0);
  h.run('SD.nameEditable=true;P=null;ui()');assert.equal(h.run('sb.disabled'),true);assert.equal(h.run('sn.disabled'),true);
+});
+
+for(const language of ['de','en','es'])test('C5 uncertain settings outcome locks sequence and refreshes '+language,async()=>{
+ const h=await fixture(language);await h.finish(snapshot('standby'));h.run('nb[3].onclick()');await drain();
+ const command=h.run("send({t:'set-device-name',n:'Maybe'})");
+ h.posts[0].reply('unavailable',503);await drain();
+ assert.equal(h.run('Q'),0);assert.ok(h.run('nt.textContent').includes(h.run('T.uncertain')));assert.equal(h.run('sb.disabled'),true);
+ await h.finish(snapshot('standby'));await command;
+ assert.ok(h.run('SD'));assert.equal(h.run('sb.disabled'),true);assert.equal(h.reloads,0);
+});
+test('C5 rendered input constraints block invalid overrides',async()=>{
+ const h=await fixture();await h.finish(snapshot('standby'));
+ h.run("pf.x.value='';pf.x.onchange()");assert.equal(h.run('ps.disabled'),true);
+ h.run("pf.x.value='46';pf.x.onchange()");assert.equal(h.run('ps.disabled'),true);
+ h.run("pf.x.value='43';pf.c.value='cool-hold-duration';pf.c.onchange()");assert.equal(h.run('ps.disabled'),true);
+ h.run("pf.k.value='5';pf.l.value='90';pf.l.onchange()");assert.equal(h.run('ps.disabled'),false);
+ h.run('ps.onclick();ps.onclick()');const intent=JSON.parse(h.posts[0].options.body).i;
+ assert.equal(intent.c.c,'cool-and-hold-for-duration');assert.equal(intent.c.k,5);assert.equal(intent.c.l,90);
 });
 
 
