@@ -37,4 +37,3 @@ Erzeugt mit `scripts/build_report.py --append --esp-idf-profiles bringup release
 - Bootloader-BIN: 26176 Bytes
 - Partitionstabellen-BIN: 3072 Bytes
 - sdkconfig SHA-256: 9ab3490da37da6bd5a9689eb067c9739276974c0b3cfe20d8c40def2d925c3ea
-

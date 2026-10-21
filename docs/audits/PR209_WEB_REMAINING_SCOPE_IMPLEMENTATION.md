@@ -1,6 +1,7 @@
 # PR #209 – R1-Web-Restumfang: Implementierungsnachweis
 
-Stand: 2026-10-21; Source-Kandidat `4f6f0c9abad9e1c354fc67e140302adcf62680e9`.
+Stand: 2026-10-21; versionierte Offline-Messbasis `4f6f0c9abad9e1c354fc67e140302adcf62680e9`.
+Der aktuellste HEAD-gebundene Test-/Build-/Self-Check-Stand steht im kanonischen PR-Handover.
 **C0–C3/C5-Software implementiert, C5-Ressourcenabschluss FAIL/HOLD.**
 **OPEN_BLOCKERS=1: Settings-HTTPD-Stack.** Weitere Produktarbeit angehalten;
 Planrevision 2.3 fuer die zusaetzliche Korrektur ist noch nicht freigegeben.
@@ -207,3 +208,8 @@ vollstaendigen Planrevision 2.3 beantragt; kein solcher Fix ist implementiert.
 Keine automatische HTTPD-/Heapbudgeterhoehung. Q1/Q2, F4 PROVISIONAL und alle
 historischen Grenzen bleiben bestehen; `RAM_PASS=NOT_PROVEN`,
 `ACTUATOR_RELEASE=NO`, `D9=NOT_RUN`.
+
+Builder-Self-Check auf `e935597`: clang-format PASS, clang-tidy fand zwei fehlende
+Klammerpaare in `webSettings()`. Rein mechanisch korrigiert; der erneute Lauf
+wird im Handover auf den neuen HEAD gebunden. Kein Ressourcenfix damit und
+keine Aenderung an Q1/Q2 oder an den Fehler-/Commitvertraegen.

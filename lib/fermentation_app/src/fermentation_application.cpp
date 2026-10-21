@@ -1031,10 +1031,13 @@ FermentationApplication::applyWebConfigurationChange(
 std::optional<ApplicationWebSettingsSnapshot>
 FermentationApplication::webSettings() const {
     const auto guard = applicationCallSerializer_.enter();
-    if (configurationService_ == nullptr) return std::nullopt;
-    const auto runtime = configurationService_->acquireRuntime();
-    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted)
+    if (configurationService_ == nullptr) {
         return std::nullopt;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return std::nullopt;
+    }
     const auto& snapshot = runtime.lease.get();
     return ApplicationWebSettingsSnapshot{
         snapshot.userConfigurationRevision(),
