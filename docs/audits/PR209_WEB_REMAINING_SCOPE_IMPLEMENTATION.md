@@ -213,3 +213,17 @@ Builder-Self-Check auf `e935597`: clang-format PASS, clang-tidy fand zwei fehlen
 Klammerpaare in `webSettings()`. Rein mechanisch korrigiert; der erneute Lauf
 wird im Handover auf den neuen HEAD gebunden. Kein Ressourcenfix damit und
 keine Aenderung an Q1/Q2 oder an den Fehler-/Commitvertraegen.
+
+### Q3-Entscheidgrundlage ergaenzt (nur Analyse, 2026-10-21)
+
+[Xtensa-Scratch-Evidence](PR209_SCRATCH_ANALYSIS_20261021.md) auf Produktquellen
+`3816450`: Graph 552 B, Prepared 1288 B, Ergebnis 1304 B, vorgeschlagener
+Ein-Scratch-Owner 1856 B, jeweils Alignment 8 B in beiden Profilen. Maximaler
+zusaetzlicher Request 1856 B; konservativer Allocatoraufschlag eingeschlossen
+maximal 1936 B. Handoff-Objektablagen gleichzeitig 3920 B, davon 2064 B bereits
+Ist-Heap; keine zusaetzlichen dynamischen Pufferkopien im bilanzierten Vorschlag.
+Nach Indeterminate-Uebergabe kein gehaltener Zusatzscratch. Dies ist eine
+analytische Layout-/Lebensdauergrenze, noch kein Implementierungsnachweis.
+Historisches H-RAM-1 und F4 liefern keinen aktuellen Heap-/HWM-PASS.
+Planrevision 2.3 §12 quantitativ ergaenzt, Q3 weiterhin NICHT FREIGEGEBEN;
+Produktdelta und Regressionen NOT_RUN. Stack-FAIL/HOLD und alle Gates bleiben.

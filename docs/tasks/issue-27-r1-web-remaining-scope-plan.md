@@ -550,9 +550,9 @@ deren direkte Tests; die bestehenden Settings-/Touch-Verbraucher bleiben.
    fest typisierter, pro Commit begrenzter Scratch-Owner gehalten. Bestehende
    Typen `LoadedConfigurationGraph`, `PreparedConfigurationCommit` und
    `ConfigurationCommitPrepareResult` werden wiederverwendet; es entsteht
-   kein zweites Transaktions- oder Persistenzmodell. Die konkrete Xtensa-
-   `sizeof`-Groesse und der maximale gleichzeitig lebende Zusatzbedarf werden
-   vor der Freigabebewertung ausgewiesen; kein stilles Erhoehen eines Budgets.
+   kein zweites Transaktions- oder Persistenzmodell. Die unten gemessene
+   Xtensa-Groesse und Lebensdauerbilanz begrenzen diesen Vorschlag;
+   kein stilles Erhoehen eines Budgets.
 2. `ConfigurationGraphStore` erhaelt einen typisierten In-place-Eintritt fuer
    diese Scratch-Ablage. Er schreibt den vorhandenen Ergebnis-/Prepared-Typ
    direkt in die Ablage und erzeugt keine gleich grosse Rueckgabe-Temporary
@@ -577,7 +577,71 @@ deren direkte Tests; die bestehenden Settings-/Touch-Verbraucher bleiben.
    weiterhin nicht nachweisbar, wieder STOP und Ownerbefund; keine automatische
    Stack-/Heap-/Scopeerweiterung. Die reale HWM-/Heapqualifikation bleibt D9.
 
-### Gezielte Nachweise und Abschluss
+### Quantitative Entscheidgrundlage vor Q3 (nur Analyse, 2026-10-21)
+
+[Messverfahren, Rohwerte und Lebensdauerbilanz](../audits/PR209_SCRATCH_ANALYSIS_20261021.md)
+beziehen sich auf Produktquellen `3816450f87aabc0a0ed3e00aa606cf4ab6644718`.
+Gemessen mit den tatsaechlichen Compile-Befehlen beider ESP32-Profile,
+Xtensa GCC 15.2.0 / `esp-15.2.0_20251204`, ESP-IDF v6.1, GNU++17,
+Exceptions/RTTI aus; ausschliesslich temporaere Analyseobjekte, kein Firmwarebuild.
+
+| Typ | `sizeof` B | `alignof` B (beide Profile) |
+|---|---:|---:|
+| `LoadedConfigurationGraph` | 552 | 8 |
+| `PreparedConfigurationCommit` | 1288 | 8 |
+| `ConfigurationCommitPrepareResult` | 1304 | 8 |
+| Vorgesehener `ProposedCommitScratch` | **1856** | **8** |
+
+Das analytische Ownerlayout ist genau `{ LoadedConfigurationGraph current;
+ConfigurationCommitPrepareResult prepared; }`; der `PreparedConfigurationCommit`
+ist im Optional des Ergebnisses bereits enthalten. Ein `unique_ptr`-Handle
+belegt 4 B ausserhalb des Heapobjekts, ohne eigenen Kontrollblock. Die In-place-
+Vorbereitung baut `prepared.prepared`/`newGraph` direkt dort auf; kein zweiter
+Scratch, keine zusaetzliche Prepared-/Graph-Heapkopie. Vorhandene String-/
+Modellallokationen werden mit gleicher Lebensdauer weiterverwendet bzw.
+verschoben. Auch die Uebergabe an `ResolutionContext` erzeugt keine grosse
+Stack-Aggregattemporary. Diese Layout-/Lebensdauerannahmen sind Grenzen des
+Vorschlags und nach Autorisierung am Implementierungsdiff zu verifizieren.
+
+Maximaler **zusaetzlicher angeforderter Heap: 1856 B pro Commit**, auch bei der
+Uebergabe. Gleichzeitig leben dort Scratch 1856 B + vorhandener Publish-Graph
+552 B + vorhandener `ResolutionContext` 1512 B = **3920 B Objektablagen**,
+zuzueglich der bereits im Ist-Pfad vorhandenen Runtime-/String-/Modellpuffer.
+Die letzten 2064 B sind bereits Ist-Heapbedarf, kein weiterer Scratch-Zuwachs.
+Fuer den gepinnten TLSF-Pfad ohne Poisoning/Tracing/Tasktracking ergibt sich
+einschliesslich Alignment, Groessenklassen und unsplittbarem Rest eine
+konservative Obergrenze von **1936 B zusaetzlicher Allocator-Belegung**;
+Herleitung und Unterschied zur erforderlichen zusammenhaengenden Luecke siehe
+Evidence. Keine neue Heapreserve und keine Erfolgsgarantie fuer die Allokation.
+
+Bei Scratch-OOM: 0 B erfolgreicher Zusatz, bestehendes Busy-Ergebnis ohne
+Schreiben; vor Allokation abgewiesene/NoChange/stale-Faelle ebenfalls 0 B.
+Bei spaeteren normalen Prepare-/Runtime-/Ausfuehrungsfehlern hoechstens ein
+Scratch bis zum Ruecklauf, danach 0 B. Bei `ConfigurationCommitIndeterminate`
+oder dem bestehenden aufbewahrten RuntimeFailure-Pfad wird nur der bestehende
+Resolution-Owner uebertragen: maximal 1856 B waehrend der Uebergabe, **0 B
+zusaetzlich nach Rueckkehr**. Nachgelagerte OOMs bestehender String-/Modell-/
+Resolution-Allokationen sind dadurch nicht allgemein beherrscht oder bewiesen.
+
+Historisches H-RAM-1 (anderes Overlayimage M): Heapminimum 19896 B, beobachteter
+kleinster API-/Shell-Block 26624/22528 B. Rechnerisch entsprechen 1936 B rund
+9,7 % jenes Heapminimums; eine Subtraktion ergibt 17960 B, **keine aktuelle
+Restheap-Prognose**. F4 bleibt PROVISIONAL (Skip <13312 B, Wiederaufnahme
+ab 16640 B), prueft groesste Bloecke und reserviert nichts fuer diesen Commit.
+TOCTOU, Fragmentierung und gleichzeitige WLAN-/HTTP-/LVGL-Last bleiben offen;
+historisches F1+F4-Stress-OOM bleibt relevant. Offline nicht bewiesen sind
+aktuelle Maximalspitze, Allokationserfolg, F4-Wirkung, reale Heap-/HWM-Reserve
+und die korrigierte vollstaendige Stackkette. **RAM_PASS=NOT_PROVEN**.
+
+**Begrenzte Empfehlung:** Q3 kann ausschliesslich einen Implementierungsversuch
+dieses quantifizierten Ein-Scratch-Deltas mit den unveraenderten Nachweisen
+autorisieren. Die Zahlen erteilen keine Ressourcen-/Hardwarefreigabe; der
+8528-B-Stackbefund bleibt FAIL/HOLD. Mehr Felder/Allokationen, laengere
+Pufferueberlappung oder veraenderte Besitzuebergabe erfordern eine erneuerte
+Bilanz vor Bewertung, keine stille Budgeterhoehung. Commit-/Recovery-/
+Golden-Byte-Vertraege und das Vollketten-8192-B-Stackgate oben bleiben bindend.
+
+### Gezielte Nachweise und Abschluss (erst nach Q3-Autorisierung)
 
 - Fehler vor Scratch-Allokation/bei OOM: kein persistenter Schreibaufruf,
   keine neue Generation, keine verlorenen Preview-/Mutationleases.
