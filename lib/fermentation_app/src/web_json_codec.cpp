@@ -766,10 +766,10 @@ const char* messageSeverityName(MessageClass value) {
 
 }  // namespace
 
-WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
-                                                WebRunMutationDto& output) {
+WebRunMutationDecodeStatus decodeWebMutation(const std::string& exactBody,
+                                             WebMutationDto& output) {
     if (exactBody.empty()) return WebRunMutationDecodeStatus::Invalid;
-    if (exactBody.size() > kMaximumWebRunMutationBodyBytes) {
+    if (exactBody.size() > kMaximumWebMutationBodyBytes) {
         return WebRunMutationDecodeStatus::TooLarge;
     }
     if (containsForbiddenNulInput(exactBody)) {
@@ -779,7 +779,9 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
     CJsonDocument document(cJSON_ParseWithLengthOpts(
         exactBody.c_str(), exactBody.size() + 1U, nullptr, true));
     if (!document || !cJSON_IsObject(document.get())) {
-        return WebRunMutationDecodeStatus::Invalid;
+        return exactBody.size() > kMaximumWebRunMutationBodyBytes
+                   ? WebRunMutationDecodeStatus::TooLarge
+                   : WebRunMutationDecodeStatus::Invalid;
     }
     const auto* const root = document.get();
     std::uint32_t version{};
@@ -788,6 +790,27 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
         return WebRunMutationDecodeStatus::Invalid;
     }
 
+    const auto* revisions = member(root, "r");
+    const auto* intent = member(root, "i");
+    const auto* type = member(intent, "t");
+    if (cJSON_IsString(type) &&
+        std::strcmp(type->valuestring, "set-device-name") == 0) {
+        std::uint64_t revision{};
+        std::string name;
+        if (hasDuplicateKeys(root) || !hasOnlyKeys(revisions, {"u"}) ||
+            hasDuplicateKeys(revisions) ||
+            !readRevisionDecimal(member(revisions, "u"), revision) ||
+            !hasOnlyKeys(intent, {"t", "n"}) || hasDuplicateKeys(intent) ||
+            !readString(member(intent, "n"),
+                        configuration_limits::kMaximumVisibleNameBytes, name))
+            return WebRunMutationDecodeStatus::Invalid;
+        output =
+            WebConfigurationMutationDto{UserConfigurationRevision{revision},
+                                        WebDeviceNameChange{std::move(name)}};
+        return WebRunMutationDecodeStatus::Success;
+    }
+    if (exactBody.size() > kMaximumWebRunMutationBodyBytes)
+        return WebRunMutationDecodeStatus::TooLarge;
     WebRunMutationDto parsed;
     if (!readExpected(member(root, "r"), parsed.expected) ||
         !readIntent(member(root, "i"), parsed.intent)) {
@@ -795,6 +818,34 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
     }
     output = std::move(parsed);
     return WebRunMutationDecodeStatus::Success;
+}
+
+WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
+                                                WebRunMutationDto& output) {
+    if (exactBody.size() > kMaximumWebRunMutationBodyBytes)
+        return WebRunMutationDecodeStatus::TooLarge;
+    WebMutationDto dto;
+    const auto decoded = decodeWebMutation(exactBody, dto);
+    if (decoded != WebRunMutationDecodeStatus::Success) return decoded;
+    const auto* run = std::get_if<WebRunMutationDto>(&dto);
+    if (run == nullptr) return WebRunMutationDecodeStatus::Invalid;
+    output = *run;
+    return WebRunMutationDecodeStatus::Success;
+}
+
+bool encodeWebApiSettings(const ApplicationWebSettingsSnapshot& snapshot,
+                          std::string& output) {
+    CJsonDocument document(cJSON_CreateObject());
+    const auto revision = std::to_string(snapshot.revision.value());
+    return document &&
+           cJSON_AddNumberToObject(document.get(), "version", 1.0) &&
+           addString(document.get(), "revision", revision.c_str()) &&
+           addString(document.get(), "deviceName",
+                     snapshot.deviceName.c_str()) &&
+           addString(document.get(), "timeZone", snapshot.timeZone.c_str()) &&
+           cJSON_AddBoolToObject(document.get(), "nameEditable",
+                                 snapshot.nameEditable) &&
+           serializeBounded(document.get(), output);
 }
 
 WebProvisionDecodeStatus decodeWebProvision(const std::string& exactBody,

@@ -20,6 +20,7 @@
 
 #include "device_platform.hpp"
 #include "configuration_limits.hpp"
+#include "configuration_graph_store.hpp"
 #include "configuration_storage_contract.hpp"
 #include "connectivity_credentials.hpp"
 #include "fermentation_application.hpp"
@@ -48,6 +49,15 @@ struct WebSessionManagerTestAccess {
 
 class FermentationApplicationTestAccess {
    public:
+    static std::size_t webCalls(const FermentationApplication& app) {
+        return app.webConfigurationCallsForTest_;
+    }
+    static ConfigurationManifestReference manifest(
+        const FermentationApplication& app) {
+        const auto read = app.configurationService_->acquireRuntime();
+        TEST_ASSERT_TRUE(read.lease.valid());
+        return read.lease.get().manifestReference();
+    }
     static RunCommandState& runtimeState(FermentationApplication& application) {
         return *application.runtimeRunState_;
     }
@@ -199,6 +209,10 @@ class FermentationApplicationTestAccess {
 };
 
 struct WebRunMutationHandlerTestAccess {
+    static ReplayOutcomeCode projectConfig(
+        const ApplicationConfigurationChangeResult& result) {
+        return WebRunMutationHandler::projectConfigurationResult(result);
+    }
     static ReplayOutcomeCode project(
         const FermentationUiCommandResult& result) {
         return WebRunMutationHandler::projectCommandResult(result);
@@ -3788,7 +3802,7 @@ void test_dashboard_shell_structure_and_responsive_contract() {
     TEST_ASSERT_TRUE(contains(body,
                               "['status','temperatures','alerts'].map(async "
                               "x=>{const a=await fetch('/api/v1/'+x,"));
-    TEST_ASSERT_EQUAL_UINT32(6U, occurrences(body, "fetch('"));
+    TEST_ASSERT_EQUAL_UINT32(7U, occurrences(body, "fetch('"));
 }
 
 void test_dashboard_shell_texts_are_complete_in_all_locales() {
@@ -3985,7 +3999,7 @@ void test_language_choice_never_reaches_the_api_or_the_polling_contract() {
     const auto body = loggedInShell(fixture);
     // The switch re-renders locally: same three polling paths, same single
     // interval and the unchanged mutation headers; no request in sl().
-    TEST_ASSERT_EQUAL_UINT32(6U, occurrences(body, "fetch('"));
+    TEST_ASSERT_EQUAL_UINT32(7U, occurrences(body, "fetch('"));
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "setInterval("));
     TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
     TEST_ASSERT_TRUE(
@@ -5290,8 +5304,258 @@ void test_program_detail_projection_bounds_nulls_and_completion_binding() {
     }
 }
 
+std::string nameBody(UserConfigurationRevision revision,
+                     const std::string& name = "New device") {
+    return "{\"v\":1,\"r\":{\"u\":\"" + std::to_string(revision.value()) +
+           "\"},\"i\":{\"t\":\"set-device-name\",\"n\":\"" + name + "\"}}";
+}
+
+void test_settings_decode_closed_schema_and_separate_run_budget() {
+    WebMutationDto dto;
+    const auto valid = nameBody(UserConfigurationRevision{7U});
+    TEST_ASSERT_TRUE(decodeWebMutation(valid, dto) ==
+                     WebRunMutationDecodeStatus::Success);
+    TEST_ASSERT_TRUE(std::holds_alternative<WebConfigurationMutationDto>(dto));
+    const std::array<const char*, 8U> invalid{
+        "{\"v\":1,\"r\":{},\"i\":{\"t\":\"set-device-name\",\"n\":\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":7},\"i\":{\"t\":\"set-device-name\",\"n\":"
+        "\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"18446744073709551616\"},\"i\":{\"t\":\"set-"
+        "device-name\",\"n\":\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\",\"s\":1},\"i\":{\"t\":\"set-device-name\","
+        "\"n\":\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\"},\"i\":{\"t\":\"set-device-name\",\"n\":"
+        "\"Test\",\"origin\":3}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\"},\"i\":{\"t\":\"set-time-zone\",\"n\":"
+        "\"Europe/Zurich\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1x\"},\"i\":{\"t\":\"set-device-name\",\"n\":"
+        "\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\",\"u\":\"2\"},\"i\":{\"t\":\"set-device-"
+        "name\",\"n\":\"Test\"}}"};
+    for (const auto* body : invalid)
+        TEST_ASSERT_TRUE(decodeWebMutation(body, dto) ==
+                         WebRunMutationDecodeStatus::Invalid);
+    TEST_ASSERT_TRUE(decodeWebMutation(
+                         valid + std::string(1024U - valid.size(), ' '), dto) ==
+                     WebRunMutationDecodeStatus::Success);
+    TEST_ASSERT_TRUE(decodeWebMutation(
+                         valid + std::string(1025U - valid.size(), ' '), dto) ==
+                     WebRunMutationDecodeStatus::TooLarge);
+    WebRunMutationDto run;
+    const std::string runJson =
+        "{\"v\":1,\"r\":{\"s\":1},\"i\":{\"t\":\"ack-message\",\"id\":7}}";
+    TEST_ASSERT_TRUE(
+        decodeWebRunMutation(runJson + std::string(481U - runJson.size(), ' '),
+                             run) == WebRunMutationDecodeStatus::TooLarge);
+}
+
+void test_settings_all_preview_and_commit_outcomes() {
+    using P = ConfigurationPreviewStatus;
+    using C = ConfigurationCommitStatus;
+    using O = ReplayOutcomeCode;
+    const std::array<std::pair<P, O>, 7U> previews{
+        {{P::ConfigurationRuntimeUnavailable, O::Unavailable},
+         {P::ConfigurationModelBudgetBusy, O::Busy},
+         {P::InvalidCandidate, O::Rejected},
+         {P::NotAllowed, O::Rejected},
+         {P::StateChanged, O::Stale},
+         {P::PreviewNotFound, O::Unavailable},
+         {P::PreviewSuperseded, O::Busy}}};
+    const std::array<std::pair<C, O>, 12U> commits{
+        {{C::Activated, O::Applied},
+         {C::NoChange, O::Applied},
+         {C::PreviewNotFound, O::Unavailable},
+         {C::PreviewSuperseded, O::Busy},
+         {C::ConfigurationMutationBusy, O::Busy},
+         {C::ConfigurationConflictFailure, O::Stale},
+         {C::ConfigurationValidationFailure, O::Rejected},
+         {C::PersistenceFailure, O::WriteFailed},
+         {C::CapacityFailure, O::WriteFailed},
+         {C::ConfigurationCommitIndeterminate, O::Unavailable},
+         {C::ConfigurationRuntimeFailure, O::Unavailable},
+         {C::ReadyForConfirmation, O::Unavailable}}};
+    for (const auto& [preview, expected] : previews)
+        for (const auto& [commit, unused] : commits) {
+            static_cast<void>(unused);
+            TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                                 {preview, commit}) == expected);
+        }
+    for (const auto& [commit, expected] : commits)
+        TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                             {P::Success, commit}) == expected);
+    TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                         {static_cast<P>(255U), C::Activated}) ==
+                     O::Unavailable);
+    TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                         {P::Success, static_cast<C>(255U)}) == O::Unavailable);
+}
+
+void test_settings_route_gate_replay_origin_and_network_characterization() {
+    ComposedFixture fixture;
+    const auto session = composedRunSession(fixture);
+    const auto before = fixture.application.webSettings();
+    TEST_ASSERT_TRUE(before.has_value());
+    const auto body = nameBody(before->revision);
+    const auto manifest =
+        FermentationApplicationTestAccess::manifest(fixture.application);
+    const auto host = fixture.network.hostname(),
+               ssid = fixture.network.accessPointSsid();
+    const auto starts = fixture.network.startCallCount(),
+               stops = fixture.network.stopCallCount();
+    for (unsigned gate = 0U; gate < 14U; ++gate) {
+        auto request =
+            makeRunRequest(session.web.cookie, session.web.csrf, "1", body);
+        switch (gate) {
+            case 0U:
+                request.method = "GET";
+                break;
+            case 1U:
+                request.metadata.host = "bad\r\n";
+                break;
+            case 2U:
+                request.metadata.contentType = "text/plain";
+                break;
+            case 3U:
+                request.metadata.origin = "http://foreign.local";
+                break;
+            case 4U:
+                request.body.clear();
+                break;
+            case 5U:
+                request.metadata.cookie.reset();
+                break;
+            case 6U:
+                request.metadata.csrfToken = "bad";
+                break;
+            case 7U:
+                request.metadata.mutationSeq.reset();
+                break;
+            case 8U:
+                request.metadata.mutationSeq = "invalid";
+                break;
+            case 9U:
+                request.metadata.mutationSeq = "2";
+                break;
+            case 11U:
+                request.body =
+                    "{\"v\":1,\"r\":{\"u\":\"1\"},\"i\":{\"t\":\"set-time-"
+                    "zone\",\"n\":\"Europe/Zurich\"}}";
+                break;
+            case 12U:
+                request.metadata.cookie = "FSSESSION=invalid";
+                break;
+            case 13U:
+                request.body = std::string(1025U, 'x');
+                break;
+            case 10U:
+                request.body =
+                    "{\"v\":1,\"r\":{},\"i\":{\"t\":\"set-device-name\",\"n\":"
+                    "\"Test\"}}";
+                break;
+        }
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_TRUE(response.statusCode >= 400U);
+        TEST_ASSERT_EQUAL_UINT32(
+            0U,
+            FermentationApplicationTestAccess::webCalls(fixture.application));
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::manifest(fixture.application)
+                .version == manifest.version);
+    }
+    const auto applied = postRun(fixture, session, 1U, body);
+    TEST_ASSERT_EQUAL_UINT16(200U, applied.statusCode);
+    TEST_ASSERT_EQUAL_STRING("{\"outcome\":\"applied\"}", applied.body.c_str());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, FermentationApplicationTestAccess::webCalls(fixture.application));
+    const auto after =
+        FermentationApplicationTestAccess::manifest(fixture.application);
+    TEST_ASSERT_TRUE(after.version != manifest.version);
+    ConfigurationGraphStore graphStore(fixture.store, fixture.timeZoneResolver);
+    const auto persisted = graphStore.loadCanonicalGraph(after.storageEpoch);
+    TEST_ASSERT_TRUE(persisted.graph.has_value());
+    TEST_ASSERT_TRUE(persisted.graph->active.manifest.origin ==
+                     decodeChangeOrigin(3U));
+    TEST_ASSERT_TRUE(persisted.graph->active.manifest.origin.kind ==
+                     ChangeOriginKind::WebInterface);
+    TEST_ASSERT_EQUAL_STRING(host.c_str(), fixture.network.hostname().c_str());
+    TEST_ASSERT_EQUAL_STRING(ssid.c_str(),
+                             fixture.network.accessPointSsid().c_str());
+    TEST_ASSERT_EQUAL_UINT32(starts, fixture.network.startCallCount());
+    TEST_ASSERT_EQUAL_UINT32(stops, fixture.network.stopCallCount());
+    const auto replay = postRun(fixture, session, 1U, body);
+    TEST_ASSERT_EQUAL_STRING(applied.body.c_str(), replay.body.c_str());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, FermentationApplicationTestAccess::webCalls(fixture.application));
+    TEST_ASSERT_EQUAL_UINT16(
+        409U,
+        postRun(fixture, session, 1U, nameBody(before->revision, "Different"))
+            .statusCode);
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, FermentationApplicationTestAccess::webCalls(fixture.application));
+    const auto current = fixture.application.webSettings();
+    TEST_ASSERT_EQUAL_UINT16(
+        200U,
+        postRun(fixture, session, 2U, nameBody(current->revision, "New device"))
+            .statusCode);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::manifest(fixture.application)
+            .version == after.version);
+    TEST_ASSERT_EQUAL_UINT16(
+        409U, postRun(fixture, session, 3U, nameBody(before->revision, "Stale"))
+                  .statusCode);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::manifest(fixture.application)
+            .version == after.version);
+    auto request =
+        makeAuthenticatedRequest("GET", "/api/v1/settings", session.web.cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(
+        200U, response.statusCode);  // Session survives name change.
+    TEST_ASSERT_TRUE(contains(response.body, "\"timeZone\":\"Europe/Zurich\""));
+    TEST_ASSERT_TRUE(contains(response.body, "\"nameEditable\":true"));
+    const auto touch = fixture.application.applyUserSettings(
+        FermentationUiUserSettingsChange{std::string("Touch name")},
+        fixture.application.webSettings()->revision);
+    TEST_ASSERT_TRUE(touch.commit == ConfigurationCommitStatus::Activated);
+    const auto touched =
+        FermentationApplicationTestAccess::manifest(fixture.application);
+    const auto touchGraph = graphStore.loadCanonicalGraph(touched.storageEpoch);
+    TEST_ASSERT_TRUE(touchGraph.graph->active.manifest.origin ==
+                     decodeChangeOrigin(2U));
+    const auto maxBody =
+        nameBody(fixture.application.webSettings()->revision, "Touch name");
+    const auto padded = maxBody + std::string(1024U - maxBody.size(), ' ');
+    TEST_ASSERT_EQUAL_UINT16(200U,
+                             postRun(fixture, session, 4U, padded).statusCode);
+    const auto calls =
+        FermentationApplicationTestAccess::webCalls(fixture.application);
+    TEST_ASSERT_EQUAL_UINT16(200U,
+                             postRun(fixture, session, 4U, padded).statusCode);
+    TEST_ASSERT_EQUAL_UINT32(calls, FermentationApplicationTestAccess::webCalls(
+                                        fixture.application));
+    TEST_ASSERT_EQUAL_UINT16(
+        413U, postRun(fixture, session, 5U, padded + " ").statusCode);
+    TEST_ASSERT_EQUAL_UINT32(calls, FermentationApplicationTestAccess::webCalls(
+                                        fixture.application));
+    installActiveRunForStatus(fixture.application, "Active");
+    TEST_ASSERT_FALSE(fixture.application.webSettings()->nameEditable);
+    const auto rejected = postRun(
+        fixture, session, 5U,
+        nameBody(fixture.application.webSettings()->revision, "Forbidden"));
+    TEST_ASSERT_EQUAL_UINT16(422U, rejected.statusCode);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::manifest(fixture.application)
+            .version == touched.version);
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_settings_decode_closed_schema_and_separate_run_budget);
+    RUN_TEST(test_settings_all_preview_and_commit_outcomes);
+    RUN_TEST(
+        test_settings_route_gate_replay_origin_and_network_characterization);
     RUN_TEST(test_program_detail_route_contract_and_session_gate);
     RUN_TEST(
         test_program_detail_projection_bounds_nulls_and_completion_binding);

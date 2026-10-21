@@ -12,6 +12,13 @@ struct WebRunMutationDto {
     FermentationUiEnvelopePayload intent;
 };
 
+struct WebConfigurationMutationDto {
+    UserConfigurationRevision expected{0U};
+    WebConfigurationChange change;
+};
+using WebMutationDto =
+    std::variant<WebRunMutationDto, WebConfigurationMutationDto>;
+
 // Narrow, synchronous application handler for POST /internal/ui/run. It decodes
 // the bounded DTO from the exact request body whose bytes are replay-bound.
 // The Application serializes its public calls itself; the dispatcher gates the
@@ -32,6 +39,8 @@ class WebRunMutationHandler final {
    private:
     friend struct WebRunMutationHandlerTestAccess;
 
+    [[nodiscard]] static ReplayOutcomeCode projectConfigurationResult(
+        const ApplicationConfigurationChangeResult& result);
     [[nodiscard]] static ReplayOutcomeCode projectCommandResult(
         const FermentationUiCommandResult& result);
     [[nodiscard]] static ReplayOutcomeCode projectRequestStatus(

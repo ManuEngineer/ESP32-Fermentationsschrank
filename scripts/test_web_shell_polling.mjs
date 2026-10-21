@@ -35,7 +35,7 @@ class Element {
 
 function snapshot(mode = 'active-run', run = '1') {
   return [
-    { homeMode: mode, revisions: { run, programCatalog: '1' } },
+    { homeMode: mode, revisions: { run, programCatalog: '1', userConfiguration:'1' } },
     { temperatures: [] },
     { alerts: mode === 'active-run' ? [{ id: '1', code: 'test-alert', active: true, acknowledged: false, muted: false, severity: 'warning' }] : [] },
   ];
@@ -72,6 +72,7 @@ async function fixture(language = 'en', storage) {
     clearTimeout: id => h.timers.delete(id),
     setInterval: (callback, delay) => setTimer(callback, delay, true),
     fetch: (url, options) => {
+      if (url === '/api/v1/settings') return Promise.resolve({ok:true,json:async()=>h.settings || {revision:'1',deviceName:'Fixture',timeZone:'Europe/Zurich',nameEditable:true}});
       if (url.startsWith('/api/v1/programs/')) {
         const id=decodeURIComponent(url.split('/').at(-1));
         return Promise.resolve({ok:true,json:async()=>h.detail || {catalogRevision:'1',program:{id,name:'Fixture',builtIn:true,startable:true,targetCelsius:42,durationMinutes:480,preheat:false,sensor:'product-if-available-else-air',defaultSensorMode:'product',completion:{mode:'finish',coolingTargetCelsius:null,holdDurationMinutes:null}}}});
@@ -733,6 +734,23 @@ test('C2 null/not-startable and stale program details cannot start',async()=>{
   h.detail.catalogRevision='2';await h.run('loadProgram()');
   assert.equal(h.run('PD'),null);assert.equal(h.run('pg.value'),'');assert.equal(h.run('PC'),'');
   assert.equal(h.posts.length,0);
+});
+
+for(const language of ['de','en','es'])test('C3 settings confirmation and read-only zone '+language,async()=>{
+  const h=await fixture(language);await h.finish(snapshot('standby'));
+  h.run('nb[3].onclick()');await drain();
+  assert.equal(h.run('SD.timeZone'),'Europe/Zurich');assert.equal(h.run('sz.textContent'),'Europe/Zurich');
+  assert.equal(h.run('sn.attributes["aria-label"]'),h.run('T.name'));
+  h.run("sn.value='New name';sn.oninput();sb.onclick()");assert.equal(h.posts.length,0);
+  h.run("sn.value='Other';sn.oninput();sb.onclick()");assert.equal(h.posts.length,0);
+  h.run('sb.onclick()');assert.equal(h.posts.length,1);
+  assert.deepEqual(JSON.parse(h.posts[0].options.body),{v:1,r:{u:'1'},i:{t:'set-device-name',n:'Other'}});
+  assert.equal(h.run('sb.disabled'),true);
+});
+test('C3 settings nameEditable false and stale lock writes',async()=>{
+ const h=await fixture();await h.finish();h.settings={revision:'1',deviceName:'Fixed',timeZone:'Europe/Zurich',nameEditable:false};
+ h.run('nb[3].onclick()');await drain();assert.equal(h.run('sn.disabled'),true);h.run('sb.onclick()');assert.equal(h.posts.length,0);
+ h.run('SD.nameEditable=true;P=null;ui()');assert.equal(h.run('sb.disabled'),true);assert.equal(h.run('sn.disabled'),true);
 });
 
 

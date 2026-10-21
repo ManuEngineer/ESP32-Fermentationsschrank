@@ -56,6 +56,11 @@ enum class WebProvisionDecodeStatus : unsigned char {
 [[nodiscard]] WebRunMutationDecodeStatus decodeWebRunMutation(
     const std::string& exactBody, WebRunMutationDto& output);
 
+[[nodiscard]] WebRunMutationDecodeStatus decodeWebMutation(
+    const std::string& exactBody, WebMutationDto& output);
+[[nodiscard]] bool encodeWebApiSettings(
+    const ApplicationWebSettingsSnapshot& snapshot, std::string& output);
+
 [[nodiscard]] bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
                                       const FermentationDeviceInfoView& device,
                                       std::string& output);

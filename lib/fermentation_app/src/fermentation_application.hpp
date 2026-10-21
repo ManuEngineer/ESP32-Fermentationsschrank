@@ -226,6 +226,19 @@ struct FermentationUiUserSettingsChange {
     std::optional<std::string> deviceName;
 };
 
+// The closed web configuration change contains exactly a device-name change.
+struct WebDeviceNameChange {
+    std::string name;
+};
+using WebConfigurationChange = std::variant<WebDeviceNameChange>;
+
+struct ApplicationWebSettingsSnapshot {
+    UserConfigurationRevision revision{0U};
+    std::string deviceName;
+    std::string timeZone;
+    bool nameEditable{false};
+};
+
 struct ApplicationConfigurationChangeResult {
     ConfigurationPreviewStatus preview{
         ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable};
@@ -309,6 +322,13 @@ class FermentationApplication {
     // changeable while no run is active; this is decided here, not by the UI.
     // The network (hostname, SoftAP SSID, QR) is neither stopped nor
     // restarted: derived names follow at the next normal network start.
+    [[nodiscard]] ApplicationConfigurationChangeResult
+    applyWebConfigurationChange(
+        const WebConfigurationChange& change,
+        const std::optional<UserConfigurationRevision>& expectedRevision);
+    [[nodiscard]] std::optional<ApplicationWebSettingsSnapshot> webSettings()
+        const;
+
     [[nodiscard]] ApplicationConfigurationChangeResult applyUserSettings(
         const FermentationUiUserSettingsChange& change,
         const std::optional<UserConfigurationRevision>& expectedRevision);
@@ -511,6 +531,15 @@ class FermentationApplication {
         const FermentationUiCommandContext& context);
 
    private:
+#ifdef APP_PROFILE_NATIVE
+    std::size_t webConfigurationCallsForTest_{0U};
+#endif
+    [[nodiscard]] ApplicationConfigurationChangeResult
+    applyUserConfigurationChange(
+        const ChangeOrigin& origin,
+        const FermentationUiUserSettingsChange& change,
+        const std::optional<UserConfigurationRevision>& expectedRevision);
+
     struct ApplicationRuntimeEvidence {
         CrossRolePlausibilityContext plausibility;
         bool safetyAllowsStart{false};

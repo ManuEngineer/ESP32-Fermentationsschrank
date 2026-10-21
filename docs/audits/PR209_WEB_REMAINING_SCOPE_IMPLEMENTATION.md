@@ -1,6 +1,6 @@
 # PR #209 – R1-Web-Restumfang: Implementierungsnachweis
 
-Stand: 2026-10-21; C0/C1/C2 umgesetzt und gezielt geprueft; C3/C5 nicht begonnen.
+Stand: 2026-10-21; C0/C1/C2/C3 umgesetzt und gezielt geprueft; C5 offen.
 Freigegebener Plan: `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2`,
 [`issue-27-r1-web-remaining-scope-plan.md`](../tasks/issue-27-r1-web-remaining-scope-plan.md).
 Der Owner hat diese exakte SHA und die Implementierung C0 → C1 → C2 → C3 → C5
@@ -71,3 +71,29 @@ Startoptionen; Eingaben/Katalogrevision/Programm sind an die Bestaetigung gebund
 Alte/fehlgeschlagene Detailantworten verwerfen die Auswahl ohne Mutation.
 JS 79/79 PASS; native Web-/Touch-Tests 174/174 PASS. Keine Browserqualifikation.
 Der abschliessende Asset-/Ressourcenwert wird nach C3/C5 ausgewiesen.
+
+## C3 – historischer Schnittnachweis
+
+Geschlossener `WebMutationDto`-Dispatch hinter den gemeinsamen Gates; Run-
+Envelope unveraendert. Settings-Body bis 1024 B im gemeinsamen Digest, Run-Codec
+weiterhin 480 B. Bestehende lokale Namenslogik in einen privaten Application-
+Eintritt gezogen; Herkunft ausschliesslich intern: WebInterface/3, Touch und
+Sprachwechsel LocalDisplay/2. Settings-GET liest Name, Zone und Revision aus einer
+Lease, Editable aus demselben Application-Lock; keine schreibende Zeitzonen-API.
+
+- JS 83/83 PASS, inklusive DE/EN/ES, Bestaetigungsbindung, nameEditable und
+  Stale-/Busy-Sperren.
+- Native Web/Session/Konfiguration/Touch: 244/244 PASS. Alle 8 Preview- und
+  12 Commit-Status plus unbekannte Werte geprueft; Preview-Fehler ignorieren
+  Commit-Platzhalter. Indeterminate wird ausschliesslich Unavailable.
+- 14 Fehler-/Gatevarianten ohne Application-Aufruf und ohne Manifestaenderung;
+  Replay ohne zweite Mutation, anderer Payload bei gleicher Sequenz verworfen,
+  max. 1024-B-Body akzeptiert, +1 verworfen. Testzaehler nur im nativen Profil.
+- Persistiertes Manifest ueber GraphStore aus dem Store dekodiert:
+  WebInterface/3 bzw. LocalDisplay/2. NoChange, stale und aktiver Lauf ohne
+  neues Manifest; Hostname/SSID/start-/stop-Zaehler unveraendert, Session bleibt.
+- Asset 15670 B (714 B bis Absolutlimit). Die C5-Abschlussreserve von 1024 B
+  ist damit **noch nicht erfuellt**; in C5 zu reduzieren, keine Limiterhoehung.
+  C2-Delta +3176 B gegen C1 ist ebenfalls ein D2-Warnsignal gegen die 1,5–2-KB-
+  Schaetzung: Bestaetigungs-/Stale-Bindung und editierbare Felder benoetigen mehr
+  Code als geschaetzt. Grenzen und Scope bleiben unveraendert.

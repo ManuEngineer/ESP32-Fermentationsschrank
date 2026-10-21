@@ -220,15 +220,14 @@ ApplicationConfigurationChangeResult commitConfigurationChange(
     return {Preview::Success, committed.status};
 }
 
-// User configuration changes of the local surface (canonical wire values
-// {LocalDisplay,2U} / {NormalEdit,1U}).
+// Shared user-configuration commit; origin is fixed by the owning entry,
+// never by transport data. Operation remains {NormalEdit,1U}.
 template <typename Mutate>
 ApplicationConfigurationChangeResult commitUserConfigurationChange(
     ConfigurationService& service, const UserConfigurationRevision& expected,
-    Mutate&& mutate) {
+    const ChangeOrigin& origin, Mutate&& mutate) {
     return commitConfigurationChange(
-        service, expected, {ChangeOriginKind::LocalDisplay, 2U},
-        {ChangeOperationKind::NormalEdit, 1U},
+        service, expected, origin, {ChangeOperationKind::NormalEdit, 1U},
         [&mutate](ConfigurationPreviewBuildLease& lease) {
             mutate(lease.userConfiguration());
         });
@@ -1000,6 +999,7 @@ FermentationApplication::applyDisplayLanguage(
     }
     return commitUserConfigurationChange(
         *configurationService_, *expectedRevision,
+        {ChangeOriginKind::LocalDisplay, 2U},
         [&languageId](UserConfiguration& configuration) {
             configuration.displayLanguageId = languageId;
         });
@@ -1009,6 +1009,46 @@ ApplicationConfigurationChangeResult FermentationApplication::applyUserSettings(
     const FermentationUiUserSettingsChange& change,
     const std::optional<UserConfigurationRevision>& expectedRevision) {
     const auto guard = applicationCallSerializer_.enter();
+    return applyUserConfigurationChange({ChangeOriginKind::LocalDisplay, 2U},
+                                        change, expectedRevision);
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applyWebConfigurationChange(
+    const WebConfigurationChange& change,
+    const std::optional<UserConfigurationRevision>& expectedRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+#ifdef APP_PROFILE_NATIVE
+    ++webConfigurationCallsForTest_;
+#endif
+    return applyUserConfigurationChange(
+        {ChangeOriginKind::WebInterface, 3U},
+        FermentationUiUserSettingsChange{
+            std::get<WebDeviceNameChange>(change).name},
+        expectedRevision);
+}
+
+std::optional<ApplicationWebSettingsSnapshot>
+FermentationApplication::webSettings() const {
+    const auto guard = applicationCallSerializer_.enter();
+    if (configurationService_ == nullptr) return std::nullopt;
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted)
+        return std::nullopt;
+    const auto& snapshot = runtime.lease.get();
+    return ApplicationWebSettingsSnapshot{
+        snapshot.userConfigurationRevision(),
+        snapshot.userConfiguration().deviceName,
+        snapshot.preparedTimeZone().canonicalIdentifier,
+        runtimeRunState_ != nullptr &&
+            !runtimeRunState_->activeProgramRun.has_value() &&
+            !runtimeRunState_->activeManualRun.has_value()};
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applyUserConfigurationChange(
+    const ChangeOrigin& origin, const FermentationUiUserSettingsChange& change,
+    const std::optional<UserConfigurationRevision>& expectedRevision) {
     using Preview = ConfigurationPreviewStatus;
     using Commit = ConfigurationCommitStatus;
     // Without the run state "no active run" cannot be proven (O4), and
@@ -1037,7 +1077,7 @@ ApplicationConfigurationChangeResult FermentationApplication::applyUserSettings(
         return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
     }
     return commitUserConfigurationChange(
-        *configurationService_, *expectedRevision,
+        *configurationService_, *expectedRevision, origin,
         [&change](UserConfiguration& configuration) {
             configuration.deviceName = *change.deviceName;
         });

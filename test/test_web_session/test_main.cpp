@@ -467,7 +467,7 @@ void test_request_digest_preserves_canonical_bounded_identity() {
     device_platform::HttpRequest atBodyLimit{
         "POST",
         "/",
-        std::string(fermentation::kMaximumWebRunMutationBodyBytes, 'x'),
+        std::string(fermentation::kMaximumWebMutationBodyBytes, 'x'),
         {}};
     TEST_ASSERT_TRUE(
         fermentation::mutationDigest(atBodyLimit, digest, boundaryDigest));

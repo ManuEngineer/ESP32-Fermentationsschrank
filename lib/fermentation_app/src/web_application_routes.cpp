@@ -23,6 +23,7 @@ constexpr char kJsonContentType[] = "application/json; charset=utf-8";
 constexpr char kStatusApiPath[] = "/api/v1/status";
 constexpr char kTemperaturesApiPath[] = "/api/v1/temperatures";
 constexpr char kAlertsApiPath[] = "/api/v1/alerts";
+constexpr char kSettingsApiPath[] = "/api/v1/settings";
 constexpr char kProgramsApiPath[] = "/api/v1/programs";
 constexpr char kLoginPath[] = "/api/v1/login";
 constexpr char kLogoutPath[] = "/api/v1/logout";
@@ -458,6 +459,50 @@ ReplayOutcomeCode WebRunMutationHandler::projectCommandResult(
     return ReplayOutcomeCode::Unavailable;
 }
 
+ReplayOutcomeCode WebRunMutationHandler::projectConfigurationResult(
+    const ApplicationConfigurationChangeResult& result) {
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    switch (result.preview) {
+        case Preview::Success:
+            break;
+        case Preview::ConfigurationRuntimeUnavailable:
+        case Preview::PreviewNotFound:
+            return ReplayOutcomeCode::Unavailable;
+        case Preview::ConfigurationModelBudgetBusy:
+        case Preview::PreviewSuperseded:
+            return ReplayOutcomeCode::Busy;
+        case Preview::InvalidCandidate:
+        case Preview::NotAllowed:
+            return ReplayOutcomeCode::Rejected;
+        case Preview::StateChanged:
+            return ReplayOutcomeCode::Stale;
+    }
+    if (result.preview != Preview::Success)
+        return ReplayOutcomeCode::Unavailable;
+    switch (result.commit) {
+        case Commit::Activated:
+        case Commit::NoChange:
+            return ReplayOutcomeCode::Applied;
+        case Commit::ConfigurationMutationBusy:
+        case Commit::PreviewSuperseded:
+            return ReplayOutcomeCode::Busy;
+        case Commit::ConfigurationConflictFailure:
+            return ReplayOutcomeCode::Stale;
+        case Commit::ConfigurationValidationFailure:
+            return ReplayOutcomeCode::Rejected;
+        case Commit::PersistenceFailure:
+        case Commit::CapacityFailure:
+            return ReplayOutcomeCode::WriteFailed;
+        case Commit::ConfigurationCommitIndeterminate:
+        case Commit::ConfigurationRuntimeFailure:
+        case Commit::PreviewNotFound:
+        case Commit::ReadyForConfirmation:
+            return ReplayOutcomeCode::Unavailable;
+    }
+    return ReplayOutcomeCode::Unavailable;
+}
+
 bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
                                    device_platform::HttpResponse& response) {
     response.staticBodySuffix = {};
@@ -492,8 +537,8 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
         return true;
     }
 
-    WebRunMutationDto dto;
-    const auto decodeStatus = decodeWebRunMutation(request.body, dto);
+    WebMutationDto dto;
+    const auto decodeStatus = decodeWebMutation(request.body, dto);
     if (decodeStatus != WebRunMutationDecodeStatus::Success) {
         const auto tooLarge =
             decodeStatus == WebRunMutationDecodeStatus::TooLarge;
@@ -566,28 +611,34 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
         return true;
     }
 
-    FermentationUiCommandContext context;
-    context.surface = device_platform::UiSurface::WebInterface;
-    context.monotonicMillis = nowMs;
-    context.expected = dto.expected;
-
     ReplayOutcomeCode projected = ReplayOutcomeCode::Unavailable;
-    const auto prepared = application_.prepareEnvelope(context, dto.intent);
-    if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
-        !prepared.request.has_value()) {
-        projected = projectRequestStatus(prepared.status);
+    if (const auto* config = std::get_if<WebConfigurationMutationDto>(&dto)) {
+        projected =
+            projectConfigurationResult(application_.applyWebConfigurationChange(
+                config->change, config->expected));
     } else {
-        const auto confirmed = application_.confirmPrepared(prepared);
-        if (confirmed.status !=
-                FermentationApplicationRequestStatus::Prepared ||
-            !confirmed.request.has_value()) {
-            projected = projectRequestStatus(confirmed.status);
+        const auto& run = std::get<WebRunMutationDto>(dto);
+        FermentationUiCommandContext context;
+        context.surface = device_platform::UiSurface::WebInterface;
+        context.monotonicMillis = nowMs;
+        context.expected = run.expected;
+
+        const auto prepared = application_.prepareEnvelope(context, run.intent);
+        if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
+            !prepared.request.has_value()) {
+            projected = projectRequestStatus(prepared.status);
         } else {
-            projected = projectCommandResult(
-                application_.applyConfirmedPrepared(*confirmed.request));
+            const auto confirmed = application_.confirmPrepared(prepared);
+            if (confirmed.status !=
+                    FermentationApplicationRequestStatus::Prepared ||
+                !confirmed.request.has_value()) {
+                projected = projectRequestStatus(confirmed.status);
+            } else {
+                projected = projectCommandResult(
+                    application_.applyConfirmedPrepared(*confirmed.request));
+            }
         }
     }
-
     if (!sessions_.completeMutation(*session.handle,
                                     timeSource_.monotonicMillis(),
                                     *reservation.sequence, digest, projected)) {
@@ -604,10 +655,12 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
     const bool status = request.path == kStatusApiPath;
     const bool temperatures = request.path == kTemperaturesApiPath;
     const bool alerts = request.path == kAlertsApiPath;
+    const bool settings = request.path == kSettingsApiPath;
     const bool programs = request.path == kProgramsApiPath;
     const bool detail = request.path.compare(0U, sizeof(kProgramsApiPath),
                                              "/api/v1/programs/") == 0;
-    if (!status && !temperatures && !alerts && !programs && !detail)
+    if (!status && !temperatures && !alerts && !programs && !detail &&
+        !settings)
         return false;
     if (request.method != "GET") {
         setResponse(response,
@@ -622,7 +675,10 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
 
     std::string body;
     bool encoded = false;
-    if (detail) {
+    if (settings) {
+        const auto snapshot = application_.webSettings();
+        encoded = snapshot.has_value() && encodeWebApiSettings(*snapshot, body);
+    } else if (detail) {
         const auto id = request.path.substr(sizeof(kProgramsApiPath));
         if (validateLowercaseIdentifier(
                 id, configuration_limits::kMinimumProgramIdBytes,
@@ -1028,6 +1084,7 @@ bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
     if (request.path == kStatusApiPath ||
         request.path == kTemperaturesApiPath ||
         request.path == kAlertsApiPath || request.path == kProgramsApiPath ||
+        request.path == kSettingsApiPath ||
         request.path.compare(0U, sizeof(kProgramsApiPath),
                              "/api/v1/programs/") == 0) {
         return handleReadOnly(request, response);
