@@ -258,7 +258,9 @@ std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta"
         " name=\"viewport\" content=\"width=device-width,initial-scale=1\"><t"
         "itle>Fermentation</title><style>body{font-family:system-ui;max-width"
-        ":48rem;margin:auto;padding:1rem}main{display:grid;gap:1rem}section{b"
+        ":48rem;margin:auto;padding:1rem}nav{display:flex;flex-wrap:wrap;gap:."
+        "5rem}"
+        "nav[hidden]{display:none}main{display:grid;gap:1rem}section{b"
         "order:1px solid #bbb;border-radius:.5rem;padding:1rem}button,input,s"
         "elect{font:inherit;padding:.45rem;min-height:2.75rem}#connection{fon"
         "t-weight:600}#cols{display:grid;gap:1rem}@media(min-width:40rem){#co"
@@ -607,27 +609,7 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
             projectConfigurationResult(application_.applyWebConfigurationChange(
                 config->change, config->expected));
     } else {
-        const auto& run = std::get<WebRunMutationDto>(dto);
-        FermentationUiCommandContext context;
-        context.surface = device_platform::UiSurface::WebInterface;
-        context.monotonicMillis = nowMs;
-        context.expected = run.expected;
-
-        const auto prepared = application_.prepareEnvelope(context, run.intent);
-        if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
-            !prepared.request.has_value()) {
-            projected = projectRequestStatus(prepared.status);
-        } else {
-            const auto confirmed = application_.confirmPrepared(prepared);
-            if (confirmed.status !=
-                    FermentationApplicationRequestStatus::Prepared ||
-                !confirmed.request.has_value()) {
-                projected = projectRequestStatus(confirmed.status);
-            } else {
-                projected = projectCommandResult(
-                    application_.applyConfirmedPrepared(*confirmed.request));
-            }
-        }
+        projected = applyRunMutation(std::get<WebRunMutationDto>(dto), nowMs);
     }
     if (!sessions_.completeMutation(*session.handle,
                                     timeSource_.monotonicMillis(),
@@ -637,6 +619,32 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
     }
     setResponse(response, replayOutcome(projected));
     return true;
+}
+
+ReplayOutcomeCode WebRunMutationHandler::applyRunMutation(
+    const WebRunMutationDto& run, std::uint64_t nowMs) {
+    ReplayOutcomeCode projected = ReplayOutcomeCode::Unavailable;
+    FermentationUiCommandContext context;
+    context.surface = device_platform::UiSurface::WebInterface;
+    context.monotonicMillis = nowMs;
+    context.expected = run.expected;
+
+    const auto prepared = application_.prepareEnvelope(context, run.intent);
+    if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
+        !prepared.request.has_value()) {
+        projected = projectRequestStatus(prepared.status);
+    } else {
+        const auto confirmed = application_.confirmPrepared(prepared);
+        if (confirmed.status !=
+                FermentationApplicationRequestStatus::Prepared ||
+            !confirmed.request.has_value()) {
+            projected = projectRequestStatus(confirmed.status);
+        } else {
+            projected = projectCommandResult(
+                application_.applyConfirmedPrepared(*confirmed.request));
+        }
+    }
+    return projected;
 }
 
 bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,

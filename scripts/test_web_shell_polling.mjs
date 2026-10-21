@@ -41,7 +41,7 @@ function snapshot(mode = 'active-run', run = '1') {
   ];
 }
 
-async function fixture(language = 'en', storage) {
+async function fixture(language = 'en', storage, scriptCode = script) {
   const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0 };
   let timerId = 0;
   const elements = new Map();
@@ -143,7 +143,7 @@ async function fixture(language = 'en', storage) {
   h.noDeadline = () => assert.ok([...h.timers.values()].every(x => x.interval), 'group timer cleaned up');
   h.command = () => h.run("send({t:'ack-message',id:'1'})");
   vm.runInContext("const S='local-fixture',A='password-protected',U=true;let Q=1;", context);
-  vm.runInContext(script, context);
+  vm.runInContext(scriptCode, context);
   await drain();
   assert.equal(h.requests.length, 3, 'immediate initial group');
   return h;
@@ -769,6 +769,24 @@ test('C5 rendered input constraints block invalid overrides',async()=>{
  h.run("pf.k.value='5';pf.l.value='90';pf.l.onchange()");assert.equal(h.run('ps.disabled'),false);
  h.run('ps.onclick();ps.onclick()');const intent=JSON.parse(h.posts[0].options.body).i;
  assert.equal(intent.c.c,'cool-and-hold-for-duration');assert.equal(intent.c.k,5);assert.equal(intent.c.l,90);
+});
+
+test('C5 closed Application dispatch architecture', async()=>{
+ const handler=source.slice(source.indexOf('bool WebRunMutationHandler::handle('),source.indexOf('bool WebReadOnlyApiHandler::handle('));
+ const calls=[...new Set([...handler.matchAll(/application_\s*\.\s*(\w+)\s*\(/g)].map(x=>x[1]))].sort();
+ assert.deepEqual(calls,['applyConfirmedPrepared','applyWebConfigurationChange','confirmPrepared','prepareEnvelope']);
+ assert.ok(!handler.includes('configurationService_'));
+ assert.ok(source.includes('nav[hidden]{display:none}'));
+ assert.ok(!script.includes("nv.style='display:flex"));
+});
+test('C5 synthetic regressions detect removed gates, wrong ID, bad fragment and unbound override',async()=>{
+ const probes=[
+  ["b.disabled=B||!P||!x.active", "b.disabled=B||!x.active", async h=>{await h.finish();h.run("nb[1].onclick();P=null;ui()");assert.equal(h.run('ls.children[1].children[0].disabled'),true)}],
+  ["id:x.id", "id:'wrong'", async h=>{await h.finish();h.run('nb[1].onclick();ls.children[1].children[0].onclick()');assert.equal(JSON.parse(h.posts[0].options.body).i.id,'1')}],
+  ["if(views.includes(v))", "if(v)", async h=>{await h.finish();h.run("nb[1].onclick();location.hash='#invalid';fr()");assert.equal(h.run('H'),'alerts')}],
+  [",JSON.stringify(sc())", "", async h=>{await h.finish(snapshot('standby'));h.run("ps.onclick();pf.x.value='43';ui()");assert.equal(h.run('K'),'')}]
+ ];
+ for(const[from,to,probe]of probes){await probe(await fixture());const mutant=script.replace(from,to);assert.notEqual(mutant,script);await assert.rejects(async()=>probe(await fixture('en',undefined,mutant)),assert.AssertionError)}
 });
 
 

@@ -105,19 +105,19 @@ Die neue UI teilt Elementerzeugung, Konfigurations-/Katalog-Lesehelper und
 Bestaetigungs-/Renderpfade; keine Abhaengigkeit oder Minifier in Build/Laufzeit.
 Die feste Asset-Grenze und ihre Abschlussreserve wurden nicht erhoeht.
 
-Aktueller Script-Nachweis: JS 87/87 PASS (einschliesslich der bisherigen 74);
-Webtests 117/117 PASS. Asset **15360 B**, Reserve **1024 B**. Normale Shell
-1751 B authentifiziert (20-stellige Sequenz: 1770 B), 1750 B Passwortschutz aus;
+Aktueller Script-Nachweis: JS 89/89 PASS (einschliesslich der bisherigen 74);
+Webtests 117/117 PASS. Asset **15311 B**, Reserve **1073 B**. Normale Shell
+1818 B authentifiziert (20-stellige Sequenz: 1837 B), 1817 B Passwortschutz aus;
 Setup-Shell unveraendert 3916 B. Beide Shells halten die 128-B-Normalreserve,
-Setup 180 B frei. Asset-CRC `c29ab140`, exakt aus den ausgelieferten Bytes.
+Setup 180 B frei. Asset-CRC `e2476fdf`, exakt aus den ausgelieferten Bytes.
 
 Host-Allokationsfenster (64-Bit, angeforderte Bytes ohne Allocatoroverhead;
 keine ESP32-Messung, alle cJSON-Allokationen freigegeben; kalt/warm identisch):
 
 | Handler | Anzahl | angefordert | groesster Block | max. lebend | Body |
 |---|---:|---:|---:|---:|---:|
-| Shell (gueltige Session) | 13 | 3025 B | 2049 B | 2082 B | 1751 B |
-| Asset | 1 | 51 B | 51 B | 51 B | 15360 B Flash, 0 B besessener Koerper |
+| Shell (gueltige Session) | 13 | 3025 B | 2049 B | 2082 B | 1818 B |
+| Asset | 1 | 51 B | 51 B | 51 B | 15311 B Flash, 0 B besessener Koerper |
 | Settings | 28 | 1598 B | 193 B | 604 B | 111 B |
 | Programmdetail (aktueller 4-Eintrag-Katalog) | 64 | 4027 B | 928 B | 2769 B | 347 B |
 
@@ -128,3 +128,18 @@ bei der Hardware-/R1-Qualifikation zu bewerten. Kein `RAM_PASS` daraus.
 
 Offline-Builds beider Profile, Sektions-/Stackvergleich und abschliessender
 Builder-Self-Check stehen noch aus. Pre-Ready und D9 bleiben NOT_RUN.
+
+Gezielter Integrationsfix: Navbar-CSS liegt jetzt in der Shell und enthaelt
+`nav[hidden]{display:none}`, damit Flex das LP-Gate nicht uebersteuert. Die
+Bestätigungslabels werden nach der Invalidierung aktualisiert. Raw-HTTP-CSS-
+Gegenprobe und synthetische Mutanten fuer fehlendes P-Gate, falsche Meldungs-ID,
+ungueltiges Fragment und ungebundene Startanpassung schlagen gezielt an.
+Der Architekturtest erlaubt dem Mutationshandler nur die vier vorgesehenen
+Application-Aufrufe (einschliesslich des privaten Run-Zweigs).
+
+Erster Profilbuild auf `75970d7`: beide Profile und Herkunfts-/Driftpruefung
+PASS nach Korrektur des lokalen Python-Pfads (keine Buildvertragsaenderung).
+Die Stackpruefung zeigte grosse bestehende Konfigurations-Commitframes; der
+Run-Zweig wurde deshalb aus dem gemeinsamen Handlerframe getrennt. Erneute
+Profil-/Stackmessung auf diesem Integrationsfix steht noch aus. Der 8192-B-
+HTTPD-Stack wird nicht eigenmaechtig erhoeht.

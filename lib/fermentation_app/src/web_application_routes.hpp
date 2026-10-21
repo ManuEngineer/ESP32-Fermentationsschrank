@@ -39,6 +39,8 @@ class WebRunMutationHandler final {
    private:
     friend struct WebRunMutationHandlerTestAccess;
 
+    [[nodiscard]] ReplayOutcomeCode applyRunMutation(
+        const WebRunMutationDto& dto, std::uint64_t nowMs);
     [[nodiscard]] static ReplayOutcomeCode projectConfigurationResult(
         const ApplicationConfigurationChangeResult& result);
     [[nodiscard]] static ReplayOutcomeCode projectCommandResult(

@@ -249,7 +249,13 @@ std::string completeBody(const device_platform::HttpResponse& response) {
 // Reassemble the actual two-script document only for existing semantic
 // string/golden contracts. HTTP byte budgets are tested on the raw response.
 std::string shellDocument(const device_platform::HttpResponse& response) {
-    const auto raw = completeBody(response);
+    auto raw = completeBody(response);
+    // The new navigation CSS is verified on the raw HTTP response below;
+    // strip only that additive style when comparing the original frozen head.
+    const std::string navCss =
+        "nav{display:flex;flex-wrap:wrap;gap:.5rem}nav[hidden]{display:none}";
+    if (const auto at = raw.find(navCss); at != std::string::npos)
+        raw.erase(at, navCss.size());
     const auto split = raw.find(";</script><p id=asset-error");
     if (split == std::string::npos) return raw;
     return raw.substr(0U, split) + ";" + fermentation::kWebApplicationAsset +
@@ -1738,6 +1744,12 @@ void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
                      std::string::npos);
 
     request = makeWebRequest("GET", "/api/v1/status");
+    TEST_ASSERT_FALSE(routes->handle(request, response));
+    char asset[24]{};
+    std::snprintf(asset, sizeof(asset), "/assets/app.%08x.js",
+                  static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(
+                      kWebApplicationAsset)));
+    request = makeWebRequest("GET", asset);
     TEST_ASSERT_FALSE(routes->handle(request, response));
     request = makeWebRequest("GET", "/api/network/status");
     TEST_ASSERT_TRUE(routes->handle(request, response));
@@ -5585,6 +5597,7 @@ void test_new_handler_allocation_windows_and_final_budgets() {
         }
     const auto shell = rawShell(fixture, session.web.cookie);
     TEST_ASSERT_TRUE(shell.size() + 19U + 128U <= 2048U);
+    TEST_ASSERT_TRUE(contains(shell, "nav[hidden]{display:none}"));
     TEST_ASSERT_TRUE(sizeof(kWebApplicationAsset) - 1U + 1024U <= 16384U);
     std::printf(
         "PR209_FINAL_BYTES shell=%zu shell_max_sequence=%zu asset=%zu "
