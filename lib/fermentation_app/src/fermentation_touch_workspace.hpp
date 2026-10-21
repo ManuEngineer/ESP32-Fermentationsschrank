@@ -706,4 +706,8 @@ class FermentationTouchWorkspace {
     std::uint32_t renderRevision_{0U};
 };
 
+[[nodiscard]] FermentationUiProgramSummaryView makeProgramSummary(
+    const ProgramDocument& document,
+    const FermentationUiStartCandidate* candidate, bool startable);
+
 }  // namespace fermentation

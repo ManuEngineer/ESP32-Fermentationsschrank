@@ -38,9 +38,12 @@ struct HttpRequestMetadata {
     std::optional<std::string> secFetchSite;
 };
 
+enum class HttpResponseCache : std::uint8_t { None, ImmutableAsset };
+
 struct HttpResponseMetadata {
     std::optional<std::string> setCookie;
     std::optional<std::string> retryAfter;
+    HttpResponseCache cache{HttpResponseCache::None};
 };
 
 enum class HttpMetadataValidation : std::uint8_t {

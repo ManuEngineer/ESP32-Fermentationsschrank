@@ -214,6 +214,9 @@ struct WebRunMutationHandlerTestAccess {
 
 namespace fermentation {
 struct WebRouteDispatcherTestAccess {
+    static void extraAssetBytes(std::size_t bytes) {
+        WebRouteDispatcher::extraAssetBytesForTest_ = bytes;
+    }
     static void extraShellBytes(std::size_t bytes) {
         WebRouteDispatcher::extraShellBytesForTest_ = bytes;
     }
@@ -221,10 +224,22 @@ struct WebRouteDispatcherTestAccess {
 }  // namespace fermentation
 
 #include "shell_golden.hpp"
+#include "web_application_asset.hpp"
+#include "crc32.hpp"
 
 namespace {
 std::string completeBody(const device_platform::HttpResponse& response) {
     return response.body + std::string(response.staticBodySuffix);
+}
+
+// Reassemble the actual two-script document only for existing semantic
+// string/golden contracts. HTTP byte budgets are tested on the raw response.
+std::string shellDocument(const device_platform::HttpResponse& response) {
+    const auto raw = completeBody(response);
+    const auto split = raw.find(";</script><p id=asset-error");
+    if (split == std::string::npos) return raw;
+    return raw.substr(0U, split) + ";" + fermentation::kWebApplicationAsset +
+           "</script></body></html>";
 }
 
 using namespace fermentation;
@@ -1863,7 +1878,7 @@ void test_composed_dispatcher_anonymous_and_recovery_states_fail_closed() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
     TEST_ASSERT_TRUE(
-        completeBody(response).find("Password protection is disabled") !=
+        shellDocument(response).find("Password protection is disabled") !=
         std::string::npos);
     TEST_ASSERT_TRUE(completeBody(response).find("password-label") !=
                      std::string::npos);
@@ -1921,7 +1936,7 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(completeBody(response).find("const U=true") !=
                      std::string::npos);
-    TEST_ASSERT_TRUE(completeBody(response).find(
+    TEST_ASSERT_TRUE(shellDocument(response).find(
                          "document.documentElement.lang=sw.value=lc") !=
                      std::string::npos);
     // The raw JSON placeholder is gone; the board replaces it.
@@ -3326,13 +3341,22 @@ void test_dispatcher_run_mutation_sequence_contract() {
 
 // ---- S6: first-time setup form in the web shell -----------------------------
 
+std::string rawShell(ComposedFixture& fixture, const std::string& cookie = {}) {
+    auto request = makeWebRequest("GET", "/");
+    if (!cookie.empty()) request.metadata.cookie = cookie;
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    return completeBody(response);
+}
+
 std::string shellBody(ComposedFixture& fixture) {
     auto request = makeWebRequest("GET", "/");
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
-    return completeBody(response);
+    return shellDocument(response);
 }
 
 bool contains(const std::string& text, const char* needle) {
@@ -3351,7 +3375,7 @@ size_t occurrences(const std::string& text, const std::string& needle) {
 // Owner limit of the web shell (Issue #27 language-selection slice, D1 = A:
 // at most 11456 bytes, one time) and the required reserve below it, including
 // the 19 byte reserve for the widest mutation sequence.
-constexpr size_t kShellLimit = 11456U;
+constexpr size_t kShellLimit = 4096U;
 constexpr size_t kShellMinimumReserve = 128U;
 
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
@@ -3460,7 +3484,7 @@ std::string authenticatedShell(ComposedFixture& fixture,
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    return completeBody(response);
+    return shellDocument(response);
 }
 
 size_t labelCount(const std::string& body, const std::string& token);
@@ -3608,29 +3632,29 @@ void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
 }
 
 void test_shell_stays_within_the_limit_in_all_states() {
-    constexpr size_t kLimit = kShellLimit;
+    constexpr size_t kLimit = 2048U;
     // Reserve for the widest possible sequence (20 digits) on top of "1".
     constexpr size_t kSequenceHeadroom = 19U;
     {
         ComposedFixture fixture;  // unprovisioned setup form
-        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+        TEST_ASSERT_TRUE(rawShell(fixture).size() + kShellMinimumReserve <=
+                         4096U);
     }
     {
         ComposedFixture fixture;  // protected, anonymous and authenticated
         TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
             fixture.application, passwordUnderTest(), kPinUnderTest));
-        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+        TEST_ASSERT_TRUE(rawShell(fixture).size() <= kLimit);
         const auto session = loginComposed(fixture);
-        const auto measuredBytes =
-            authenticatedShell(fixture, session.cookie).size();
+        const auto measuredBytes = rawShell(fixture, session.cookie).size();
         std::printf("WEB_SHELL_AUTH_BYTES=%zu RESERVE=%zu\n", measuredBytes,
                     kLimit - measuredBytes);
-        TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
+        TEST_ASSERT_TRUE(rawShell(fixture, session.cookie).size() +
                              kSequenceHeadroom <=
                          kLimit);
         // The measured shell keeps the owner reserve (it includes the
         // sequence headroom above).
-        TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
+        TEST_ASSERT_TRUE(rawShell(fixture, session.cookie).size() +
                              kShellMinimumReserve <=
                          kLimit);
     }
@@ -3657,7 +3681,7 @@ void test_shell_stays_within_the_limit_in_all_states() {
         ComposedFixture fixture;  // recovery required
         TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
             fixture.application, AuthProvisioningState::RecoveryRequired));
-        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+        TEST_ASSERT_TRUE(rawShell(fixture).size() <= kLimit);
     }
 }
 
@@ -3948,7 +3972,7 @@ void test_language_selector_is_in_every_shell_state_without_server_state() {
         auto request = makeWebRequest("GET", "/");
         device_platform::HttpResponse response;
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
-        check(completeBody(response));
+        check(shellDocument(response));
         TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
         TEST_ASSERT_FALSE(response.metadata.setCookie->find("lang") !=
                           std::string::npos);
@@ -4997,9 +5021,10 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
         const auto expected =
             shell_golden::webShell(state, csrf, authenticated, sequence);
         TEST_ASSERT_EQUAL_STRING(expected.c_str(),
-                                 completeBody(response).c_str());
+                                 shellDocument(response).c_str());
         if (state != WebAuthenticationState::Unprovisioned) {
-            TEST_ASSERT_LESS_OR_EQUAL_UINT32(1536U, response.body.size());
+            TEST_ASSERT_LESS_OR_EQUAL_UINT32(1920U,
+                                             completeBody(response).size());
         }
         if (state == WebAuthenticationState::PasswordProtected) {
             const auto session = loginComposed(fixture);
@@ -5008,7 +5033,7 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
             const auto expectedAuthenticated =
                 shell_golden::webShell(state, session.csrf, true, 1U);
             TEST_ASSERT_EQUAL_STRING(expectedAuthenticated.c_str(),
-                                     completeBody(response).c_str());
+                                     shellDocument(response).c_str());
         }
         // Real shell construction sets a suffix before the real size check.
         WebRouteDispatcherTestAccess::extraShellBytes(8192U);
@@ -5028,8 +5053,121 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
     }
 }
 
+void test_asset_route_crc_cache_and_public_bytes() {
+    std::string canonical;
+    for (unsigned mode = 0U; mode < 4U; ++mode) {
+        ComposedFixture fixture;
+        if (mode != 0U)
+            TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+                fixture.application, passwordUnderTest(), kPinUnderTest));
+        if (mode == 2U)
+            TEST_ASSERT_TRUE(
+                FermentationApplicationTestAccess::setWebPasswordEnabled(
+                    fixture.application, false));
+        if (mode == 3U)
+            TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+                fixture.application, AuthProvisioningState::RecoveryRequired));
+        // CRC derived independently from the actual public bytes.
+        char path[24]{};
+        const std::string bytes(kWebApplicationAsset);
+        std::snprintf(
+            path, sizeof(path), "/assets/app.%08x.js",
+            static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(bytes)));
+        auto request = makeWebRequest("GET", path);
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        TEST_ASSERT_TRUE(response.body.empty());
+        TEST_ASSERT_EQUAL_STRING(bytes.c_str(), completeBody(response).c_str());
+        TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+        TEST_ASSERT_TRUE(response.metadata.cache ==
+                         device_platform::HttpResponseCache::ImmutableAsset);
+        if (canonical.empty()) canonical = completeBody(response);
+        TEST_ASSERT_EQUAL_STRING(canonical.c_str(),
+                                 completeBody(response).c_str());
+        for (const auto& wrong :
+             {std::string(path) + "?v=1",
+              std::string("/assets/app.00000000.js"),
+              std::string("/assets/APP.js"), std::string(path) + "/x"}) {
+            request.path = wrong;
+            response = {};
+            TEST_ASSERT_FALSE(fixture.http.routes()->handle(request, response));
+            TEST_ASSERT_TRUE(response.metadata.cache ==
+                             device_platform::HttpResponseCache::None);
+        }
+        request.path = path;
+        request.method = "POST";
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(405U, response.statusCode);
+        TEST_ASSERT_TRUE(response.staticBodySuffix.empty());
+        TEST_ASSERT_TRUE(response.metadata.cache ==
+                         device_platform::HttpResponseCache::None);
+        request.method = "GET";
+        request.metadata.host = "invalid\r\n";
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+        request.metadata.host = "esp.local";
+        request.body = "x";
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+    }
+}
+
+void test_independent_shell_and_asset_boundaries() {
+    for (bool setup : {true, false}) {
+        ComposedFixture fixture;
+        if (!setup)
+            TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+                fixture.application, passwordUnderTest(), kPinUnderTest));
+        auto request = makeWebRequest("GET", "/");
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        const auto size = completeBody(response).size();
+        const std::size_t limit = setup ? 4096U : 2048U;
+        TEST_ASSERT_TRUE(size + 128U + (setup ? 0U : 19U) <= limit);
+        WebRouteDispatcherTestAccess::extraShellBytes(limit - size);
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        TEST_ASSERT_EQUAL_UINT32(limit, completeBody(response).size());
+        WebRouteDispatcherTestAccess::extraShellBytes(limit - size + 1U);
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        WebRouteDispatcherTestAccess::extraShellBytes(0U);
+        TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+        TEST_ASSERT_EQUAL_STRING("{\"error\":\"web-shell-unavailable\"}",
+                                 response.body.c_str());
+        TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
+                                 response.contentType.c_str());
+        TEST_ASSERT_TRUE(response.staticBodySuffix.empty());
+    }
+    ComposedFixture fixture;
+    char path[24]{};
+    const std::string bytes(kWebApplicationAsset);
+    std::snprintf(
+        path, sizeof(path), "/assets/app.%08x.js",
+        static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(bytes)));
+    auto request = makeWebRequest("GET", path);
+    device_platform::HttpResponse response;
+    WebRouteDispatcherTestAccess::extraAssetBytes(16384U - bytes.size());
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_EQUAL_UINT32(16384U, completeBody(response).size());
+    WebRouteDispatcherTestAccess::extraAssetBytes(16384U - bytes.size() + 1U);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    WebRouteDispatcherTestAccess::extraAssetBytes(0U);
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"web-asset-unavailable\"}",
+                             response.body.c_str());
+    TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
+                             response.contentType.c_str());
+    TEST_ASSERT_TRUE(response.staticBodySuffix.empty());
+    TEST_ASSERT_TRUE(response.metadata.cache ==
+                     device_platform::HttpResponseCache::None);
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_asset_route_crc_cache_and_public_bytes);
+    RUN_TEST(test_independent_shell_and_asset_boundaries);
     RUN_TEST(
         test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors);
     RUN_TEST(test_outcome_matrix_accepts_only_owning_apply_results);

@@ -79,7 +79,10 @@ class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
 #ifdef APP_PROFILE_NATIVE
     friend struct WebRouteDispatcherTestAccess;
     inline static std::size_t extraShellBytesForTest_{0U};
+    inline static std::size_t extraAssetBytesForTest_{0U};
 #endif
+    [[nodiscard]] bool handleAsset(const device_platform::HttpRequest& request,
+                                   device_platform::HttpResponse& response);
     [[nodiscard]] bool handleShell(const device_platform::HttpRequest& request,
                                    device_platform::HttpResponse& response);
     [[nodiscard]] bool handleLogin(const device_platform::HttpRequest& request,

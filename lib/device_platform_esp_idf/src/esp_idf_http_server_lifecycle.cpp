@@ -299,6 +299,13 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
                                    "response metadata unavailable");
     }
+    if (response.metadata.cache ==
+            device_platform::HttpResponseCache::ImmutableAsset &&
+        httpd_resp_set_hdr(request, "Cache-Control",
+                           "private, max-age=31536000, immutable") != ESP_OK) {
+        return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "response metadata unavailable");
+    }
     if (response.staticBodySuffix.empty()) {
         return httpd_resp_send(request, response.body.data(),
                                response.body.size());

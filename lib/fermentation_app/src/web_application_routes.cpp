@@ -2,11 +2,15 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <array>
+#include <cstdio>
 #include <string>
 #include <utility>
 #include <variant>
 
 #include "web_json_codec.hpp"
+#include "web_application_asset.hpp"
+#include "crc32.hpp"
 #include "web_browser_policy.hpp"
 
 namespace fermentation {
@@ -23,7 +27,23 @@ constexpr char kLogoutPath[] = "/api/v1/logout";
 constexpr char kProvisionPath[] = "/api/v1/provision";
 constexpr char kSessionCookieName[] = "FSSESSION=";
 constexpr char kHtmlContentType[] = "text/html; charset=utf-8";
-constexpr std::size_t kMaximumWebShellBytes = 11456U;
+constexpr std::size_t kMaximumWebShellBytes = 2048U;
+constexpr std::size_t kMaximumWebSetupShellBytes = 4096U;
+constexpr std::size_t kMaximumWebAssetBytes = 16384U;
+static_assert(sizeof(kWebApplicationAsset) - 1U <= kMaximumWebAssetBytes);
+
+const std::array<char, 24U>& assetPath() {
+    static const auto path = [] {
+        device_platform::Crc32IsoHdlc crc;
+        static_cast<void>(crc.update(kWebApplicationAsset,
+                                     sizeof(kWebApplicationAsset) - 1U));
+        std::array<char, 24U> value{};
+        std::snprintf(value.data(), value.size(), "/assets/app.%08x.js",
+                      static_cast<unsigned>(crc.finalize()));
+        return value;
+    }();
+    return path;
+}
 
 WebMutationOutcome outcome(std::uint16_t status, const char* body) {
     return {status, kJsonContentType, body};
@@ -151,169 +171,6 @@ std::string retryAfterSeconds(std::uint64_t retryAfterMs) {
 // from plan 9656a18 and 10752 B from plan 3376a19). One-time limit, no
 // further increase. The language is chosen client side (sl()), validated
 // against /^(de|en|es)$/ and kept only in the browser (localStorage.lang).
-constexpr char kWebShellSuffix[] =
-    ";const E='password-protected',D='password-disabled',N=Date.now,V"
-    "='no-store',J='hidden',X='textContent',Y='replaceChildren',Z='pr"
-    "ogramCatalog';const L={login:[\"Anmelden\",\"Login\",\"Iniciar sesion"
-    "\"],logout:[\"Abmelden\",\"Logout\",\"Cerrar sesion\"],offline:[\"Offlin"
-    "e\",\"Offline\",\"Sin conexion\"],stale:[\"Veraltet\",\"Stale\",\"Anticuad"
-    "o\"],online:[\"Online\",\"Online\",\"En linea\"],rq:[\"Lokale Provisioni"
-    "erung oder Recovery erforderlich\",\"Local provisioning or recover"
-    "y required\",\"Se requiere provision local o recuperacion\"],pl:[\"P"
-    "asswort\",\"Password\",\"Contrasena\"],pt:[\"Passwortschutz aktiv\",\"Pa"
-    "ssword protection enabled\",\"Proteccion por contrasena activa\"],d"
-    "s:[\"Passwortschutz deaktiviert\",\"Password protection is disabled"
-    "\",\"Proteccion por contrasena desactivada\"],ack:[\"Quittieren\",\"Ac"
-    "knowledge\",\"Confirmar\"],mute:[\"Stumm\",\"Mute\",\"Silenciar\"],stop:["
-    "\"Stop\",\"Stop\",\"Parar\"],done:[\"Abschliessen\",\"Complete\","
-    "\"Finaliza"
-    "r\"],start:[\"Starten\",\"Start\",\"Iniciar\"],sure:[\"Sicher?\",\"Sure?"
-    "\","
-    "\"Seguro?\"],ok:[\"Erledigt\",\"Done\",\"Hecho\"],fail:[\"Nicht ausgefueh"
-    "rt\",\"Not executed\",\"No ejecutado\"],age:[\"Stand "
-    "vor\",\"Age\",\"Hace\""
-    "],failed:[\"Fehler\",\"Failed\",\"Fallo\"],alerts:[\"Meldungen\",\"Alerts"
-    "\",\"Alertas\"],qd:[\"quittiert\",\"acknowledged\",\"confirmada\"],sm:[\"s"
-    "tumm\",\"muted\",\"silenciada\"],standby:[\"Bereit\",\"Ready\",\"Listo\"],"
-    "\""
-    "active-run\":[\"Lauf aktiv\",\"Run active\",\"Activo\"],waiting:[\"Warte"
-    "t\",\"Waiting\",\"Esperando\"],completed:[\"Abgeschlossen\",\"Completed\""
-    ",\"Finalizado\"],restricted:[\"Eingeschraenkt\",\"Restricted\",\"Restri"
-    "ngido\"],recovery:[\"Wiederherstellung\",\"Recovery\",\"Recuperacion\"]"
-    ",unavailable:[\"Nicht verfuegbar\",\"Unavailable\",\"No disponible\"],"
-    "\"cabinet-air\":[\"Schrank\",\"Cabinet\",\"Armario\"],product:[\"Produkt\""
-    ",\"Product\",\"Producto\"],cooling:[\"Kuehlung\",\"Cooling\",\"Enfriamien"
-    "to\"],\"c-finish\":[\"Beenden\",\"Finish\",\"Terminar\"],\"c-cool-"
-    "finish\":"
-    "[\"Kuehlen, beenden\",\"Cool, finish\",\"Enfriar, terminar\"],\"c-cool-"
-    "hold-duration\":[\"Kuehlen, Zeit halten\",\"Cool, hold (time)\",\"Enfr"
-    "iar, mantener\"],\"c-cool-hold-manual\":[\"Kuehlen, bis Stop\",\"Cool,"
-    " hold to stop\",\"Enfriar, hasta parar\"],\"p-boot\":[\"Startet\",\"Star"
-    "ting\",\"Iniciando\"],\"p-safe-boot\":[\"Sicherer Start\",\"Safe boot\",\""
-    "Inicio seguro\"],\"p-standby\":[\"Bereit\",\"Standby\",\"Listo\"],\"p-preh"
-    "eating\":[\"Vorheizen\",\"Preheating\",\"Precalentando\"],\"p-waiting-fo"
-    "r-product\":[\"Warten auf Produkt\",\"Waiting for product\",\"Esperand"
-    "o producto\"],\"p-reaching-target\":[\"Ziel wird erreicht\",\"Reaching"
-    " target\",\"Alcanzando objetivo\"],\"p-qualifying-target\":[\"Ziel wir"
-    "d abgesichert\",\"Qualifying target\",\"Validando objetivo\"],\"p-ferm"
-    "enting\":[\"Gaerung\",\"Fermenting\",\"Fermentando\"],\"p-cooling\":[\"Kue"
-    "hlen\",\"Cooling\",\"Enfriando\"],\"p-cool-holding\":[\"Kuehl halten\",\"C"
-    "ool holding\",\"Manteniendo frio\"],\"p-manual-holding\":[\"Manuelles "
-    "Halten\",\"Manual holding\",\"Mantenimiento manual\"],\"p-completed\":["
-    "\"Abgeschlossen\",\"Completed\",\"Completado\"],\"p-recovery-evaluation"
-    "\":[\"Wiederanlauf-Pruefung\",\"Recovery evaluation\",\"Evaluando recu"
-    "peracion\"],\"p-fault\":[\"Stoerung\",\"Fault\",\"Fallo\"],\"p-service-mod"
-    "e\":[\"Servicemodus\",\"Service mode\",\"Modo de servicio\"],program:[\""
-    "Programm\",\"Program\",\"Programa\"],phase:[\"Phase\",\"Phase\",\"Fase\"],"
-    "t"
-    "arget:[\"Soll\",\"Target\",\"Objetivo\"],end:[\"Abschluss\",\"End\","
-    "\"Final"
-    "\"],elapsed:[\"Phase verstrichen\",\"Phase elapsed\",\"Fase transcurri"
-    "da\"],remaining:[\"Rest dieser Phase\",\"Phase remaining\",\"Restante "
-    "de fase\"],\"manual-timed\":[\"Zeitlauf\",\"Timed run\",\"Proceso tempor"
-    "izado\"],unbounded:[\"bis manuell beendet\",\"until manually stopped"
-    "\",\"hasta detener manualmente\"],\"not-applicable\":[\"entfaellt\",\"no"
-    "t applicable\",\"no aplicable\"],network:[\"Netzwerk\",\"Network\",\"Red"
-    "\"],clock:[\"Uhrzeit\",\"Time\",\"Hora\"],\"net-connected\":["
-    "\"verbunden\","
-    "\"connected\",\"conectado\"],\"net-disconnected\":[\"getrennt\",\"disconn"
-    "ected\",\"desconectado\"],\"clock-untrusted\":[\"nicht synchronisiert\""
-    ",\"not synchronized\",\"no sincronizada\"],\"home-wifi\":[\"Heimnetz\",\""
-    "Home Wi-Fi\",\"Wi-Fi domestico\"],\"ap-only\":[\"Eigener AP\",\"Own AP\","
-    "\"AP propio\"]};const q=x=>document.querySelector(x),au=q('#auth-s"
-    "tate'),wr=q('#warning'),lg=q('#login'),lo=q('#logout'),cn=q('#co"
-    "nnection'),md=q('#mode'),tp=q('#temps'),ls=q('#alerts'),bd=q('#b"
-    "oard'),sw=q('#lang'),ok=/^(de|en|es)$/,T={};let lc,s;try{s=local"
-    "Storage.lang}catch(e){}function sl(c){lc=ok.test(c)?c:'en';for(c"
-    "onst k in L)T[k]=L[k][{de:0,en:1,es:2}[lc]];document.documentEle"
-    "ment.lang=sw.value=lc;q('#login button')[X]=T.login;q('#password"
-    "-label')[X]=T.pl;lo[X]=T.logout;au[X]=A===E?T.pt:A===D?T.ds:T.rq"
-    ";wr[X]=T.ds;}sl(ok.test(s)?s:(navigator.language||'en').slice(0,"
-    "2));wr[J]=A!==D;lg[J]=A!==E||U;lo[J]=!U;sw.onchange=()=>{sl(sw.v"
-    "alue);dr();ui();try{localStorage.lang=lc}catch(e){}};function el"
-    "(x,c){const e=document.createElement('p');e[X]=x;e.className=c||"
-    "'';return e;}function cv(v){return Number.isFinite(v)?v.toFixed("
-    "1)+' °C':T.unavailable;}function tm(s,c=0){if(!Number.isSafeInte"
-    "ger(s)||s<0)return T.unavailable;const m=Math[c?'ceil':'floor']("
-    "s/60);return Math.floor(m/60)+':'+String(m%60).padStart(2,'0');}"
-    "function dr(){const f=P?'online':LP?'stale':'offline';cn[X]=T[f]"
-    "+(f==='stale'?' · '+T.age+' '+((N()-LT)/1e3|0)+' s':'');cn.datas"
-    "et.state=f;bd.className=P?'':'x';bd[J]=!LP;if(!LP)return;const[a"
-    ",b,c]=LP,r=a.run,o=r?.completion,t=r?.time;md[X]=T[a.homeMode]||"
-    "a.homeMode;tp[Y](el(a.deviceName||T.unavailable),...['cabinet-ai"
-    "r','product','cooling'].map(r=>{const e=b.temperatures.find(x=>x"
-    ".role===r);return el(T[r]+': '+(!e?T.unavailable:e.valid&&e.valu"
-    "eCelsius!=null?e.valueCelsius.toFixed(1)+' °C':'-- '+(T[e.qualit"
-    "y]||T.unavailable)));}),...(r?[[\"program\",r.programName||T[r.sou"
-    "rceKind]||T.unavailable],[\"phase\",T['p-'+a.processState]||a.proc"
-    "essState||T.unavailable],[\"target\",cv(r.targetCelsius)],[\"end\",o"
-    "?(T['c-'+o.mode]||o.mode)+(o.coolingTargetCelsius==null?'':' · '"
-    "+cv(o.coolingTargetCelsius))+(o.holdDurationMinutes==null?'':' ·"
-    " '+tm(o.holdDurationMinutes*60)):T.unavailable],[\"elapsed\",t?.sc"
-    "ope==='phase'?tm(t.elapsedSeconds):T.unavailable],[\"remaining\",t"
-    "?.scope!=='phase'||t.remainingKind==='unknown'?T.unavailable:t.r"
-    "emainingKind==='timed'?tm(t.remainingSeconds,1):T[t.remainingKin"
-    "d]||t.remainingKind||T.unavailable]].map(([k,v])=>el(T[k]+': '+v"
-    ")):[]),...[['network',(T[a.networkMode]||T.unavailable)+' · '+(T"
-    "['net-'+a.networkState]||T.unavailable)],['clock',a.clock?.local"
-    "?a.clock.local+' '+a.clock.zone:T['clock-untrusted']]].map(([k,v"
-    "])=>el(T[k]+': '+v)));const n=c.alerts.filter(x=>x.active);ls[Y]"
-    "(el(T.alerts+': '+n.length),...n.map(x=>el(x.code.replace(/-/g,'"
-    " ')+(x.acknowledged?' · '+T.qd:'')+(x.muted?' · '+T.sm:''),x.sev"
-    "erity)));}function rf(f=0){const t0=N();if(LT){if(t0-LT>15000)P="
-    "null;ui();dr();}if(f){++G;C&&C.abort();if(!W)W=(async()=>{await "
-    "F;W=0;return rf();})();return W;}if(F||W)return;const my=++G,c=n"
-    "ew AbortController();C=c;const e=()=>{c.abort();if(my===G){P=nul"
-    "l;ui();dr();}},z=setTimeout(e,3e4),r=['status','temperatures','a"
-    "lerts'].map(async x=>{const a=await fetch('/api/v1/'+x,{cache:V,"
-    "signal:c.signal});if(!a.ok)throw 0;return a.json();});return F=("
-    "async()=>{try{const p=await Promise.all(r);if(my!==G||c.signal.a"
-    "borted)return;LP=p;LT=t0;const v=p[0].revisions[Z];P=N()-t0<=150"
-    "00?p:null;if(P&&U&&Q&&v&&v!==PC)lp();ui();dr();}catch{e();}final"
-    "ly{await Promise.allSettled(r);clearTimeout(z);F=C=0;}})();}lg.a"
-    "ddEventListener('submit',async e=>{e.preventDefault();const r=aw"
-    "ait fetch('/api/v1/login',{method:'POST',headers:{'Content-Type'"
-    ":'application/json'},body:JSON.stringify({password:q('#password'"
-    ").value})});if(r.ok)location.reload();});lo.onclick=async()=>{aw"
-    "ait fetch('/api/v1/logout',{method:'POST',headers:{'Content-Type"
-    "':'application/json','X-CSRF-Token':window.__WEB_CSRF__||''}});w"
-    "indow.__WEB_CSRF__='';Q=0;P=null;ui();lo[J]=1;lg[J]=A!==E;};cons"
-    "t ops=q('#ops'),nt=q('#note'),pg=q('#pg');let P=null,B=false,LB="
-    "0,K='',KC='',PC='',G=0,F=0,C=0,W=0,LP=null,LT=0;pg.onchange=()=>"
-    "ui();function al(f){return P&&P[2].alerts.find(m=>m.active&&f(m)"
-    ");}function ui(){ops[J]=!U||!Q;const h=P&&P[0].homeMode,r=h==='a"
-    "ctive-run'||h==='waiting',a=al(m=>!m.acknowledged),u=al(m=>!m.mu"
-    "ted);const d={ack:!a,mute:!u,stop:!r,done:h!=='completed',start:"
-    "h!=='standby'||!pg.value||!PC||P[0].revisions[Z]!==PC},g={ack:a,"
-    "mute:u},c=P?[h,P[0].revisions.run,P[0].revisions[Z],PC,pg.value]"
-    ".join():'';if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';ops.querySelecto"
-    "rAll('button').forEach(b=>{const k=b.dataset.a;b.disabled=B||!P|"
-    "|d[k];b[X]=K===k?T.sure:T[k]+(g[k]?' #'+g[k].id:'');});}async fu"
-    "nction send(i){K='';B=true;ui();const m={stateSequence:'s',run:'"
-    "r',messages:'m',fault:'f',recoveryEpisode:'e',userConfiguration:"
-    "'u',programCatalog:'c'},v=P[0].revisions,o={};for(const k in v)i"
-    "f(m[k])o[m[k]]=v[k];if(i.t==='start-program')o.c=PC;const body=J"
-    "SON.stringify({v:1,r:o,i}),n=Q;let r=null,j=null;for(let t=0;t<2"
-    "&&!r;t++){try{r=await fetch('/internal/ui/run',{method:'POST',he"
-    "aders:{'Content-Type':'application/json','X-CSRF-Token':window._"
-    "_WEB_CSRF__,'X-UI-Mutation-Seq':String(n)},body});}catch(e){}}if"
-    "(r&&r.status!==503){try{j=await r.json();}catch(e){}}if(!j||!/^("
-    "applied|stale|busy|confirmation-required|rejected|too-large|writ"
-    "e-failed)$/.test(j.outcome)){location.reload();return;}Q=n+1;P=n"
-    "ull;B=false;ui();dr();nt[X]=j.outcome==='applied'?T.ok:T.fail;aw"
-    "ait rf(1);}ops.onclick=e=>{const a=e.target.dataset&&e.target.da"
-    "taset.a;if(!a||B||e.target.disabled)return;if(a==='ack'||a==='mu"
-    "te'){const m=al(x=>a==='ack'?!x.acknowledged:!x.muted);if(m)send"
-    "({t:a+'-message',id:m.id});return;}if(K!==a){K=a;KC='';ui();e.ta"
-    "rget[X]=T.sure;return;}K='';send(a==='start'?{t:'start-program',"
-    "c:{p:pg.value}}:a==='stop'?{t:'stop-run',o:'abort-and-turn-off'}"
-    ":{t:'complete-run',c:false});};async function lp(){if(LB)return;"
-    "LB=1;PC='';pg[Y]();try{const r=await fetch('/api/v1/programs',{c"
-    "ache:V});const j=r.ok&&await r.json();if(j&&/^[0-9]+$/.test(j.ca"
-    "talogRevision)){pg[Y](...j.programs.map(x=>new Option(x.name,x.i"
-    "d)));PC=j.catalogRevision;}}catch(e){}LB=0;ui();}window.__WEB_CS"
-    "RF__=S;dr();rf();setInterval(rf,5000);</script></body></html>";
-
 std::string provisioningShell(std::string_view& staticBodySuffix) {
     static constexpr char kSuffix[] =
         "const L={de:{a:'Mit Passwort schuetzen (empfohlen)',b:'Passworts"
@@ -437,7 +294,13 @@ std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
     html += authenticated ? "true" : "false";
     html += ";let Q=";
     html += std::to_string(mutationSequence);
-    staticBodySuffix = kWebShellSuffix;
+    html +=
+        ";</script><p id=asset-error hidden>Script unavailable / Skript nicht "
+        "verfuegbar / Script no disponible. Reload.</p><script src=";
+    html += assetPath().data();
+    staticBodySuffix =
+        " onerror=\"document.querySelector('#asset-error').hidden=false\"></"
+        "script></body></html>";
     return html;
 }
 
@@ -777,6 +640,38 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
     return true;
 }
 
+bool WebRouteDispatcher::handleAsset(
+    const device_platform::HttpRequest& request,
+    device_platform::HttpResponse& response) {
+    if (request.path != assetPath().data()) return false;
+    if (request.method != "GET") {
+        setJsonResponse(response, 405U, "{\"error\":\"method-not-allowed\"}");
+        return true;
+    }
+    if (!validWebMetadata(request, response)) return true;
+    if (!request.body.empty()) {
+        setJsonResponse(response, 400U, "{\"error\":\"body-not-allowed\"}");
+        return true;
+    }
+    response.body.clear();
+#ifdef APP_PROFILE_NATIVE
+    response.body.append(extraAssetBytesForTest_, 'x');
+#endif
+    if (sizeof(kWebApplicationAsset) - 1U + response.body.size() >
+        kMaximumWebAssetBytes) {
+        setJsonResponse(response, 503U,
+                        "{\"error\":\"web-asset-unavailable\"}");
+        return true;
+    }
+    response.statusCode = 200U;
+    response.contentType = "text/javascript; charset=utf-8";
+    response.metadata = {};
+    response.metadata.cache =
+        device_platform::HttpResponseCache::ImmutableAsset;
+    response.staticBodySuffix = kWebApplicationAsset;
+    return true;
+}
+
 bool WebRouteDispatcher::handleShell(
     const device_platform::HttpRequest& request,
     device_platform::HttpResponse& response) {
@@ -829,7 +724,9 @@ bool WebRouteDispatcher::handleShell(
     response.body.append(extraShellBytesForTest_, 'x');
 #endif
     if (response.body.size() + response.staticBodySuffix.size() >
-        kMaximumWebShellBytes) {
+        (state == WebAuthenticationState::Unprovisioned
+             ? kMaximumWebSetupShellBytes
+             : kMaximumWebShellBytes)) {
         setJsonResponse(response, 503U,
                         "{\"error\":\"web-shell-unavailable\"}");
     }
@@ -1077,6 +974,7 @@ bool WebRouteDispatcher::handleRun(const device_platform::HttpRequest& request,
 bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
                                 device_platform::HttpResponse& response) {
     response.staticBodySuffix = {};
+    response.metadata = {};
     const bool networkPath = request.path == "/api/network/status" ||
                              request.path == "/api/network/scan" ||
                              request.path == "/api/network/candidate";
@@ -1089,6 +987,8 @@ bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
         return false;
     }
     if (networkPath) return networkSetupRoutes_.handle(request, response);
+    if (request.path.compare(0U, 8U, "/assets/") == 0)
+        return handleAsset(request, response);
     if (request.path == "/") return handleShell(request, response);
     if (request.path == kLoginPath) return handleLogin(request, response);
     if (request.path == kLogoutPath) return handleLogout(request, response);

@@ -4,10 +4,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../lib/fermentation_app/src/web_application_routes.cpp', import.meta.url), 'utf8');
-const literal = source.match(/constexpr char kWebShellSuffix\[\] =([\s\S]*?);\n\nstd::string provisioningShell/);
-assert.ok(literal, 'extract the actual production suffix');
-const suffix = [...literal[1].matchAll(/"(?:[^"\\]|\\.)*"/g)].map(x => JSON.parse(x[0])).join('');
-const script = "const S='local-fixture',A='password-protected',U=true;let Q=1" + suffix.split('</script>')[0];
+const assetSource = readFileSync(new URL('../lib/fermentation_app/src/web_application_asset.hpp', import.meta.url), 'utf8');
+const suffix = ';' + assetSource.match(/R"webjs\(([\s\S]*?)\)webjs"/)[1] + '</script></body></html>';
+const script = suffix.slice(1).split('</script>')[0];
 const paths = ['status', 'temperatures', 'alerts'];
 const actions = ['ack', 'mute', 'stop', 'done', 'start'];
 const csrfToken = 'local-fixture';
@@ -134,6 +133,7 @@ async function fixture(language = 'en', storage) {
   h.locked = () => assert.ok(buttons.every(b => b.disabled), 'all run actions locked');
   h.noDeadline = () => assert.ok([...h.timers.values()].every(x => x.interval), 'group timer cleaned up');
   h.command = () => h.run("send({t:'ack-message',id:'1'})");
+  vm.runInContext("const S='local-fixture',A='password-protected',U=true;let Q=1;", context);
   vm.runInContext(script, context);
   await drain();
   assert.equal(h.requests.length, 3, 'immediate initial group');
