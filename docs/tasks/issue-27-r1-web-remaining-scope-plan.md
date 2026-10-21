@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-20 · PLAN-REVISION 2.2 (gezielte Korrekturen) · OWNERENTSCHEIDE D1–D9 UND Q1/Q2 BESTAETIGT · REVISION NICHT FREIGEGEBEN · UMSETZUNG GESPERRT.**
+**2026-10-21 · PLAN-REVISION 2.3 (HTTPD-Stackbefund und begrenzter Korrekturvorschlag) · D1–D9/Q1/Q2 UNVERAENDERT · ERWEITERUNG NICHT FREIGEGEBEN · WEITERE PRODUKTARBEIT GESPERRT.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -9,6 +9,16 @@ Revision 1 (Plan-SHA `4927e856df8cb3474a7b0ed74aa92917dd23cc6b`), Revision 2 (Pl
 Navigationsplan (`0614c054e3303ef2aacd495b8221e512eb4c0714`); deren Messbelege bleiben
 unter `audits/WEB_NAV_BUDGET_20261020/`. Die Ownerentscheide unten sind **keine** Freigabe
 dieser Revision: Umgesetzt wird erst nach ausdruecklicher Freigabe der exakten Plan-SHA.
+
+**Freigegebene Implementierungsbaseline:** Revision 2.2 auf
+`b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2` wurde am 2026-10-21 einschliesslich
+C0 → C1 → C2 → C3 → C5 vom Owner freigegeben. Der Softwarekandidat liegt auf
+`4f6f0c9abad9e1c354fc67e140302adcf62680e9`; funktionale Tests und beide Profilbuilds
+sind PASS, das neue Settings-HTTPD-Stackgate ist **FAIL / HOLD** (§12).
+Diese vollstaendige Revision ersetzt den Planungsstand fuer die noch offene
+Ressourcenkorrektur; sie ist selbst **nicht freigegeben**. Die bisherige Freigabe
+erlaubt weder den zusaetzlichen Eingriff in den gemeinsamen Konfigurations-
+Commit-Pfad noch eine Erhoehung des HTTPD-Stacks.
 
 ## 0. Bestaetigte Ownerentscheide (Revision 2)
 
@@ -31,16 +41,24 @@ dieser Revision: Umgesetzt wird erst nach ausdruecklicher Freigabe der exakten P
 | **Q1** | Bestehendes Verhalten beibehalten: Eine Aenderung des Geraetenamens aendert Hostname/mDNS/SoftAP-SSID **erst beim naechsten normalen Netzwerkstart bzw. Geraetestart**. Keine sofortige Rekonfiguration, keine Unterbrechung der laufenden Verbindung; die Web-UI weist klar auf die verzoegerte Wirkung hin. Der native Test zur ausbleibenden Netzwerkrekonfiguration bleibt. |
 | **Q2** | Zeitzonenaenderung **zurueckgestellt** (KISS/YAGNI): Solange `kSupportedTimeZones` nur `Europe/Zurich` enthaelt, zeigt die Web-UI die kanonische Zone lesbar, nicht editierbar und ohne wirkungslosen Speichern-Knopf. `applyTimeZone`, der Intent `set-time-zone` und die nur dafuer geplanten Implementierungs-/Mutationstests sind **aus diesem PR gestrichen**; die schreibende Zeitzonenfunktion wird erst bei einem tatsaechlich erweiterten, freigegebenen Katalog geplant. Die bestehende Anzeige-/Konfigurationsgrundlage wird nicht zurueckgebaut. |
 
-Damit gibt es **keine offene Ownerfrage und keinen Q1-/Q2-HOLD** mehr; offen bleiben nur die
-Freigabe der exakten Plan-SHA und der spaeter getrennt freizugebende D9-Testpunkt.
+D1–D9 und Q1/Q2 bleiben entschieden; es gibt keinen Q1-/Q2-HOLD. Neu offen ist
+**Q3: Freigabe der begrenzten Stackkorrektur in §12 auf der exakten SHA dieser
+Revision**. Bis dahin gilt Ressourcen-HOLD; D9 bleibt separat freizugeben.
 
 **Kernaussagen.** (1) Ein PR (C0, C1, C2, C3, C5). (2) Abgetrennt bleiben Manueller Betrieb,
 Diagnose/Diagramme/Exporte (#28), Journale/Protokolle/Backup/Werksreset (#19),
 Service-Funktionen und -Route, Programmeditor, Favicon (#204). (3) Q1/Q2 sind entschieden
-(§0); es gibt keinen fachlichen HOLD. (4) Keine Hardware-, Flash-, Browser-, UART-, Reset- oder Aktorfreigabe;
+(§0); die Ressourcenqualifikation des Settings-Schreibpfads ist FAIL/HOLD (§12). (4) Keine Hardware-, Flash-, Browser-, UART-, Reset- oder Aktorfreigabe;
 `ACTUATOR_RELEASE=NO`, `RAM_PASS=NOT_PROVEN`.
 
 ## 1. Live-Basis
+
+Implementierungsstand 2026-10-21: C0 `d1170b2`, C1 `d2446ee`, C2 `27aa12c`,
+C3 `57fa250`, C5 `75970d7`, Integrationskorrektur `4f6f0c9`. Das ist ein
+nicht hardwarequalifizierter Draft-Kandidat, keine abgeschlossene C5-Freigabe.
+Messungen und Grenzen stehen in der [Evidence](../audits/PR209_WEB_REMAINING_SCOPE_IMPLEMENTATION.md).
+Die folgende Ausgangsbasis bleibt fuer die bereits implementierten Anforderungen
+massgeblich; die neue Abweichung wird ausschliesslich in §12 behandelt.
 
 - `origin/main` = `086873ac3a6ea0d8134810a744e61862e0528a6a` (Merge PR #208,
   2026-10-20T15:13:41Z). Erste Branch-Aenderung `ac037e8`: #208 als `MERGED` in der
@@ -423,19 +441,22 @@ Anzeige, keine Aenderung der Outcome-Matrix.
    Zeilenknoepfe.
 2. **C2 – Programme.** `GET /api/v1/programs/<id>` (Codec/Handler/Tests), Detail- und
    Anpassungsansicht, Anbindung an `start-program`.
-3. **C3 – Einstellungen** (unabhaengig von C1/C2; keine offene Ownerfrage):
+3. **C3 – Einstellungen** (Q1/Q2 entschieden; Ressourcen-HOLD nach §12):
    - **C3.0 Konfigurationsmutations-Infrastruktur** (zusammen mit dem Verbraucher C3.1, kein
      Vorbau): `WebMutationDto`-Variante und geschlossener Dispatch (C3-F1), vollstaendige
      Ergebnisabbildung, privater Eintritt mit serverseitiger Herkunft (C3-F2), `GET /api/v1/settings`.
    - **C3.1 Geraetename** (`set-device-name`, `applyWebConfigurationChange`, UI mit Bestaetigung und
      Hinweis auf die verzoegerte Netzwerkwirkung, Charakterisierungstest, Zone nur lesbar).
+   Der bestehende C3-Konfigurationspfad benoetigt zusaetzlich die in §12
+   beschriebene, erneut freizugebende Stackkorrektur. Keine weitere
+   Produktimplementierung vor Freigabe dieser Revision.
 4. **C5 – Integration, Regression, Evidence.** Outcome-Anzeige, WEB_UI-Angleichung
    (Werksreset nur lokal, Asset/Navigation/Seiten), ACCEPTANCE_TESTS, ROADMAP, Issue-Status,
    vollstaendige Offline-Ressourcenevidence, Builder-Self-Check; danach **ein**
    unabhaengiger Full Review ueber den gesamten PR (optionale gezielte Zwischenreviews nach C0
    und C2, kein Full Review je Commit). **C4 entfaellt (D7).**
 
-Jeder Schnitt wird auf seinen Quell-/Testcommit gebunden und bleibt einzeln revertierbar. Es gibt keine offene Ownerfrage (Q1/Q2 entschieden); C0 hat keine Q-Voraussetzung.
+Jeder Schnitt bleibt quell-/testcommit-gebunden und einzeln revertierbar. C0–C3 und die C5-Software sind im Kandidaten umgesetzt; vor Abschluss der C5-Ressourcenpruefung ist Q3 (§12) zu klaeren. Die bestehenden C0-/Q1-/Q2-Entscheidungen werden nicht erneut geoeffnet.
 
 ## 8. Gezielte Nachweise
 
@@ -482,10 +503,9 @@ dieses Gate nicht und es gilt kein implizites Gate-PASS.
 
 ## 10. Offene Ownerfragen
 
-**Keine.** Q1 (Ist-Stand beibehalten) und Q2 (Zeitzone zurueckgestellt) sind entschieden (§0);
-es gibt weder einen Q1- noch einen Q2-HOLD. Offen bleiben ausschliesslich die Freigabe der
-exakten Plan-SHA dieser Revision (nach gezielter Fix Verification) und der spaeter getrennt
-freizugebende D9-Testpunkt (§9).
+**Q3:** Freigabe dieser exakten Planrevision fuer die begrenzte Stackkorrektur
+nach §12. D1–D9 und Q1/Q2 bleiben unveraendert; D9 benoetigt weiterhin eine
+getrennte Hardware-/Flash-/Browserfreigabe. Kein Ready-/Merge-/Release-GO.
 
 ## 11. Risiken
 
@@ -500,3 +520,79 @@ freizugebende D9-Testpunkt (§9).
   Laufsperre, vollstaendige Ergebnisabbildung (insbesondere `ConfigurationCommitIndeterminate`) und die
   persistierte Herkunft `WebInterface` muessen im Test belegt sein.
 - Matrixzeilen H/X bleiben offen; R1-U/D9/G2 und Aktorfreigabe unveraendert offen.
+
+## 12. HTTPD-Settings-Stackbefund und vorgeschlagene Korrektur (Q3, NICHT FREIGEGEBEN)
+
+### Nachgewiesene Abweichung
+
+Der HTTPD-Task hat unveraendert 8192 B. Im synchronen normalen Namenscommit
+sind bereits diese fuenf Frames gleichzeitig aktiv: Adapter `handleRequest`
+704 B, gemeinsamer Mutationshandler 544 B, `commitConfigurationChange` 272 B,
+`ConfigurationService::confirmPreview` 3728 B und
+`ConfigurationGraphStore::prepareCommit` 3280 B. Teil-Summe **8528 B**, also
+336 B ueber dem gesamten Taskstack. Application-/Dispatcher-/SDK-/NVS-Frames
+sind darin noch nicht enthalten. Messquelle: GCC-15.2-`-fstack-usage` beider
+Profile auf sauberem Source-Commit `4f6f0c9`; Adapter mit dessen unveraendertem
+Compile-Befehl und zusaetzlichen Analyseflags. Der Run-Zweig ist bereits in
+`applyRunMutation` getrennt (2048 B); er ist nicht Teil dieser Settings-Summe.
+Dies ist ein echter Ressourcenblocker, kein D2-Schaetzungswarnsignal.
+
+### Begrenzter vorgeschlagener Scope
+
+Die Empfehlung ist eine feste, transiente Heap-Scratch-Ablage im bestehenden
+Konfigurations-Commit-Pfad. Der 8192-B-HTTPD-Stack, die bestehenden F4-Schwellen,
+Konfigurationsbudgets, Persistenz-/Wireformate und App-/Web-Vertraege bleiben
+unveraendert. Kein Worker, keine zweite Queue, keine neue Mutationsroute.
+Betroffen sind `configuration_service.*`, `configuration_graph_store.*` und
+deren direkte Tests; die bestehenden Settings-/Touch-Verbraucher bleiben.
+
+1. Die grossen bisherigen Commit-Vorbereitungsobjekte werden als **ein**
+   fest typisierter, pro Commit begrenzter Scratch-Owner gehalten. Bestehende
+   Typen `LoadedConfigurationGraph`, `PreparedConfigurationCommit` und
+   `ConfigurationCommitPrepareResult` werden wiederverwendet; es entsteht
+   kein zweites Transaktions- oder Persistenzmodell. Die konkrete Xtensa-
+   `sizeof`-Groesse und der maximale gleichzeitig lebende Zusatzbedarf werden
+   vor der Freigabebewertung ausgewiesen; kein stilles Erhoehen eines Budgets.
+2. `ConfigurationGraphStore` erhaelt einen typisierten In-place-Eintritt fuer
+   diese Scratch-Ablage. Er schreibt den vorhandenen Ergebnis-/Prepared-Typ
+   direkt in die Ablage und erzeugt keine gleich grosse Rueckgabe-Temporary
+   auf dem Stack. Der bestehende Return-by-value-Eintritt bleibt kompatibel
+   und delegiert an dieselbe Implementierung. Validierung, Slotwahl, Bytes,
+   CRC, Herkunft, Generationen, Schreibreihenfolge und Fehlersemantik bleiben
+   an genau einer Stelle.
+3. `ConfigurationService::confirmPreview` nutzt die Ablage fuer die grossen
+   laufenden Vorbereitungswerte. Bereits vorhandene `ResolutionContext`-/
+   Epoch-/Lease-Vertraege werden weiterverwendet; bei Indeterminate geht der
+   Zustand ohne grosse Kopie in den vorhandenen Resolution-Owner ueber.
+   Keine Aenderung der Aktivierungs-/Fail-closed-/Ruecklesepolicy.
+4. Allokation fehlertolerant und vor dem ersten persistenten Schreibschritt;
+   kein neuer manifestierter Zustand bei Scratch-OOM. Ein fehlender
+   temporaerer Scratch-Slot liefert den bestehenden Busy-Status und gibt
+   Preview-/Mutationseigentum korrekt frei. NoChange, stale und abgelehnte
+   Kandidaten behalten ihre bisherigen Ergebnisse und schreiben nichts.
+5. Nach der Aenderung werden die **vollstaendige** Settings-HTTPD-Kette und
+   der bestehende Run-Pfad gegen die unveraenderten 8192 B geprueft, einschliesslich
+   aufgerufener Validierungs-/Store-/SDK-Pfade. Einzelne verkleinerte Frames
+   sind kein Stack-PASS. Ist die Grenze oder ausreichende belegte Reserve
+   weiterhin nicht nachweisbar, wieder STOP und Ownerbefund; keine automatische
+   Stack-/Heap-/Scopeerweiterung. Die reale HWM-/Heapqualifikation bleibt D9.
+
+### Gezielte Nachweise und Abschluss
+
+- Fehler vor Scratch-Allokation/bei OOM: kein persistenter Schreibaufruf,
+  keine neue Generation, keine verlorenen Preview-/Mutationleases.
+- Bestehende Konfigurations-/Graph-Store-Goldenbytes, Slot-/CRC-/Root-/
+  Indeterminate- und Epochenfehlerfaelle bleiben gruen; bestehender und
+  In-place-Eintritt liefern dieselben typisierten Ergebnisse.
+- Alle bisherigen Settings-Gates, Replay, Herkunft Web/Touch, NoChange/stale,
+  Netzwerkwirkung und der unveraenderte Touch-Pfad werden direkt mitgeprueft.
+- Host-Allokationsfenster mit maximalem zulaessigem Katalog/Name; neue
+  Scratch-Spitzen, statische Frames und beide ESP-Profile auf sauberem
+  Implementierungscommit. Keine Umdeutung zu RAM-/Hardware-PASS.
+- C5-Evidence/ROADMAP/Issue/PR aktualisieren, Builder-Self-Check auf finalem
+  HEAD; danach fuer den unabhaengigen Full Review anhalten. Pre-Ready,
+  Ready/merge und D9 bleiben eigenstaendige Owner-Gates.
+
+**Anhalten:** Dieser zusaetzliche Scope beginnt erst nach ausdruecklicher
+Ownerfreigabe der exakten SHA dieser vollstaendigen Planrevision. Bis dahin
+bleibt der aktuelle Implementierungskandidat Draft/HOLD.

@@ -1,6 +1,10 @@
 # PR #209 – R1-Web-Restumfang: Implementierungsnachweis
 
-Stand: 2026-10-21; C0/C1/C2/C3 umgesetzt; C5 Software integriert, abschliessende Nachweise laufen.
+Stand: 2026-10-21; Source-Kandidat `4f6f0c9abad9e1c354fc67e140302adcf62680e9`.
+**C0–C3/C5-Software implementiert, C5-Ressourcenabschluss FAIL/HOLD.**
+**OPEN_BLOCKERS=1: Settings-HTTPD-Stack.** Weitere Produktarbeit angehalten;
+Planrevision 2.3 fuer die zusaetzliche Korrektur ist noch nicht freigegeben.
+
 Freigegebener Plan: `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2`,
 [`issue-27-r1-web-remaining-scope-plan.md`](../tasks/issue-27-r1-web-remaining-scope-plan.md).
 Der Owner hat diese exakte SHA und die Implementierung C0 → C1 → C2 → C3 → C5
@@ -16,7 +20,7 @@ Issue #27 OPEN; dessen Statuskopf vor Merge #206 ist historisch ueberholt.
 
 Keine Hardware-, Flash-, Browser-, UART-, Reset- oder Aktorfreigabe.
 `ACTUATOR_RELEASE=NO`, `RAM_PASS=NOT_PROVEN`, `D9=NOT_RUN`,
-`PRE_READY_LOCAL_GATES=NOT_RUN`, Independent Full Review offen.
+`PRE_READY_LOCAL_GATES=NOT_RUN`, Independent Full Review offen; Builder-Self-Check auf dem nachfolgenden Dokumentations-HEAD wird im kanonischen Handover ausgewiesen.
 
 ## C0 – historischer Schnittnachweis
 
@@ -126,8 +130,8 @@ ist separat nativ geprueft. Das Handlerfenster oben ist kein Maximal-Heapnachwei
 fuer alle moeglichen 16-Eintrag-Kataloge; deren Kopien und Fragmentierung bleiben
 bei der Hardware-/R1-Qualifikation zu bewerten. Kein `RAM_PASS` daraus.
 
-Offline-Builds beider Profile, Sektions-/Stackvergleich und abschliessender
-Builder-Self-Check stehen noch aus. Pre-Ready und D9 bleiben NOT_RUN.
+Offline-Builds und Sektions-/Stackvergleich sind unten ausgewiesen.
+Pre-Ready und D9 bleiben NOT_RUN; der Self-Check wird HEAD-gebunden im PR-Handover dokumentiert.
 
 Gezielter Integrationsfix: Navbar-CSS liegt jetzt in der Shell und enthaelt
 `nav[hidden]{display:none}`, damit Flex das LP-Gate nicht uebersteuert. Die
@@ -141,5 +145,65 @@ Erster Profilbuild auf `75970d7`: beide Profile und Herkunfts-/Driftpruefung
 PASS nach Korrektur des lokalen Python-Pfads (keine Buildvertragsaenderung).
 Die Stackpruefung zeigte grosse bestehende Konfigurations-Commitframes; der
 Run-Zweig wurde deshalb aus dem gemeinsamen Handlerframe getrennt. Erneute
-Profil-/Stackmessung auf diesem Integrationsfix steht noch aus. Der 8192-B-
+Profil-/Stackmessung auf diesem Integrationsfix ist abgeschlossen: Builds PASS,
+Settings-Stack weiterhin FAIL (unten). Der 8192-B-
 HTTPD-Stack wird nicht eigenmaechtig erhoeht.
+
+## Abschliessende Offline-Evidence auf `4f6f0c9`
+
+- Beide ESP-IDF-Profile PASS inklusive Profil-/Herkunfts-/Driftpruefung und
+  sauberem Source-Arbeitsbaum. IDF v6.1 `fff9895c82d744c7237be8847347bdd1b07c6643`,
+  GCC 15.2.0; [kanonischer Buildbericht](PR209_OFFLINE_BUILD_REPORT_20261021.md).
+- Gezielte native Suite: **437/437 PASS** in 11 betroffenen Bereichen
+  (Web-Routen, HTTP-Port, UI-Modelle/Renderer/Steady-State, Laufdetail/Kommandos,
+  Konfigurationsservice, Touch, Session und Browserpolicy). JS **89/89 PASS**,
+  einschliesslich Architekturcheck und vier erkannten synthetischen Regressionen.
+- IDF-Linux-HTTP-Adapterhost: Cache-/Chunk-/Sendefehlervertrag PASS (C0).
+  Kein Browser-/Geraetelauf. Kein vollstaendiger Pre-Ready-Lauf.
+- Messbasis fuer den Release-Sektionsvergleich: vorhandenes sauberes Artefakt
+  `26173ab9f796d1539aa052b05e713272083a96cd`, produktionsquellgleich mit
+  `main` `086873a` (dazwischen nur Markdown). Baseline-ELF SHA-256
+  `18febc77c941af7baceeaf1f8d7aa04e01fe1fd9e7fc28a226ff04be996efd0c`.
+
+| Release-Sektion | Basis | Kandidat | Delta |
+|---|---:|---:|---:|
+| `.dram0.data` | 18975 B | 18975 B | 0 |
+| `.dram0.bss` | 74488 B | 74520 B | +32 B |
+| `.iram0.text` | 100815 B | 100815 B | 0 |
+| `.iram0.vectors` | 1028 B | 1028 B | 0 |
+| `.flash.text` | 1405758 B | 1409254 B | +3496 B |
+| `.flash.rodata` | 237868 B | 244060 B | +6192 B |
+
+Die +32 B BSS stammen aus dem einmaligen CRC-Pfadcache samt Initialisierungs-
+guard; der C0-Null-Delta-Wert war eine Schaetzung. Kein neuer Laufzeitpufferpool.
+Release-BIN 1774560 B, SHA-256
+`493aa109e0e946a285d2413e52be3d764ad8d6ec7ccb0f98fd23a6709e68545c`;
+Bring-up-BIN 1786048 B, SHA-256
+`68bbb73a7513fa1205a7dac2a9d6d3f72d039428bb084ad95aaf09c271993169`.
+Artefaktmanifeste wurden mit dem vorhandenen Buildreport-Owner fuer `4f6f0c9`
+erzeugt; keine Aussage ueber Flash, Deployment oder Freigabe.
+
+### Stack: FAIL statt Gesamt-PASS
+
+Beide Profile: `handleAsset` 96 B <= `handleShell` 352 B; Read-only-Handler
+624 B unveraendert. `applyRunMutation` 2048 B, gemeinsamer Mutationshandler
+544 B (vor Trennung 2496 B). Der neue Konfigurationszweig ruft synchron den
+bestehenden Preview-/Commit-Pfad auf.
+
+[Ausgewaehlte rohe Framewerte](PR209_HTTPD_STACK_20261021.tsv): bereits Adapter
+704 + Mutationshandler 544 + `commitConfigurationChange` 272 + `confirmPreview`
+3728 + `prepareCommit` 3280 = **8528 B > 8192 B**. Alle fuenf Aufrufer haben
+nach dem jeweiligen Unteraufruf weiteren Code und sind hier nicht als
+Tail-Calls entfallen. Die Summe laesst weitere Application-/Dispatcher-/SDK-/
+NVS-Frames aus und ist deshalb eine Untergrenze, keine Vollkettenqualifikation.
+Die Produkt-`.su`-Dateien stammen aus beiden kanonischen Profilbuilds; fuer den
+Adapter wurde der unveraenderte Befehl aus dem jeweiligen `compile_commands.json`
+mit `-fstack-usage -fcallgraph-info=su` und einem temporaeren Objektziel ausgefuehrt.
+Das aendert weder Firmwarebuild noch Taskstack.
+
+**HTTPD_SETTINGS_STACK=FAIL**, **C5_RESOURCE_GATE=HOLD**, **OPEN_BLOCKERS=1**.
+Der Scope zur Korrektur des gemeinsamen Konfigurations-Commit-Pfads ist in der
+vollstaendigen Planrevision 2.3 beantragt; kein solcher Fix ist implementiert.
+Keine automatische HTTPD-/Heapbudgeterhoehung. Q1/Q2, F4 PROVISIONAL und alle
+historischen Grenzen bleiben bestehen; `RAM_PASS=NOT_PROVEN`,
+`ACTUATOR_RELEASE=NO`, `D9=NOT_RUN`.

@@ -1,0 +1,15 @@
+# Source: 4f6f0c9abad9e1c354fc67e140302adcf62680e9
+# GCC 15.2.0, static frames; adapter: same compile_commands.json command plus -fstack-usage -fcallgraph-info=su
+profile	function	frame_bytes	source
+esp32_bringup	Impl::handleRequest	704	lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp:240
+esp32_bringup	WebRunMutationHandler::handle	544	lib/fermentation_app/src/web_application_routes.cpp:498
+esp32_bringup	commitConfigurationChange (user settings)	272	lib/fermentation_app/src/fermentation_application.cpp:186
+esp32_bringup	ConfigurationService::confirmPreview	3728	lib/fermentation_app/src/configuration_service.cpp:932
+esp32_bringup	ConfigurationGraphStore::prepareCommit	3280	lib/fermentation_app/src/configuration_graph_store.cpp:1432
+esp32_bringup	LOWER_BOUND_SELECTED_NESTED_FRAMES	8528	HTTPD_STACK=8192; FAIL; other live frames omitted
+esp32_release	Impl::handleRequest	704	lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp:240
+esp32_release	WebRunMutationHandler::handle	544	lib/fermentation_app/src/web_application_routes.cpp:498
+esp32_release	commitConfigurationChange (user settings)	272	lib/fermentation_app/src/fermentation_application.cpp:186
+esp32_release	ConfigurationService::confirmPreview	3728	lib/fermentation_app/src/configuration_service.cpp:932
+esp32_release	ConfigurationGraphStore::prepareCommit	3280	lib/fermentation_app/src/configuration_graph_store.cpp:1432
+esp32_release	LOWER_BOUND_SELECTED_NESTED_FRAMES	8528	HTTPD_STACK=8192; FAIL; other live frames omitted
