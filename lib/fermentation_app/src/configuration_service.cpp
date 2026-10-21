@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <new>
 #include <utility>
 
 #include "configuration_document_codec.hpp"
@@ -47,6 +48,14 @@ struct ConfigurationService::ResolutionContext {
         ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome};
     bool runtimePreparationRetryConsumed{false};
 };
+
+void ConfigurationService::CommitScratchDeleter::operator()(
+    CommitScratch* scratch) const noexcept {
+    if (scratch != nullptr) {
+        scratch->~CommitScratch();
+        ::operator delete(scratch, std::align_val_t{alignof(CommitScratch)});
+    }
+}
 
 namespace {
 
@@ -1003,7 +1012,22 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         return {ConfigurationCommitStatus::ConfigurationValidationFailure};
     }
 
-    LoadedConfigurationGraph current;
+    // Explicit alignment also covers targets whose ordinary malloc aligns to 4
+    // B.
+    std::unique_ptr<CommitScratch, CommitScratchDeleter> scratch(
+        new (std::align_val_t{alignof(CommitScratch)}, std::nothrow)
+            CommitScratch{});
+    if (!scratch) {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (capturedPreview_ == captured &&
+            mode_ == ConfigurationServiceMode::Operational &&
+            !visiblePreview_) {
+            visiblePreview_ = captured;
+            capturedPreview_.reset();
+        }
+        return {ConfigurationCommitStatus::ConfigurationMutationBusy};
+    }
+    auto& current = scratch->current;
     bool basisConflict = false;
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
@@ -1051,8 +1075,9 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         captured->candidate->userConfiguration,
         captured->candidate->serviceConfiguration,
         captured->candidate->programCatalog};
-    auto prepared = graphStore_.prepareCommit(
-        current, candidate, captured->origin, captured->operation);
+    auto& prepared = scratch->prepared;
+    graphStore_.prepareCommitInto(current, candidate, captured->origin,
+                                  captured->operation, prepared);
     if (!prepared.prepared.has_value()) {
         const bool failClosed =
             prepared.status ==
@@ -1156,12 +1181,12 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
 
     auto publishedGraph =
         std::make_unique<LoadedConfigurationGraph>(prepared.prepared->newGraph);
-    const auto runtimeBinding =
+    auto resolution = std::make_unique<ResolutionContext>();
+    resolution->persistent = std::move(*prepared.prepared);
+    resolution->runtimeBinding =
         makeRuntimeBinding(*publishedGraph, *preparedRuntime);
-    auto resolution = std::make_unique<ResolutionContext>(ResolutionContext{
-        std::move(*prepared.prepared), std::move(publishedGraph),
-        std::move(preparedRuntime), runtimeBinding,
-        ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome, false});
+    resolution->preparedGraph = std::move(publishedGraph);
+    resolution->preparedRuntime = std::move(preparedRuntime);
     const auto execution =
         graphStore_.executePreparedCommit(resolution->persistent);
     if (execution.status == ConfigurationCommitExecutionStatus::Activated) {
