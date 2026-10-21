@@ -1,6 +1,6 @@
 # PR #209 – R1-Web-Restumfang: Implementierungsnachweis
 
-Stand: 2026-10-21; C0/C1 umgesetzt und gezielt geprueft; C2/C3/C5 nicht begonnen.
+Stand: 2026-10-21; C0/C1/C2 umgesetzt und gezielt geprueft; C3/C5 nicht begonnen.
 Freigegebener Plan: `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2`,
 [`issue-27-r1-web-remaining-scope-plan.md`](../tasks/issue-27-r1-web-remaining-scope-plan.md).
 Der Owner hat diese exakte SHA und die Implementierung C0 → C1 → C2 → C3 → C5
@@ -56,3 +56,18 @@ Asset 11023 B, Delta gegen C0 +1250 B. **D2-Warnsignal:** mehr als 25 % ueber de
 noch vollstaendige Zustandsanzeige. Diese erforderlichen Ergaenzungen erklaeren
 das Delta; kein zusaetzlicher Scope. 5361 B bis Absolutlimit; C5 muss weiterhin
 mindestens 1024 B Reserve nachweisen. Kein automatischer HOLD gemaess D2.
+
+## C2 – historischer Schnittnachweis
+
+Programmdetail-API mit Session, Methode/Body-/Identifiergrenzen, 404 fuer
+unbekannte/deaktivierte/nicht installierte Eintraege und 503 ohne Lease.
+Die Codec-Projektion verwendet genau `makeProgramSummary`, keine Overrides im
+GET, null fuer fehlende Werte und `startable` aus der Runnable-Validierung.
+Nativer Nachweis fuer 96-B-UTF-8-Namen, JSON-Escaping, max. Revision, 16 Eintraege
+im Katalog und alle vier Anzeige-/Intent-Completion-Bindungen; Body <= 3072 B.
+
+Programmseite mit Detail, unveraendertem Programm als Basis und nur abweichenden
+Startoptionen; Eingaben/Katalogrevision/Programm sind an die Bestaetigung gebunden.
+Alte/fehlgeschlagene Detailantworten verwerfen die Auswahl ohne Mutation.
+JS 79/79 PASS; native Web-/Touch-Tests 174/174 PASS. Keine Browserqualifikation.
+Der abschliessende Asset-/Ressourcenwert wird nach C3/C5 ausgewiesen.

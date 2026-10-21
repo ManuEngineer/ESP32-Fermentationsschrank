@@ -69,4 +69,9 @@ enum class WebProvisionDecodeStatus : unsigned char {
 [[nodiscard]] bool encodeWebApiPrograms(
     const FermentationUiPresentationSource& source, std::string& output);
 
+// Installed, enabled entry from the same presentation-source lease.
+[[nodiscard]] bool encodeWebApiProgram(
+    const FermentationUiPresentationSource& source,
+    const ProgramDocument& program, std::string& output);
+
 }  // namespace fermentation

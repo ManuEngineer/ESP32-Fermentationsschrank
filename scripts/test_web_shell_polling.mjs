@@ -22,6 +22,7 @@ function deferred() {
 
 class Element {
   constructor() { this.children = []; this.dataset = {}; this.value = ''; }
+  checkValidity() { const n=Number(this.value);return (this.min===undefined||n>=this.min)&&(this.max===undefined||n<=this.max); }
   addEventListener() {}
   append(...children) { this.children.push(...children); }
   after(...children) { this.afterNodes = children; }
@@ -71,6 +72,10 @@ async function fixture(language = 'en', storage) {
     clearTimeout: id => h.timers.delete(id),
     setInterval: (callback, delay) => setTimer(callback, delay, true),
     fetch: (url, options) => {
+      if (url.startsWith('/api/v1/programs/')) {
+        const id=decodeURIComponent(url.split('/').at(-1));
+        return Promise.resolve({ok:true,json:async()=>h.detail || {catalogRevision:'1',program:{id,name:'Fixture',builtIn:true,startable:true,targetCelsius:42,durationMinutes:480,preheat:false,sensor:'product-if-available-else-air',defaultSensorMode:'product',completion:{mode:'finish',coolingTargetCelsius:null,holdDurationMinutes:null}}}});
+      }
       if (url === '/api/v1/programs') {
         return Promise.resolve({ ok: true, json: async () => ({ catalogRevision: '1', programs: [{ name: 'Fixture', id: 'p1' }] }) });
       }
@@ -708,6 +713,26 @@ for (const language of ['de','en','es']) test('C1 navigation/alerts '+language, 
   assert.equal(JSON.parse(h.posts[0].options.body).i.id,'1');
   assert.equal(JSON.parse(h.posts[0].options.body).i.t,'ack-message');
   assert.equal(h.run('ls.children[1].children[0].disabled'),true);
+});
+
+test('C2 program details, overrides and confirmation binding', async()=>{
+  const h=await fixture();await h.finish(snapshot('standby'));
+  assert.equal(h.run('PD.id'),'p1');
+  h.run("nb[2].onclick()");assert.equal(h.run('pd.hidden'),false);
+  assert.deepEqual(JSON.parse(h.run('JSON.stringify(candidate())')),{p:'p1'});
+  h.run("pf.x.value='43';pf.x.onchange();ps.onclick()");
+  assert.equal(h.posts.length,0);assert.equal(h.run('K'),'start');
+  h.run("pf.d.value='90';pf.d.onchange()");assert.equal(h.run('K'),'');
+  h.run('ps.onclick();ps.onclick()');assert.equal(h.posts.length,1);
+  assert.deepEqual(JSON.parse(h.posts[0].options.body).i,{t:'start-program',c:{p:'p1',x:43,d:90}});
+});
+test('C2 null/not-startable and stale program details cannot start',async()=>{
+  const h=await fixture();h.detail={catalogRevision:'1',program:{id:'p1',name:'TBD',startable:false,targetCelsius:null,durationMinutes:null,preheat:false,defaultSensorMode:'air',completion:{mode:'finish',coolingTargetCelsius:null,holdDurationMinutes:null}}};
+  await h.finish(snapshot('standby'));assert.equal(h.run('ps.disabled'),true);
+  assert.equal(h.run('pf.x.value'),'');assert.equal(h.run('pf.d.value'),'');
+  h.detail.catalogRevision='2';await h.run('loadProgram()');
+  assert.equal(h.run('PD'),null);assert.equal(h.run('pg.value'),'');assert.equal(h.run('PC'),'');
+  assert.equal(h.posts.length,0);
 });
 
 

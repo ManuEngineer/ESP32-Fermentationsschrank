@@ -11,6 +11,8 @@
 #include "web_json_codec.hpp"
 #include "web_application_asset.hpp"
 #include "crc32.hpp"
+#include "configuration_text.hpp"
+#include "configuration_limits.hpp"
 #include "web_browser_policy.hpp"
 
 namespace fermentation {
@@ -603,7 +605,10 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
     const bool temperatures = request.path == kTemperaturesApiPath;
     const bool alerts = request.path == kAlertsApiPath;
     const bool programs = request.path == kProgramsApiPath;
-    if (!status && !temperatures && !alerts && !programs) return false;
+    const bool detail = request.path.compare(0U, sizeof(kProgramsApiPath),
+                                             "/api/v1/programs/") == 0;
+    if (!status && !temperatures && !alerts && !programs && !detail)
+        return false;
     if (request.method != "GET") {
         setResponse(response,
                     requestError(405U, "{\"error\":\"method-not-allowed\"}"));
@@ -617,7 +622,32 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
 
     std::string body;
     bool encoded = false;
-    if (programs) {
+    if (detail) {
+        const auto id = request.path.substr(sizeof(kProgramsApiPath));
+        if (validateLowercaseIdentifier(
+                id, configuration_limits::kMinimumProgramIdBytes,
+                configuration_limits::kMaximumProgramIdBytes) !=
+            ConfigurationTextStatus::Success) {
+            setJsonResponse(response, 400U,
+                            "{\"error\":\"invalid-program-id\"}");
+            return true;
+        }
+        const auto source = application_.uiPresentationSource();
+        if (source.has_value()) {
+            const auto& entries = source->programCatalog.programs;
+            const auto entry = std::find_if(
+                entries.begin(), entries.end(), [&id](const auto& value) {
+                    return value.program.id == id && value.program.installed &&
+                           value.program.enabled;
+                });
+            if (entry == entries.end()) {
+                setJsonResponse(response, 404U,
+                                "{\"error\":\"program-not-found\"}");
+                return true;
+            }
+            encoded = encodeWebApiProgram(*source, *entry, body);
+        }
+    } else if (programs) {
         // An unavailable catalog is 503, never an empty list.
         const auto source = application_.uiPresentationSource();
         encoded = source.has_value() && encodeWebApiPrograms(*source, body);
@@ -997,7 +1027,9 @@ bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
     }
     if (request.path == kStatusApiPath ||
         request.path == kTemperaturesApiPath ||
-        request.path == kAlertsApiPath || request.path == kProgramsApiPath) {
+        request.path == kAlertsApiPath || request.path == kProgramsApiPath ||
+        request.path.compare(0U, sizeof(kProgramsApiPath),
+                             "/api/v1/programs/") == 0) {
         return handleReadOnly(request, response);
     }
     if (request.path == kRoutePath) return handleRun(request, response);

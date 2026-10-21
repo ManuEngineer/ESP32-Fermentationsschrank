@@ -3519,7 +3519,7 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_TRUE(contains(body, "t:a+'-message'"));
     TEST_ASSERT_TRUE(contains(body, "{t:'stop-run',o:'abort-and-turn-off'}"));
     TEST_ASSERT_TRUE(contains(body, "{t:'complete-run',c:false}"));
-    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:{p:pg.value}}"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:candidate()}"));
     // Only a clearly completed outcome advances the sequence; otherwise reload.
     TEST_ASSERT_TRUE(contains(body,
                               "applied|stale|busy|confirmation-required|"
@@ -3549,12 +3549,13 @@ void test_shell_action_availability_and_confirmation_binding_contract() {
     // A pending confirmation is bound to mode, run and catalog revision and
     // the selected program; it is dropped on change, on send and without a
     // valid snapshot. Unchanged polls keep it.
-    TEST_ASSERT_TRUE(contains(body,
-                              "c=P?[h,P[0].revisions.run,P[0]."
-                              "revisions[Z],PC,pg.value]"
-                              ".join():''"));
+    TEST_ASSERT_TRUE(
+        contains(body,
+                 "c=P?[h,P[0].revisions.run,P[0]."
+                 "revisions[Z],PC,pg.value,JSON.stringify(candidate())]"
+                 ".join():''"));
     TEST_ASSERT_TRUE(contains(body, "if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';"));
-    TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ui();"));
+    TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>loadProgram();"));
     TEST_ASSERT_TRUE(contains(body, "send(i){K='';B=true;"));
     // A failed refresh makes the snapshot unusable until a fresh one arrives.
     // Abort the siblings, then check the generation before display effects
@@ -3787,7 +3788,7 @@ void test_dashboard_shell_structure_and_responsive_contract() {
     TEST_ASSERT_TRUE(contains(body,
                               "['status','temperatures','alerts'].map(async "
                               "x=>{const a=await fetch('/api/v1/'+x,"));
-    TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
+    TEST_ASSERT_EQUAL_UINT32(6U, occurrences(body, "fetch('"));
 }
 
 void test_dashboard_shell_texts_are_complete_in_all_locales() {
@@ -3984,7 +3985,7 @@ void test_language_choice_never_reaches_the_api_or_the_polling_contract() {
     const auto body = loggedInShell(fixture);
     // The switch re-renders locally: same three polling paths, same single
     // interval and the unchanged mutation headers; no request in sl().
-    TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
+    TEST_ASSERT_EQUAL_UINT32(6U, occurrences(body, "fetch('"));
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "setInterval("));
     TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
     TEST_ASSERT_TRUE(
@@ -4580,7 +4581,7 @@ void test_shell_start_flow_text_contract() {
     // usable sequence and its result never makes Start available by itself.
     TEST_ASSERT_TRUE(contains(body, "fetch('/api/v1/programs'"));
     TEST_ASSERT_TRUE(contains(body, "new Option(x.name,x.id)"));
-    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:{p:pg.value}}"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:candidate()}"));
     TEST_ASSERT_TRUE(contains(body, "start:h!=='standby'||!pg.value"));
     // Start needs two clicks like Stop/Complete (no direct-send branch).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
@@ -4594,7 +4595,8 @@ void test_shell_start_flow_text_contract() {
     TEST_ASSERT_TRUE(contains(body, "PC='';pg[Y]();"));
     TEST_ASSERT_TRUE(contains(body, "PC=j.catalogRevision;"));
     TEST_ASSERT_TRUE(contains(body, "if(i.t==='start-program')o.c=PC;"));
-    TEST_ASSERT_TRUE(contains(body, "revisions[Z],PC,pg.value]"));
+    TEST_ASSERT_TRUE(contains(
+        body, "revisions[Z],PC,pg.value,JSON.stringify(candidate())]"));
 }
 
 void test_other_states_get_no_provisioning_form_or_bypass() {
@@ -5173,8 +5175,126 @@ void test_independent_shell_and_asset_boundaries() {
                      device_platform::HttpResponseCache::None);
 }
 
+void test_program_detail_route_contract_and_session_gate() {
+    ComposedFixture fixture;
+    auto request = makeWebRequest("GET", "/api/v1/programs/test");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    const auto session = composedRunSession(fixture);
+    const auto source = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(source.has_value());
+    const auto id = source->programCatalog.programs.front().program.id;
+    request = makeWebRequest("GET", "/api/v1/programs/" + id);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+    request = makeAuthenticatedRequest("GET", "/api/v1/programs/" + id,
+                                       session.web.cookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(
+        contains(response.body, ("\"id\":\"" + id + "\"").c_str()));
+    TEST_ASSERT_TRUE(contains(response.body, "\"catalogRevision\":\""));
+    TEST_ASSERT_TRUE(contains(response.body, "\"defaultSensorMode\":"));
+    for (const auto& invalid :
+         {std::string(), std::string(49U, 'a'), std::string("UPPER"),
+          id + "?x=1", id + "/extra"}) {
+        request.path = "/api/v1/programs/" + invalid;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+        TEST_ASSERT_EQUAL_STRING("{\"error\":\"invalid-program-id\"}",
+                                 response.body.c_str());
+    }
+    request.path = "/api/v1/programs/" + std::string(48U, 'z');
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(404U, response.statusCode);
+    request.path = "/api/v1/programs/a";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(404U, response.statusCode);
+    request.method = "POST";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(405U, response.statusCode);
+    request.method = "GET";
+    request.body = "x";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+    FermentationApplication unavailableApplication;
+    WebReadOnlyApiHandler api(unavailableApplication);
+    request.body.clear();
+    TEST_ASSERT_TRUE(api.handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+}
+
+void test_program_detail_projection_bounds_nulls_and_completion_binding() {
+    ComposedFixture fixture;
+    const auto read = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(read.has_value());
+    auto source = *read;
+    auto entry = source.programCatalog.programs.front();
+    entry.program.id = std::string(48U, 'p');
+    entry.program.name.clear();
+    for (unsigned i = 0; i < 48U; ++i) entry.program.name += "é";
+    source.programCatalog.programs.assign(16U, entry);
+    source.programCatalogRevision = ProgramCatalogRevision{UINT64_MAX};
+    std::string body;
+    TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+    TEST_ASSERT_TRUE(body.size() <= 3072U);
+    TEST_ASSERT_TRUE(
+        contains(body, "\"catalogRevision\":\"18446744073709551615\""));
+    TEST_ASSERT_FALSE(contains(body, "notes"));
+    TEST_ASSERT_FALSE(contains(body, "fermentationStages"));
+    entry.program.name = std::string(48U, '"');
+    TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+    TEST_ASSERT_TRUE(contains(body, "\\\""));
+    entry.program.fermentationStages.clear();
+    TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+    TEST_ASSERT_TRUE(contains(body, "\"targetCelsius\":null"));
+    TEST_ASSERT_TRUE(contains(body, "\"durationMinutes\":null"));
+    TEST_ASSERT_TRUE(contains(body, "\"startable\":false"));
+    for (const auto& flag : {0U, 1U}) {
+        auto hidden = entry;
+        if (flag)
+            hidden.program.installed = false;
+        else
+            hidden.program.enabled = false;
+        TEST_ASSERT_FALSE(encodeWebApiProgram(source, hidden, body));
+    }
+    const std::array<CompletionMode, 4U> modes{
+        CompletionMode::FinishWithoutCooling, CompletionMode::CoolThenFinish,
+        CompletionMode::CoolAndHoldForDuration,
+        CompletionMode::CoolAndHoldUntilManualStop};
+    const std::array<const char*, 4U> display{
+        "finish", "cool-finish", "cool-hold-duration", "cool-hold-manual"};
+    const std::array<const char*, 4U> intent{
+        "finish-without-cooling", "cool-then-finish",
+        "cool-and-hold-for-duration", "cool-and-hold-until-manual-stop"};
+    for (std::size_t i = 0; i < modes.size(); ++i) {
+        entry.program.completion.mode = modes[i];
+        entry.program.completion.coolingTargetCelsius =
+            i ? std::optional<double>(5.0) : std::nullopt;
+        entry.program.completion.holdDurationMinutes =
+            i == 2U ? std::optional<std::uint32_t>(90U) : std::nullopt;
+        TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+        TEST_ASSERT_TRUE(contains(
+            body, (std::string("\"mode\":\"") + display[i] + "\"").c_str()));
+        WebRunMutationDto dto;
+        const auto json = std::string(
+                              "{\"v\":1,\"r\":{\"s\":1},\"i\":{\"t\":\"start-"
+                              "program\",\"c\":{\"p\":\"test\",\"c\":\"") +
+                          intent[i] + "\"" + (i ? ",\"k\":5" : "") +
+                          (i == 2U ? ",\"l\":90" : "") + "}}}";
+        TEST_ASSERT_TRUE(decodeWebRunMutation(json, dto) ==
+                         WebRunMutationDecodeStatus::Success);
+        TEST_ASSERT_TRUE(std::get<FermentationUiStartProgramIntent>(dto.intent)
+                             .candidate.completionMode == modes[i]);
+    }
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_program_detail_route_contract_and_session_gate);
+    RUN_TEST(
+        test_program_detail_projection_bounds_nulls_and_completion_binding);
     RUN_TEST(test_asset_route_crc_cache_and_public_bytes);
     RUN_TEST(test_independent_shell_and_asset_boundaries);
     RUN_TEST(
