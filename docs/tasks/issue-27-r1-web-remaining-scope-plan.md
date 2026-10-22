@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-21 · PLAN-REVISION 2.3 (HTTPD-Stackbefund und begrenzter Korrekturvorschlag) · D1–D9/Q1/Q2 UNVERAENDERT · Q3 AUF `1b00baea77a6168f29172ffa91852e10fdfd0c7e` FREIGEGEBEN · IMPLEMENTIERUNG MIT RESSOURCEN-HOLD.**
+**2026-10-22 · PLAN-REVISION 2.4 (gezieltes Run-Stack-Diagnose-/Plandelta §13) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 NICHT FREIGEGEBEN · PRODUKTARBEIT WEITER HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -20,6 +20,11 @@ Die begrenzte Q3-Korrektur wurde auf `095f393f0eed4eb95944c164a8e967ce973c3fc9`
 umgesetzt; [Ergebnis und neuer Stackbefund](../audits/PR209_Q3_IMPLEMENTATION_20261022.md).
 Die Freigabe erlaubt keine Budgeterhoehung und keine weitere Produktkorrektur
 ausserhalb von §12. Der unveraenderte Run-Pfad verletzt das Stackgate; HOLD bleibt.
+
+**Neues Diagnose-/Plandelta:** §13 untersucht ausschliesslich den verbliebenen
+HTTPD-Run-Stack. Gepruefter HEAD `84fa6696559ef89f9e46afb0157f818c92365cf8`,
+Produkt `095f393f0eed4eb95944c164a8e967ce973c3fc9`; Q3 bleibt unveraendert.
+Revision 2.4 ist keine zusaetzliche Produktfreigabe und kein neuer Gesamtplan.
 
 ## 0. Bestaetigte Ownerentscheide (Revision 2)
 
@@ -671,3 +676,153 @@ Golden-Byte-Vertraege und das Vollketten-8192-B-Stackgate oben bleiben bindend.
 des weiter verletzten Vollketten-Stackgates bleibt der Kandidat Draft/HOLD.
 Weitere Produktkorrekturen benoetigen einen neuen expliziten Ownerentscheid;
 Independent Full Review, Pre-Ready und D9 bleiben getrennte Gates.
+
+
+## 13. HTTPD-Run-Stackdiagnose und minimaler Korrekturkandidat (Q4, NICHT FREIGEGEBEN)
+
+### Diagnose und Quellen
+
+[Run-Stack-Evidence](../audits/PR209_RUN_STACK_DIAGNOSIS_20261022.md) mit
+[Frames](../audits/PR209_RUN_FRAMES_20261022.tsv),
+[ABI](../audits/PR209_RUN_ABI_20261022.tsv) und
+[Kanten](../audits/PR209_RUN_EDGES_20261022.tsv), beide tatsaechlichen Xtensa-
+Profile auf Produkt095f393. Keine Produktdateien oder produktiven Tests
+geaendert; nur isolierte Compilerproben, keine neue Firmware/Regressionen.
+Gezielte Quellen: `run_commands.*`, `fermentation_ui_commands.*`,
+`fermentation_application.*`, `run_persistence_coordinator.*`, Web-Codec/
+-Routen/Replay; kanonisch `RUN_COMMANDS.md`, `RUN_PERSISTENCE.md`, `WEB_UI.md`,
+ADR-013, bestehende Direct-Consumer-Tests. Kein allgemeiner C0–C5-Review.
+
+- Application-Frame10880 B: lokale `CommandDecision`10104 B, davon zwei
+  `RunCommandState` zu je4896 B. UI-/Persistenzresultate208/112 B und Referenz
+  auf Prepared-Request sind nicht die Hauptursache. GCC ueberlagert kleine
+  Rueckgabe-/Lease-Temporaries; keine einfache Summe aller Typgroessen.
+- Tatsachlich erreichbare direkte Kanten in beiden `.ci`: Web-handler544 →
+  applyRunMutation2048 → applyConfirmedPrepared10880 B = **13472 B Untergrenze**
+  gegen8192 B. Bestaetigter Web-Program-Start erreicht weiter Visitor20240 B
+  (lokale Decision plus Value-Return-Temporary) und StartInto8000 B (u.a.
+  weiterer4896-B-Kandidat und2824-B-ActiveRun-Optional). Daraus mindestens
+  **41712 B**, ohne weitere Wrapper/SDK-/indirekte Unteraufrufe.
+- Prepare/Confirm, Decision und anschliessende Persistenz sind getrennte
+  Phasen. Coordinator nutzt schon den bestehenden12752-B-WorkingSet-Owner;
+  kein neuer Heapblock desselben Typs erforderlich. SDK/NVS/indirekte Ketten
+  bleiben ohne belastbare Aufloesung **NOT_PROVEN**, nicht0 B oder PASS.
+- Q3-Settings-Teilframes2928 B und Config-Scratch1856/8 B (+1936 B konservative
+  Allocatorbelegung) unveraendert. Settings-Vollkette weiterhin NOT_PROVEN.
+
+### Bevorzugte Richtung, nur gemeinsam sinnvoll
+
+**Root-only-Fix verworfen. SAFE_SMALL_FIX=NOT_PROVEN; IMPLEMENTATION_READY=NO.**
+Kleinste hier untersuchte plausible zusammenhaengende Richtung:
+
+1. Ein transienter, aligned/nothrow-Owner fuer den bestehenden `CommandDecision`
+   innerhalb Application, vor Entscheidungs-/Apply-/Persistenzarbeit. Guard,
+   bestaetigter Request und fruehe Kontextpruefungen bleiben. Keine Queue,
+   Worker, zweiter Persistenzpfad, neuer Domainzustand oder Budgeterhoehung.
+2. Echter non-null In-place-Eintritt in der bestehenden UI-Bridge; Application
+   ruft ihn direkt auf. Vorhandene Into-Starts wiederverwenden, fuer die
+   uebrigen erreichbaren Command-Varianten denselben Algorithmus in Into-
+   Kernen fuehren. Bestehende Value-/Nullable-APIs bleiben kompatibel und
+   delegieren; kein lokaler grosser Fallback im aufgerufenen Owning-Pfad.
+3. Zusaetzliche Run-State-Kandidaten nachweisbar in bereits vorhandenen
+   `decision.after`-Storage aufbauen. Auf jedem abgelehnten/unbestaetigten
+   Ruecklauf denselben kompletten Decisionwert wie bisher herstellen;
+   keine Selbst-Move-Zuweisung, keine Mutation des echten Current. Kann diese
+   Aequivalenz nicht bewiesen werden, STOP statt stillem Semantikwechsel.
+4. Betroffen: `fermentation_application.*`, `fermentation_ui_commands.*`,
+   `run_commands.*` und direkte Tests. Run-Persistence/Store/Wire bleiben
+   unveraendert. Weitergehende noetige Korrekturen nicht vorab autorisiert.
+
+Compile-only-Proben, jeweils beide Profile: Application10880 →784 B;
+Start-/Manual-Visitor20240 →32 B; weitere Visitorvarianten behalten10144 B,
+solange Value-Returns existieren. Start-Kandidat-Alias mit Restore und ohne
+Selbst-Move: Program8000 →3104 B, Manual5216 →320 B. Kein Link-/Semantiktest;
+Proben sind keine Produktimplementierung. Schon nur fuenf kuenftige
+Program-Start-Teilframes ergaben6512 B: **maximal1680 B arithmetischer Rest**,
+keine begruendete Reserve. Alle Webvarianten und die Vollkette fehlen noch.
+
+### Heap, Lebensdauer und offener OOM-Vertrag
+
+Ein neuer Decision-Owner: **10104 B Request, Alignment8, Handle4 B**;
+konservative TLSF-Belegung **10256 B**, zusammenhaengende Suche bis10240 B
+(Details in Evidence). Gegen Produkt095f393 maximal ein solcher fixer Block,
+ueber Decision/Persistenz/Readback bis zum Ruecklauf. Bei frueher Ablehnung
+vor Allokation/Scratch-OOM0 B erfolgreich; nach Ablehnung/Erfolg/Indeterminate
+kein gehaltener zusaetzlicher Decisionowner. Bestehende Unterpuffer/WorkingSets
+bleiben; keine weiteren Deepcopies oder verlaengerten Ueberlappungen erlaubt.
+Ein absoluter Unterpuffer-Peak bzw. Allokationserfolg ist **NOT_PROVEN**.
+
+Nicht globale Exklusivitaet mit allen Q3-/Recoveryclients behaupten: bei
+Ueberlappung Q3+Q4 konservativ11960 B Requests /12192 B Allocatorbelegung gegen
+Vor-Q3. Historisches H-RAM-1-Minimum19896 B (anderes Image, aktiver Run offen)
+belegt keine aktuelle Reserve;10256 B sind bereits51,5 % davon. F4 ist keine
+Reservierung; WLAN/HTTP/LVGL, TOCTOU und Fragmentierung bleiben Risiken.
+Permanente Vorallokation oder Wiederverwendung des noch benoetigten
+Coordinator-WorkingSet sind kein kostenloser Ersatz.
+
+OOM darf keine falsche Owningsituation behaupten. Explizite **noch zu
+entscheidende** Minimaloption: internes
+`FermentationUiDetailStatus::ResourceUnavailable`, KategorieUnavailable,
+PhaseDecisionOnly, bestehendes Web-Unavailable-Wireoutcome. Kein vorgetaeuschter
+Persistence-Busy/OwningOutcome, kein TooLarge durch CapacityReached. Die
+HTTP-Sequenz ist bereits reserviert und wird wie bisher mit dem Ergebnis
+abgeschlossen/gecached; identischer Replay startet keinen neuen Versuch.
+Keine neue Sequenz-/CommandID-/Retryregel, kein Ruecksetzen erzeugter IDs.
+Diese additive interne Detailoption ist selbst Teil des nicht freigegebenen
+Scopes; ohne ehrlichen akzeptierten OOM-Vertrag keine Umsetzung.
+
+### Gezielte spaetere Regressionen und Ressourcenabschluss
+
+Erst nach gezieltem Planreview und ausdruecklicher Produktfreigabe:
+
+- Domain-/Bridge-Aequivalenz fuer alle erreichbaren Varianten: bestaetigt/
+  unbestaetigt, NoChange, stale, ungueltige Sensor-/Safety-/Revisions-/Kapazitaets-
+  und Zustandsgrenzen; kompletter `before`/`after`-/Summary-/Effects-/Statuswert,
+  nullable/value und Into gleich. Insbesondere Restore auf Ablehnung.
+- Scratch-OOM vor Apply/Store: Current unveraendert, keine Storewrites/neue
+  Persistenzrevision/processed oder persisted CommandID; Guard/Owner frei,
+  kein Leak. Bereits bestehende Prepare-/ID-Vergabe nicht rueckgaengig machen.
+  Neues ehrliches DecisionOnly/Unavailable auch lokal/Touch korrekt anzeigen.
+- Web Session/CSRF/Origin/Revision/Confirmation unveraendert; OOM als genau ein
+  abgeschlossenes Unavailable-Replay-Ergebnis. Identischer Replay ohne
+  weitere Allokation/Storewrite, Digestkonflikt/stale Sequenz/In-flight-
+  Sperre unveraendert; kein erfolgreicher Replay einer DecisionOnly-Proposal.
+- Persistierte Resultate/AlreadyPersisted/AlreadyProcessed, TimeMismatch,
+  WriteFailed/CommitOutcomeUnknown, Readback OLD/NEW/Indeterminate, Recovery,
+  RAM-Apply-nach-Write, Ack/Mute RAM-only und Post-Commit-Apply-Failure behalten
+  unveraenderten Outcome-/Safetyvertrag. Spaetere Puffer-OOMs separat pruefen;
+  nicht durch den Scratch-OOM-Test als beherrscht darstellen.
+- Gezielte bestehende Bereiche: `test_run_commands`,
+  `test_fermentation_ui_commands`, `test_run_persistence_coordinator`,
+  `test_web_application_routes`, direkt betroffene Touch-Verbraucher. Kein
+  allgemeiner C0–C5-Neureview und keine Wiederholung unveraenderter Q3-Suites.
+- Allokationsfenster mit maximal gueltigem Run/Programm/Katalog, Messages/
+  Effekten, bestaetigtem Request und maximalen Datengroessen; neuer Ownerpeak,
+  groesster zusammenhaengender Block und dynamische Unterpufferueberlappungen
+  fuer Erfolg, Ablehnung, OOM, Writefehler und Indeterminate. Host/Ziel trennen.
+- Beide Profile auf sauberem Implementierungscommit: fuer **alle** erreichbaren
+  Run-/Settings-HTTPD-Phasen Taskeintritt/SDK/Adapter/Dispatcher/Porttargets/
+  Validierung/Codecs/Persistenz/NVS erfassen. Nur gleichzeitig lebende Frames
+  summieren, sret/Inlining/indirekte und begrenzte rekursive Pfade explizit
+  aufloesen. Keine Teilframes oder fehlenden Targets als0 B buchen.
+  Nicht abschliessbar begrenzte Ketten **NOT_PROVEN/HOLD**, Ueberschreitung
+  **FAIL/HOLD**. Erst ein dokumentierter Maximalpfad S mit **8192−S** und
+  technisch begruendeter, im gezielten Review akzeptierter Reserve erlaubt
+  statischen Ressourcenabschluss. Positiver arithmetischer Rest allein nicht.
+  Keine automatische Budgeterhoehung, kein Vorwegnehmen eines Reserve-PASS.
+- D9/reale Heap-/HWM-/Hardwarequalifikation bleibt getrennt und nicht durch
+  statische Summen ersetzt. Boot/Reset/Fehler/unklare Hardware bleiben ohne
+  Aktorfreigabe. Bei zusaetzlichem Ressourcen-/Semantikscope STOP/Neubilanz.
+
+### Owner-Entscheidvorlage / Halt
+
+Empfehlung: keine Root-only-Produktfreigabe. Die zusammenhaengende Richtung ist
+konkret quantifiziert, aber noch nicht als kleine sichere Gesamtloesung belegt.
+Vor Produktfreigabe gezielt entscheiden/nachweisen: kompletter Variantenscope,
+OOM-Detailvertrag, dynamischer Heappeak/Blockbedarf und Vollkettenreserve.
+Ein Scheitern fuehrt nicht automatisch zu Queue/Worker/groesserem Stack.
+
+**Zusaetzliche Produktimplementierung NICHT FREIGEGEBEN.** Diese Revision ist
+nur Diagnose-/Planergebnis; Q3 bleibt auf freigegebener1b00bae-Basis umgesetzt.
+HTTPD-Vollkettengate FAIL, Ressourcen-HOLD, RAM_PASS=NOT_PROVEN,
+ACTUATOR_RELEASE=NO. Exakte neue Plan-SHA in PR/Handover; danach anhalten.
