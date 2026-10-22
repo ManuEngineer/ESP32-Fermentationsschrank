@@ -1,0 +1,371 @@
+--- a/lib/fermentation_app/src/run_commands.cpp
++++ b/lib/fermentation_app/src/run_commands.cpp
+@@ -842 +842 @@
+-    auto candidate = decision.before;
++    auto& candidate = decision.after;
+@@ -845,0 +846 @@
++        if (!decision.proposed()) { decision.after = decision.before; }
+@@ -850,0 +852 @@
++        if (!decision.proposed()) { decision.after = decision.before; }
+@@ -859 +860,0 @@
+-    decision.after = std::move(candidate);
+@@ -923 +924 @@
+-    auto candidate = decision.before;
++    auto& candidate = decision.after;
+@@ -925,0 +927 @@
++        if (!decision.proposed()) { decision.after = decision.before; }
+@@ -930,3 +932,3 @@
+-        return;
+-    }
+-    decision.after = std::move(candidate);
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
++    }
+@@ -964,4 +966,4 @@
+-CommandDecision decideStop(const RunCommandState& current,
+-                           const StopRequest& request) {
+-    auto decision =
+-        beginDecision(current, request.envelope, CommandKind::AbortAndTurnOff);
++void decideStopInto(const RunCommandState& current,
++                           const StopRequest& request, CommandDecision& destination) {
++    beginDecisionInto(current, request.envelope, CommandKind::AbortAndTurnOff, destination);
++    auto& decision = destination;
+@@ -969 +971 @@
+-        return decision;
++        return;
+@@ -973 +975 @@
+-        return decision;
++        return;
+@@ -977 +979 @@
+-        return decision;
++        return;
+@@ -983 +985 @@
+-        return decision;
++        return;
+@@ -988 +990 @@
+-        return decision;
++        return;
+@@ -995 +997 @@
+-            return decision;
++            return;
+@@ -999 +1001 @@
+-            return decision;
++            return;
+@@ -1004 +1006 @@
+-            return decision;
++            return;
+@@ -1009,4 +1011,4 @@
+-        return decision;
+-    }
+-
+-    auto candidate = decision.before;
++        return;
++    }
++
++    auto& candidate = decision.after;
+@@ -1017 +1019,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1025 +1028,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1030,4 +1034,4 @@
+-        return decision;
+-    }
+-
+-    decision.after = std::move(candidate);
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
++    }
++
+@@ -1063,0 +1068,8 @@
++    if (!decision.proposed()) { decision.after = decision.before; }
++        return;
++}
++
++CommandDecision decideStop(const RunCommandState& current,
++                           const StopRequest& request) {
++    CommandDecision decision;
++    decideStopInto(current, request, decision);
+@@ -1067,2 +1079,2 @@
+-CommandDecision decideCompletion(const RunCommandState& current,
+-                                 const CompletionRequest& request) {
++void decideCompletionInto(const RunCommandState& current,
++                                 const CompletionRequest& request, CommandDecision& destination) {
+@@ -1071 +1083,2 @@
+-    auto decision = beginDecision(current, request.envelope, kind);
++    beginDecisionInto(current, request.envelope, kind, destination);
++    auto& decision = destination;
+@@ -1073 +1086 @@
+-        return decision;
++        return;
+@@ -1077 +1090 @@
+-        return decision;
++        return;
+@@ -1084 +1097 @@
+-            return decision;
++            return;
+@@ -1088 +1101 @@
+-            return decision;
++            return;
+@@ -1093 +1106 @@
+-            return decision;
++            return;
+@@ -1098,4 +1111,4 @@
+-        return decision;
+-    }
+-
+-    auto candidate = decision.before;
++        return;
++    }
++
++    auto& candidate = decision.after;
+@@ -1105 +1118,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1112 +1126,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1117,4 +1132,4 @@
+-        return decision;
+-    }
+-
+-    decision.after = std::move(candidate);
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
++    }
++
+@@ -1138,0 +1154,8 @@
++    if (!decision.proposed()) { decision.after = decision.before; }
++        return;
++}
++
++CommandDecision decideCompletion(const RunCommandState& current,
++                                 const CompletionRequest& request) {
++    CommandDecision decision;
++    decideCompletionInto(current, request, decision);
+@@ -1142 +1165 @@
+-CommandDecision decideRunAdjustment(
++void decideRunAdjustmentInto(
+@@ -1144,3 +1167,3 @@
+-    const RunAdjustmentCommandRequest& request) {
+-    auto decision =
+-        beginDecision(current, request.envelope, CommandKind::AdjustRun);
++    const RunAdjustmentCommandRequest& request, CommandDecision& destination) {
++    beginDecisionInto(current, request.envelope, CommandKind::AdjustRun, destination);
++    auto& decision = destination;
+@@ -1148 +1171 @@
+-        return decision;
++        return;
+@@ -1154 +1177 @@
+-        return decision;
++        return;
+@@ -1171 +1194 @@
+-        return decision;
++        return;
+@@ -1175 +1198 @@
+-        return decision;
++        return;
+@@ -1188,4 +1211,4 @@
+-            return decision;
+-        }
+-    }
+-    auto candidate = decision.before;
++            return;
++        }
++    }
++    auto& candidate = decision.after;
+@@ -1197 +1220,2 @@
+-            return decision;
++            if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1202 +1226,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1208 +1233,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1216 +1242,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1225 +1252,2 @@
+-        return decision;
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
+@@ -1249,4 +1277,4 @@
+-        return decision;
+-    }
+-
+-    decision.after = std::move(candidate);
++        if (!decision.proposed()) { decision.after = decision.before; }
++        return;
++    }
++
+@@ -1263,0 +1292,9 @@
++    if (!decision.proposed()) { decision.after = decision.before; }
++        return;
++}
++
++CommandDecision decideRunAdjustment(
++    const RunCommandState& current,
++    const RunAdjustmentCommandRequest& request) {
++    CommandDecision decision;
++    decideRunAdjustmentInto(current, request, decision);
+@@ -1325,4 +1362,5 @@
+-CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
+-                                         const MessageCommandRequest& request) {
+-    auto decision = beginDecision(current, request.envelope,
+-                                  CommandKind::AcknowledgeMessage);
++void decideAcknowledgeMessageInto(const RunCommandState& current,
++                                         const MessageCommandRequest& request, CommandDecision& destination) {
++    beginDecisionInto(current, request.envelope,
++                                  CommandKind::AcknowledgeMessage, destination);
++    auto& decision = destination;
+@@ -1330 +1368 @@
+-        return decision;
++        return;
+@@ -1335 +1373 @@
+-        return decision;
++        return;
+@@ -1339 +1377 @@
+-        return decision;
++        return;
+@@ -1343 +1381 @@
+-        return decision;
++        return;
+@@ -1349,0 +1388,7 @@
++    return;
++}
++
++CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
++                                         const MessageCommandRequest& request) {
++    CommandDecision decision;
++    decideAcknowledgeMessageInto(current, request, decision);
+@@ -1353,4 +1398,4 @@
+-CommandDecision decideMuteMessage(const RunCommandState& current,
+-                                  const MessageCommandRequest& request) {
+-    auto decision =
+-        beginDecision(current, request.envelope, CommandKind::MuteMessage);
++void decideMuteMessageInto(const RunCommandState& current,
++                                  const MessageCommandRequest& request, CommandDecision& destination) {
++    beginDecisionInto(current, request.envelope, CommandKind::MuteMessage, destination);
++    auto& decision = destination;
+@@ -1358 +1403 @@
+-        return decision;
++        return;
+@@ -1363 +1408 @@
+-        return decision;
++        return;
+@@ -1367 +1412 @@
+-        return decision;
++        return;
+@@ -1371 +1416 @@
+-        return decision;
++        return;
+@@ -1377,0 +1423,7 @@
++    return;
++}
++
++CommandDecision decideMuteMessage(const RunCommandState& current,
++                                  const MessageCommandRequest& request) {
++    CommandDecision decision;
++    decideMuteMessageInto(current, request, decision);
+--- a/lib/fermentation_app/src/run_commands.hpp
++++ b/lib/fermentation_app/src/run_commands.hpp
+@@ -498,0 +499,12 @@
++void decideStopInto(const RunCommandState& current,
++                           const StopRequest& request, CommandDecision& destination);
++void decideCompletionInto(const RunCommandState& current,
++                                 const CompletionRequest& request, CommandDecision& destination);
++void decideRunAdjustmentInto(
++    const RunCommandState& current,
++    const RunAdjustmentCommandRequest& request, CommandDecision& destination);
++void decideAcknowledgeMessageInto(const RunCommandState& current,
++                                         const MessageCommandRequest& request, CommandDecision& destination);
++void decideMuteMessageInto(const RunCommandState& current,
++                                  const MessageCommandRequest& request, CommandDecision& destination);
++
+--- a/lib/fermentation_app/src/fermentation_ui_commands.cpp
++++ b/lib/fermentation_app/src/fermentation_ui_commands.cpp
+@@ -468 +468 @@
+-FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
++FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedInto(
+@@ -472 +472 @@
+-    CommandDecision* decisionOut) {
++    CommandDecision& decisionOut) {
+@@ -474 +474 @@
+-        [&current, &request, &confirmation, decisionOut](const auto& prepared) {
++        [&current, &request, &confirmation, &decisionOut](const auto& prepared) {
+@@ -476 +476 @@
+-            CommandDecision decision;
++            auto& decision = decisionOut;
+@@ -478,2 +478 @@
+-                decision =
+-                    ::fermentation::decideProgramStart(current, prepared);
++                ::fermentation::decideProgramStartInto(current, prepared, decision);
+@@ -481 +480 @@
+-                decision = ::fermentation::decideManualStart(current, prepared);
++                ::fermentation::decideManualStartInto(current, prepared, decision);
+@@ -483 +482 @@
+-                decision = ::fermentation::decideStop(current, prepared);
++                ::fermentation::decideStopInto(current, prepared, decision);
+@@ -485 +484 @@
+-                decision = ::fermentation::decideCompletion(current, prepared);
++                ::fermentation::decideCompletionInto(current, prepared, decision);
+@@ -488,2 +487 @@
+-                decision =
+-                    ::fermentation::decideRunAdjustment(current, prepared);
++                ::fermentation::decideRunAdjustmentInto(current, prepared, decision);
+@@ -499,2 +497 @@
+-                decision = ::fermentation::decideAcknowledgeMessage(
+-                    current, prepared.request);
++                ::fermentation::decideAcknowledgeMessageInto(current, prepared.request, decision);
+@@ -505,2 +502 @@
+-                decision = ::fermentation::decideMuteMessage(current,
+-                                                             prepared.request);
++                ::fermentation::decideMuteMessageInto(current, prepared.request, decision);
+@@ -513 +509 @@
+-            if (decisionOut != nullptr) *decisionOut = decision;
++
+@@ -517,0 +514,8 @@
++}
++
++FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
++ const RunCommandState& current, const FermentationApplicationPreparedRequest& request,
++ const std::optional<FermentationUiConfirmationRequest>& confirmation, CommandDecision* out) {
++ if (out != nullptr) { return decidePreparedInto(current, request, confirmation, *out); }
++ CommandDecision local;
++ return decidePreparedInto(current, request, confirmation, local);
+--- a/lib/fermentation_app/src/fermentation_ui_commands.hpp
++++ b/lib/fermentation_app/src/fermentation_ui_commands.hpp
+@@ -408,0 +409,5 @@
++    [[nodiscard]] static FermentationUiCommandResult decidePreparedInto(
++        const RunCommandState& current,
++        const FermentationApplicationPreparedRequest& request,
++        const std::optional<FermentationUiConfirmationRequest>& confirmation,
++        CommandDecision& decisionOut);
+--- a/lib/fermentation_app/src/fermentation_application.cpp
++++ b/lib/fermentation_app/src/fermentation_application.cpp
+@@ -0,0 +1 @@
++#include <new>
+@@ -660,3 +661,10 @@
+-    CommandDecision decision;
+-    auto decisionResult = FermentationUiCommandBridge::decidePrepared(
+-        *runtimeRunState_, confirmed, std::nullopt, &decision);
++    const auto release = [](CommandDecision* value) {
++      if (value) { value->~CommandDecision();
++        ::operator delete(value, std::align_val_t{alignof(CommandDecision)}); }
++    };
++    std::unique_ptr<CommandDecision, decltype(release)> scratch(
++      new (std::align_val_t{alignof(CommandDecision)}, std::nothrow) CommandDecision{}, release);
++    if (!scratch) { return {}; } // Compile-only stub. No OOM enum/API implementation.
++    auto& decision = *scratch;
++    auto decisionResult = FermentationUiCommandBridge::decidePreparedInto(
++        *runtimeRunState_, confirmed, std::nullopt, decision);

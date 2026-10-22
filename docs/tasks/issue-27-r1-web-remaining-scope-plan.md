@@ -826,3 +826,50 @@ Ein Scheitern fuehrt nicht automatisch zu Queue/Worker/groesserem Stack.
 nur Diagnose-/Planergebnis; Q3 bleibt auf freigegebener1b00bae-Basis umgesetzt.
 HTTPD-Vollkettengate FAIL, Ressourcen-HOLD, RAM_PASS=NOT_PROVEN,
 ACTUATOR_RELEASE=NO. Exakte neue Plan-SHA in PR/Handover; danach anhalten.
+
+
+### Q4-Machbarkeitsdelta zur kombinierten Probe (2026-10-22)
+
+**Q4_FEASIBILITY_HOLD.** Basis47b782e, keine weitere Produktfreigabe.
+[Neue Evidence](../audits/PR209_Q4_FEASIBILITY_20261022.md),
+[einziger gemeinsamer temporaerer Patch](../audits/PR209_Q4_COMBINED_20261022.patch)
+und rohe gemeinsame Frames/Phasenpfade sind versioniert. A/B/C wurden in
+**einer** temporaeren Sourcekopie mit gemeinsamen Headern zusammengefuehrt;
+Application/Bridge/Commands/Web jeweils mit beiden originalen Xtensa-
+Profilbefehlen uebersetzt. Kein Link, Produkt-/Testcode oder OOM-Enum geaendert.
+
+Alle sieben Web-erreichbaren Visitorvarianten jetzt32 B; zugehoerige Into-
+Frames: Program3104, Manual320, Stop240, Completion240, Adjustment400,
+Ack/Mute32 B. Application784 B, Bridge48 B; **applyRunMutation bleibt2048 B**.
+Die gemeinsame Program-Decision ruft die bestehende ActiveRun-Factory mit
+weiteren3136 B auf: **544+2048+784+32+3104+3136 =9648 B**, schon1456 B ueber
+8192 B, noch ohne Adapter/Dispatcher/Bridge/SDK-/Validierungspraefixe.
+Gemessene gemeinsame Frames, keine Addition isolierter A/B/C-Gewinne.
+Prepare, Confirm, Decision und Persistence/Readback sind getrennt bilanziert;
+fehlende indirekte/SDK-/NVS-Kanten **NOT_PROVEN**, nicht0 B oder PASS.
+Settings/Q3 unveraendert, kein Ressourcenabschluss.
+
+Der2048-B-Webframe haelt prepared/confirmed (je856 B aus vorhandener Evidence)
+und Context/UI-Return-Temporary. Eine lokale Scope-/const-Aenderung beweist
+keine Framefreigabe. Selbst vollstaendiges hypothetisches Streichen dieses
+Frames ergäbe mit dem Adapter **9648−2048+704 =8304 B >8192 B**;
+diese Gegenrechnung ist kein gemessener Optimierungsgewinn.
+
+Fixe10104-B-Decision-/10256-B-Allocator-Komponente nicht neu gemessen und
+jetzt nicht empfohlen. Keine neue explizite normale Deepcopy gegenueber
+Produkt095f393 erkennbar; dynamische Spitzen auf Restore-/Request-/ActiveRun-/
+Serialisierungs-/Readback-Ueberlappung weiter NOT_PROVEN. Coordinator-
+WorkingSet12752 B wird beim Persistieren neben der Decision gebraucht und
+ist kein nachgewiesen freier/exklusiver Ersatzspeicher.
+
+OOM-Option unveraendert zur Entscheidung: internes ResourceUnavailable,
+DecisionOnly/Unavailable, bestehendes Web-unavailable und Replay; kein
+Persistence-Busy, CapacityReached/TooLarge oder falsches OwningOutcome.
+Keine Enum-/API-Implementierung dieses OOM-Vertrags in der Compileprobe.
+
+**STOP / Owneroption:** gezielte weitere Diagnose der `run_snapshot.*`-
+ActiveRun-Factory mit ihren Caller-/Value-/Optional-Temporaries und der
+nahen2592/1680-B-Prepare-Requestkonstruktion beauftragen oder HOLD beibehalten.
+Bevorzugt bestehendes Decision-after-Storage untersuchen, kein weiterer
+Heapowner/WorkingSet, kein Budgetwechsel/Worker/Queue. Keine solche weitere
+Variante oder Produktkorrektur aus diesem Auftrag. Q3/C0–C5 und D9 bleiben.
