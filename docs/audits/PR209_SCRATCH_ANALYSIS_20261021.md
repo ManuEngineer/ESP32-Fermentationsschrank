@@ -1,11 +1,14 @@
 # PR #209 – quantitative Scratch-Analyse vor Q3
 
+**Historische Vorfreigabe-Analyse**; Q3 spaeter auf `1b00baea77a6168f29172ffa91852e10fdfd0c7e`
+freigegeben. [Aktuelle Implementierungsevidence](PR209_Q3_IMPLEMENTATION_20261022.md).
+
 2026-10-21. **ANALYSIS_ONLY; Q3 NICHT FREIGEGEBEN.** Untersucht wurden
 Produktquellen auf `3816450f87aabc0a0ed3e00aa606cf4ab6644718`, Branch
 `agent/issue-27-r1-web-navigation-plan`, offener Draft-PR #209 / Issue #27.
 Freigegebene Implementierungsbaseline bleibt Planrevision 2.2
 `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2`. Diese Evidence ergaenzt ausschliesslich
-[Gesamtplan Revision 2.3 §12](../tasks/issue-27-r1-web-remaining-scope-plan.md#12-httpd-settings-stackbefund-und-vorgeschlagene-korrektur-q3-nicht-freigegeben).
+[Gesamtplan Revision 2.3 §12](../tasks/issue-27-r1-web-remaining-scope-plan.md#12-httpd-settings-stackbefund-und-begrenzte-korrektur-q3).
 Kein Produktcode, keine Stack-/Heapbudgets und keine Commitvertraege geaendert.
 Keine Regressionen, Profilbuilds, Pre-Ready- oder Geraetelaeufe ausgefuehrt.
 

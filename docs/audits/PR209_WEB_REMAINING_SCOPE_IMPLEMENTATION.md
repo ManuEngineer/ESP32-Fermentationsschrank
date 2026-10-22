@@ -3,8 +3,11 @@
 Stand: 2026-10-21; versionierte Offline-Messbasis `4f6f0c9abad9e1c354fc67e140302adcf62680e9`.
 Der aktuellste HEAD-gebundene Test-/Build-/Self-Check-Stand steht im kanonischen PR-Handover.
 **C0–C3/C5-Software implementiert, C5-Ressourcenabschluss FAIL/HOLD.**
-**OPEN_BLOCKERS=1: Settings-HTTPD-Stack.** Weitere Produktarbeit angehalten;
-Planrevision 2.3 fuer die zusaetzliche Korrektur ist noch nicht freigegeben.
+**Aktuell: OPEN_BLOCKERS=1, HTTPD-Vollkettenstack HOLD.** Q3 auf `1b00bae`
+freigegeben und auf `095f393` begrenzt umgesetzt; Scratch-Framekorrektur
+nachgewiesen, unveraenderter Run-Frame 10880 B >8192 B.
+[Aktuelle Q3-Evidence](PR209_Q3_IMPLEMENTATION_20261022.md). Die folgenden
+Messwerte bleiben auf ihren jeweiligen historischen Stand gebunden.
 
 Freigegebener Plan: `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2`,
 [`issue-27-r1-web-remaining-scope-plan.md`](../tasks/issue-27-r1-web-remaining-scope-plan.md).

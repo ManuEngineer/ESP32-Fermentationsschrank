@@ -1,24 +1,25 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-21 · PLAN-REVISION 2.3 (HTTPD-Stackbefund und begrenzter Korrekturvorschlag) · D1–D9/Q1/Q2 UNVERAENDERT · ERWEITERUNG NICHT FREIGEGEBEN · WEITERE PRODUKTARBEIT GESPERRT.**
+**2026-10-21 · PLAN-REVISION 2.3 (HTTPD-Stackbefund und begrenzter Korrekturvorschlag) · D1–D9/Q1/Q2 UNVERAENDERT · Q3 AUF `1b00baea77a6168f29172ffa91852e10fdfd0c7e` FREIGEGEBEN · IMPLEMENTIERUNG MIT RESSOURCEN-HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
 die einzige kanonische, vollstaendige Fassung. Historisch und nicht mehr massgeblich:
 Revision 1 (Plan-SHA `4927e856df8cb3474a7b0ed74aa92917dd23cc6b`), Revision 2 (Plan-SHA `d940c2db329151c4a55a63385cce6bd18473e6f7`) und Revision 2.1 (Plan-SHA `7c3bbae6fd29bbe1679c39929f086c2c92e76bf0`, beide ersetzt durch diese Fassung) und der fruehere reine
 Navigationsplan (`0614c054e3303ef2aacd495b8221e512eb4c0714`); deren Messbelege bleiben
-unter `audits/WEB_NAV_BUDGET_20261020/`. Die Ownerentscheide unten sind **keine** Freigabe
-dieser Revision: Umgesetzt wird erst nach ausdruecklicher Freigabe der exakten Plan-SHA.
+unter `audits/WEB_NAV_BUDGET_20261020/`. Die Ownerentscheide unten allein waren keine Implementierungsfreigabe; die
+explizite Q3-Freigabe der exakten Plan-SHA `1b00baea77a6168f29172ffa91852e10fdfd0c7e`
+wurde nach Review erteilt und am 2026-10-22 vom Owner nochmals bestaetigt.
 
 **Freigegebene Implementierungsbaseline:** Revision 2.2 auf
 `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2` wurde am 2026-10-21 einschliesslich
 C0 → C1 → C2 → C3 → C5 vom Owner freigegeben. Der Softwarekandidat liegt auf
 `4f6f0c9abad9e1c354fc67e140302adcf62680e9`; funktionale Tests und beide Profilbuilds
 sind PASS, das neue Settings-HTTPD-Stackgate ist **FAIL / HOLD** (§12).
-Diese vollstaendige Revision ersetzt den Planungsstand fuer die noch offene
-Ressourcenkorrektur; sie ist selbst **nicht freigegeben**. Die bisherige Freigabe
-erlaubt weder den zusaetzlichen Eingriff in den gemeinsamen Konfigurations-
-Commit-Pfad noch eine Erhoehung des HTTPD-Stacks.
+Die begrenzte Q3-Korrektur wurde auf `095f393f0eed4eb95944c164a8e967ce973c3fc9`
+umgesetzt; [Ergebnis und neuer Stackbefund](../audits/PR209_Q3_IMPLEMENTATION_20261022.md).
+Die Freigabe erlaubt keine Budgeterhoehung und keine weitere Produktkorrektur
+ausserhalb von §12. Der unveraenderte Run-Pfad verletzt das Stackgate; HOLD bleibt.
 
 ## 0. Bestaetigte Ownerentscheide (Revision 2)
 
@@ -41,9 +42,9 @@ Commit-Pfad noch eine Erhoehung des HTTPD-Stacks.
 | **Q1** | Bestehendes Verhalten beibehalten: Eine Aenderung des Geraetenamens aendert Hostname/mDNS/SoftAP-SSID **erst beim naechsten normalen Netzwerkstart bzw. Geraetestart**. Keine sofortige Rekonfiguration, keine Unterbrechung der laufenden Verbindung; die Web-UI weist klar auf die verzoegerte Wirkung hin. Der native Test zur ausbleibenden Netzwerkrekonfiguration bleibt. |
 | **Q2** | Zeitzonenaenderung **zurueckgestellt** (KISS/YAGNI): Solange `kSupportedTimeZones` nur `Europe/Zurich` enthaelt, zeigt die Web-UI die kanonische Zone lesbar, nicht editierbar und ohne wirkungslosen Speichern-Knopf. `applyTimeZone`, der Intent `set-time-zone` und die nur dafuer geplanten Implementierungs-/Mutationstests sind **aus diesem PR gestrichen**; die schreibende Zeitzonenfunktion wird erst bei einem tatsaechlich erweiterten, freigegebenen Katalog geplant. Die bestehende Anzeige-/Konfigurationsgrundlage wird nicht zurueckgebaut. |
 
-D1–D9 und Q1/Q2 bleiben entschieden; es gibt keinen Q1-/Q2-HOLD. Neu offen ist
-**Q3: Freigabe der begrenzten Stackkorrektur in §12 auf der exakten SHA dieser
-Revision**. Bis dahin gilt Ressourcen-HOLD; D9 bleibt separat freizugeben.
+D1–D9 und Q1/Q2 bleiben entschieden; es gibt keinen Q1-/Q2-HOLD.
+**Q3 ist auf `1b00baea77a6168f29172ffa91852e10fdfd0c7e` freigegeben und begrenzt
+umgesetzt (§12).** Das Vollketten-Stackgate bleibt FAIL/HOLD; D9 bleibt separat freizugeben.
 
 **Kernaussagen.** (1) Ein PR (C0, C1, C2, C3, C5). (2) Abgetrennt bleiben Manueller Betrieb,
 Diagnose/Diagramme/Exporte (#28), Journale/Protokolle/Backup/Werksreset (#19),
@@ -521,7 +522,16 @@ getrennte Hardware-/Flash-/Browserfreigabe. Kein Ready-/Merge-/Release-GO.
   persistierte Herkunft `WebInterface` muessen im Test belegt sein.
 - Matrixzeilen H/X bleiben offen; R1-U/D9/G2 und Aktorfreigabe unveraendert offen.
 
-## 12. HTTPD-Settings-Stackbefund und vorgeschlagene Korrektur (Q3, NICHT FREIGEGEBEN)
+## 12. HTTPD-Settings-Stackbefund und begrenzte Korrektur (Q3)
+
+**Status 2026-10-22:** Q3 auf Plan-SHA `1b00baea77a6168f29172ffa91852e10fdfd0c7e`
+freigegeben; begrenzte Umsetzung auf `095f393f0eed4eb95944c164a8e967ce973c3fc9`.
+[Implementierungsevidence](../audits/PR209_Q3_IMPLEMENTATION_20261022.md): 1856-B-
+Scratch, Alignment 8 B, Handle 4 B bestaetigt; Stack-Teilwerte verbessert,
+Vollketten-8192-B-Gate FAIL wegen unveraendertem Run-Frame 10880 B.
+Weitere Produktarbeit STOP, kein Run-Fix und keine Budgeterhoehung freigegeben.
+Der folgende Vorschlags-/Analysevertrag ist die autorisierte Grundlage, kein
+nachtraeglicher Ressourcen-PASS.
 
 ### Nachgewiesene Abweichung
 
@@ -657,6 +667,7 @@ Golden-Byte-Vertraege und das Vollketten-8192-B-Stackgate oben bleiben bindend.
   HEAD; danach fuer den unabhaengigen Full Review anhalten. Pre-Ready,
   Ready/merge und D9 bleiben eigenstaendige Owner-Gates.
 
-**Anhalten:** Dieser zusaetzliche Scope beginnt erst nach ausdruecklicher
-Ownerfreigabe der exakten SHA dieser vollstaendigen Planrevision. Bis dahin
-bleibt der aktuelle Implementierungskandidat Draft/HOLD.
+**Anhalten:** Die freigegebene Q3-Umsetzung ist begrenzt abgeschlossen; wegen
+des weiter verletzten Vollketten-Stackgates bleibt der Kandidat Draft/HOLD.
+Weitere Produktkorrekturen benoetigen einen neuen expliziten Ownerentscheid;
+Independent Full Review, Pre-Ready und D9 bleiben getrennte Gates.
