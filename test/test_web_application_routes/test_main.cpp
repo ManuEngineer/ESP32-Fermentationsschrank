@@ -37,6 +37,16 @@
 #include "../common/allocation_window.hpp"
 
 namespace fermentation {
+class RunPersistenceCoordinatorTestAccess {
+   public:
+    static bool released(RunPersistenceCoordinator& c) {
+        auto operation = c.beginCommandOperation();
+        if (!operation) return false;
+        const auto* candidate = c.commandCandidate(*operation);
+        return candidate && !candidate->activeProgramRun &&
+               !candidate->activeManualRun && candidate->activeRunId.empty();
+    }
+};
 
 struct WebSessionManagerTestAccess {
     static bool hasActive(const WebSessionManager& manager) {
@@ -57,6 +67,49 @@ class FermentationApplicationTestAccess {
         const auto read = app.configurationService_->acquireRuntime();
         TEST_ASSERT_TRUE(read.lease.valid());
         return read.lease.get().manifestReference();
+    }
+    static bool borrowReleased(FermentationApplication& app) {
+        return RunPersistenceCoordinatorTestAccess::released(
+            *app.runPersistenceCoordinator_);
+    }
+    static void commissionMaximumCatalog(FermentationApplication& app) {
+        auto build = app.configurationService_->beginPreview();
+        TEST_ASSERT_TRUE(build.lease.valid());
+        auto& catalog = build.lease.programCatalog();
+        for (auto& document : catalog.programs) {
+            auto& p = document.program;
+            p.name.clear();
+            for (unsigned n = 0; n < 48U; ++n) p.name += "\xC3\xA4";
+            p.notes.clear();
+            for (unsigned n = 0; n < 512U; ++n) p.notes += "\xC3\xA4";
+            p.productSensorFailure.fallbackDelaySeconds = 30U;
+            p.fermentationStages.front().targetTemperatureCelsius = 38.0;
+            p.fermentationStages.front().durationMinutes = 120U;
+            p.targetQualification.bandCelsius = 0.5;
+            p.targetQualification.durationMinutes = 10U;
+            p.maximumTargetReachMinutes = 180U;
+            if (p.preheat) p.maximumProductWaitMinutes = 30U;
+            if (p.completion.mode != CompletionMode::FinishWithoutCooling)
+                p.completion.coolingTargetCelsius = 8.0;
+        }
+        for (unsigned n = 0; n < 12U; ++n) {
+            auto user = catalog.programs.front();
+            user.program.id = std::string(46U, 'u') + (n < 10 ? "0" : "1") +
+                              std::to_string(n % 10U);
+            user.program.builtIn = false;
+            user.program.factoryCatalogEntry = false;
+            user.program.resettable = false;
+            user.program.userDeletable = true;
+            catalog.programs.push_back(std::move(user));
+        }
+        const auto installed = app.configurationService_->installPreview(
+            std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
+            {ChangeOperationKind::NormalEdit, 1U});
+        TEST_ASSERT_TRUE(installed.preview.has_value());
+        const auto committed = app.configurationService_->confirmPreview(
+            installed.preview->handle);
+        TEST_ASSERT_TRUE(committed.status ==
+                         ConfigurationCommitStatus::Activated);
     }
     static RunCommandState& runtimeState(FermentationApplication& application) {
         return *application.runtimeRunState_;
@@ -5606,8 +5659,181 @@ void test_new_handler_allocation_windows_and_final_budgets() {
         16384U - (sizeof(kWebApplicationAsset) - 1U));
 }
 
+// Same native fixture is also run against 095f393: requested bytes, not an
+// ESP32 heap/fragmentation proof. Aligned Q3 CommitScratch is outside these
+// hooks.
+void test_q4_maximum_catalog_mutation_allocation_and_cleanup_windows() {
+    for (unsigned scenario = 0U; scenario < 7U; ++scenario) {
+        alloc_window::Window window;
+        {
+            ComposedFixture fixture;
+            FermentationApplicationTestAccess::commissionMaximumCatalog(
+                fixture.application);
+            fixture.timeSource.setUnixTimeSeconds(1'700'000'000);
+            CrossRolePlausibilityContext evidence;
+            evidence.air.quality = device_platform::SensorQuality::Valid;
+            evidence.product.quality = device_platform::SensorQuality::Valid;
+            evidence.cooling.quality = device_platform::SensorQuality::Valid;
+            fixture.application.publishOwningRuntimeEvidence(evidence);
+            const auto session = composedRunSession(fixture);
+            const auto id = std::string(46U, 'u') + "11";
+            const auto start =
+                std::string("{\"t\":\"start-program\",\"c\":{\"p\":\"") + id +
+                "\"}}";
+            if (scenario == 1U)
+                fixture.store.setNextWriteFault(
+                    device_platform_test_support::
+                        SimulatedPersistentStateStore::WriteFault::
+                            FailBeforeBegin);
+            if (scenario == 2U) {
+                fixture.store.setNextWriteFault(
+                    device_platform_test_support::
+                        SimulatedPersistentStateStore::WriteFault::
+                            PowerCutAfterCommitBeforeReturn);
+                fixture.store.failNextReadAfterWrite();
+            }
+            if (scenario == 6U) {
+                std::string maxName;
+                for (unsigned n = 0U; n < 48U; ++n) maxName += "\xC3\xA4";
+                installActiveRunForStatus(fixture.application, maxName);
+                auto& state = FermentationApplicationTestAccess::runtimeState(
+                    fixture.application);
+                auto document =
+                    *storedProgram(state.activeProgramRun->snapshot().source);
+                document.program.notes.clear();
+                for (unsigned n = 0U; n < 512U; ++n)
+                    document.program.notes += "\xC3\xA4";
+                state.activeProgramRun = ActiveRun::start(
+                    document, ProgramSourceKind::FactoryCatalog,
+                    RunProgramSourceRevision{1U});
+                for (unsigned n = 0U; n < 31U; ++n) {
+                    RunAdjustmentRequest adjustment;
+                    adjustment.confirmed = true;
+                    adjustment.targetTemperatureCelsius = n % 2U ? 38.0 : 39.0;
+                    adjustment.timestamp.monotonicMillis = n;
+                    const auto decision =
+                        state.activeProgramRun->decideAdjustment(
+                            adjustment,
+                            {true, 0U, 0U,
+                             RunAdjustmentPhaseContext::Fermenting});
+                    TEST_ASSERT_TRUE(decision.proposed());
+                    TEST_ASSERT_TRUE(
+                        state.activeProgramRun->applyAdjustment(decision)
+                            .status == RunAdjustmentStatus::Applied);
+                }
+                state.sensorSelection.emplace();
+                state.processRunSnapshot =
+                    makeProcessRunSnapshot(*state.activeProgramRun);
+                fixture.timeSource.advanceMonotonicMillis(1000U);
+            }
+            const auto body =
+                scenario == 3U
+                    ? nameBody(fixture.application.webSettings()->revision,
+                               std::string(48U, 'n'))
+                    : runBody(fixture.application,
+                              scenario == 6U
+                                  ? "{\"t\":\"adjust-run\",\"x\":38.0}"
+                                  : start);
+            // Faults 4/5 deliberately cover host unwinding vs checked cJSON
+            // OOM.
+            bool threw = false;
+            unsigned status = 0U;
+            window = alloc_window::measure(
+                [&] {
+                    try {
+                        const auto response =
+                            postRun(fixture, session, 1U, body);
+                        status = response.statusCode;
+                        if (scenario == 0U || scenario == 6U) {
+                            TEST_ASSERT_EQUAL_UINT16(200U, status);
+                            const auto replay =
+                                postRun(fixture, session, 1U, body);
+                            TEST_ASSERT_EQUAL_STRING(
+                                completeBody(response).c_str(),
+                                completeBody(replay).c_str());
+                        }
+                    } catch (const std::bad_alloc&) {
+                        threw = true;
+                    }
+                },
+                scenario == 4U || scenario == 5U ? 1U : 0U, scenario == 5U);
+            if (scenario == 4U) TEST_ASSERT_TRUE(threw);
+            if (scenario == 5U) TEST_ASSERT_FALSE(threw);
+            TEST_ASSERT_FALSE(fixture.store.hasPendingWriteForTesting());
+            if (scenario == 4U || scenario == 5U) {
+                // The failed operation releases internal serializers/borrows.
+                const auto retried = postRun(fixture, session, 2U, body);
+                TEST_ASSERT_TRUE(retried.statusCode != 500U);
+            }
+            std::printf(
+                "Q4_MUTATION_ALLOC case=%u count=%zu bytes=%zu largest=%zu "
+                "peak=%zu live_after=%zu status=%u host_bad_alloc=%u\n",
+                scenario, window.count, window.requestedBytes,
+                window.largestBlock, window.peakLiveBytes, window.liveBytes,
+                status, threw);
+        }
+        TEST_ASSERT_EQUAL_UINT32(0U, alloc_window::gWindow.liveBytes);
+    }
+}
+
+void test_q4_borrow_candidate_construction_allocation_failure_unwinds_without_apply() {
+    for (std::size_t failure = 1U; failure <= 6U; ++failure) {
+        ComposedFixture fixture;
+        FermentationApplicationTestAccess::commissionMaximumCatalog(
+            fixture.application);
+        fixture.timeSource.setUnixTimeSeconds(1'700'000'000);
+        CrossRolePlausibilityContext evidence;
+        evidence.air.quality = evidence.product.quality =
+            evidence.cooling.quality = device_platform::SensorQuality::Valid;
+        fixture.application.publishOwningRuntimeEvidence(evidence);
+        const auto session = composedRunSession(fixture);
+        static_cast<void>(session);
+        WebRunMutationDto dto;
+        const auto body =
+            runBody(fixture.application,
+                    std::string("{\"t\":\"start-program\",\"c\":{\"p\":\"") +
+                        std::string(46U, 'u') + "11\"}}");
+        TEST_ASSERT_TRUE(decodeWebRunMutation(body, dto) ==
+                         WebRunMutationDecodeStatus::Success);
+        FermentationUiCommandContext context;
+        context.surface = device_platform::UiSurface::WebInterface;
+        context.monotonicMillis = fixture.timeSource.monotonicMillis();
+        context.expected = dto.expected;
+        auto prepared =
+            fixture.application.prepareEnvelope(context, dto.intent);
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+        TEST_ASSERT_TRUE(fixture.application.confirmPreparedInPlace(prepared) ==
+                         FermentationApplicationRequestStatus::Prepared);
+        bool threw = false;
+        static_cast<void>(alloc_window::measure(
+            [&] {
+                try {
+                    static_cast<void>(
+                        fixture.application.applyConfirmedPrepared(
+                            *prepared.request));
+                } catch (const std::bad_alloc&) {
+                    threw = true;
+                }
+            },
+            failure));
+        TEST_ASSERT_TRUE(threw);
+        const auto& state = FermentationApplicationTestAccess::runtimeState(
+            fixture.application);
+        TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_UINT32(0U, state.processedCommandCount);
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::borrowReleased(
+            fixture.application));
+        TEST_ASSERT_EQUAL_UINT32(0U, alloc_window::gWindow.liveBytes);
+    }
+    // This proves native exception unwinding only; target -fno-exceptions does
+    // not turn std::string/vector allocation failure into a returned status.
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_q4_borrow_candidate_construction_allocation_failure_unwinds_without_apply);
+    RUN_TEST(test_q4_maximum_catalog_mutation_allocation_and_cleanup_windows);
     RUN_TEST(test_new_handler_allocation_windows_and_final_budgets);
     RUN_TEST(test_settings_decode_closed_schema_and_separate_run_budget);
     RUN_TEST(test_settings_all_preview_and_commit_outcomes);

@@ -629,19 +629,19 @@ ReplayOutcomeCode WebRunMutationHandler::applyRunMutation(
     context.monotonicMillis = nowMs;
     context.expected = run.expected;
 
-    const auto prepared = application_.prepareEnvelope(context, run.intent);
+    auto prepared = application_.prepareEnvelope(context, run.intent);
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
         !prepared.request.has_value()) {
         projected = projectRequestStatus(prepared.status);
     } else {
-        const auto confirmed = application_.confirmPrepared(prepared);
-        if (confirmed.status !=
-                FermentationApplicationRequestStatus::Prepared ||
-            !confirmed.request.has_value()) {
-            projected = projectRequestStatus(confirmed.status);
+        const auto confirmedStatus =
+            application_.confirmPreparedInPlace(prepared);
+        if (confirmedStatus != FermentationApplicationRequestStatus::Prepared ||
+            !prepared.request.has_value()) {
+            projected = projectRequestStatus(confirmedStatus);
         } else {
             projected = projectCommandResult(
-                application_.applyConfirmedPrepared(*confirmed.request));
+                application_.applyConfirmedPrepared(*prepared.request));
         }
     }
     return projected;

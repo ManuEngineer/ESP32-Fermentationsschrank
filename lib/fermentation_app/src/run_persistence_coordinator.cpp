@@ -1,5 +1,7 @@
 #include "run_persistence_coordinator.hpp"
 
+#include <type_traits>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -399,6 +401,7 @@ std::optional<CommandId> RunPersistenceCoordinator::commandIdHighWater()
 RunEpochHandoffSlotsPreparedResult
 RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
     const AuthorizedRunEpochHandoffProof& proof) {
+    if (commandBorrowed_) return {borrowedBusyResult(), std::nullopt};
     RunPersistenceDurability durability = RunPersistenceDurability::Unchanged;
     const auto reject = [this, &durability](
                             RunPersistenceStep step,
@@ -578,6 +581,7 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
 RunEpochHandoffHeadFinalizedResult
 RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
     const AuthorizedRunEpochHandoffProof& proof) {
+    if (commandBorrowed_) return {borrowedBusyResult(), std::nullopt};
     RunPersistenceDurability durability = RunPersistenceDurability::Unchanged;
     const auto reject = [this, &durability](
                             RunPersistenceStep step,
@@ -767,6 +771,11 @@ RunPersistenceResult RunPersistenceCoordinator::unavailableResult() const {
 
 void RunPersistenceCoordinator::loadAndInitializeInto(
     RunPersistenceLoadResult& destination) {
+    if (commandBorrowed_) {
+        destination.status = RunPersistenceLoadStatus::AlreadyInitialized;
+        destination.snapshot.reset();
+        return;
+    }
     destination.status = RunPersistenceLoadStatus::ReadFailed;
     destination.snapshot.reset();
     pendingR1CheckpointRevision_.reset();
@@ -1063,6 +1072,7 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
 RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
     const RunCommandState& current, const RunCheckpointTime& time,
     const CrossRolePlausibilityContext& liveSensorEvidence) {
+    if (commandBorrowed_) return {borrowedBusyResult(), current};
     const auto invalid = [this](const RunCommandState& state) {
         return RecoveryActivationOutcome{
             result(RunPersistenceResultStatus::InvalidDecision,
@@ -1324,6 +1334,7 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
 RunPersistenceResult RunPersistenceCoordinator::activateR1EligibleRun(
     RunCommandState& current, const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     if (state_ != RunPersistenceCoordinatorState::LoadedActiveRun ||
         !currentHead_.has_value() ||
         !slots_[currentHead_->current.slot].has_value()) {
@@ -1414,7 +1425,7 @@ RecoveryActivationOutcome
 RunPersistenceCoordinator::activateR1ExactFermentingCore(
     const RunCommandState& current, const RunPersistenceRawRecord& loadedRecord,
     const RunCheckpointTime& time, std::optional<std::size_t> targetSlot,
-    RunPersistenceFallbackDirective fallbackDirective,
+    const RunPersistenceFallbackDirective& fallbackDirective,
     RunPersistenceCoordinatorState rollbackState,
     bool selectedFallbackCompletionToNoActiveRun) {
     const auto invalid =
@@ -1544,6 +1555,9 @@ RunPersistenceCoordinator::activateR1ExactFermentingCore(
 R1RecoveryEvaluation
 RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
     RunCommandState& current, const RunCheckpointTime& time) {
+    if (commandBorrowed_)
+        return {RecoveryDisposition::RecoveryRejectedOrFailClosed,
+                borrowedBusyResult()};
     const auto rejected =
         [this](RunPersistenceResultStatus status,
                RunPersistenceStep step = RunPersistenceStep::CandidateApply,
@@ -1654,6 +1668,7 @@ RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
 
 bool RunPersistenceCoordinator::prepareRecoveryEvaluationState(
     RunCommandState& current, std::uint64_t monotonicMillis) const {
+    if (commandBorrowed_) return false;
     auto candidate = current;
     const auto transition =
         propose(candidate.processState, ProcessState::RecoveryEvaluation,
@@ -1673,6 +1688,7 @@ RecoveryActivationOutcome
 RunPersistenceCoordinator::activateFallbackRecoveredRun(
     const RunCommandState& current, const RunCheckpointTime& time,
     const CrossRolePlausibilityContext& liveSensorEvidence) {
+    if (commandBorrowed_) return {borrowedBusyResult(), current};
     const auto invalid = [this](const RunCommandState& state) {
         return RecoveryActivationOutcome{
             result(RunPersistenceResultStatus::InvalidDecision,
@@ -1770,6 +1786,7 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
 RunPersistenceResult RunPersistenceCoordinator::reevaluateRecoveryEvaluation(
     RunCommandState& current, const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     const auto notAllowed = [this]() {
         return result(RunPersistenceResultStatus::NotAllowedInState,
                       RunPersistenceStep::CandidateApply);
@@ -1916,6 +1933,7 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
     RunCommandState& current, const ResolveRecoveryUncertaintyRequest& request,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext& liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     const auto notAllowed = [this]() {
         return result(RunPersistenceResultStatus::NotAllowedInState,
                       RunPersistenceStep::CandidateApply);
@@ -2154,7 +2172,7 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
-    bool periodic, const RunCommandState& before,
+    bool periodic, const RunPersistenceBefore& before,
     RunPersistenceMutationKind mutationKind,
     std::optional<CommandId> commandId) {
     if (state_ != RunPersistenceCoordinatorState::Ready &&
@@ -2168,6 +2186,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
 
 RunPersistenceResult RunPersistenceCoordinator::discardAsNoActiveRun(
     RunCommandState& current, const RunCheckpointTime& time) {
+    if (commandBorrowed_) return borrowedBusyResult();
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::LoadedActiveRun) {
         return unavailableResult();
@@ -2222,10 +2241,10 @@ RunPersistenceResult RunPersistenceCoordinator::discardAsNoActiveRun(
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
-    bool periodic, const RunCommandState& before,
+    bool periodic, const RunPersistenceBefore& before,
     RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId,
     std::optional<std::size_t> targetSlotOverride,
-    RunPersistenceFallbackDirective fallbackDirective,
+    const RunPersistenceFallbackDirective& fallbackDirective,
     RunPersistenceCoordinatorState rollbackState) {
     // R1 write invariant: an active FERMENTING Current is the recovery anchor
     // consumed by #124 and therefore must carry trusted UTC.  This check is
@@ -2331,52 +2350,74 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
+    const auto encoded = prepareSnapshotRecord(snapshot, time);
+    if (encoded != SnapshotRecordPreparation::Success) {
+        state_ = rollbackState;
+        return result(encoded == SnapshotRecordPreparation::InvalidSnapshot
+                          ? RunPersistenceResultStatus::InvalidDecision
+                          : RunPersistenceResultStatus::CapacityExceeded,
+                      RunPersistenceStep::CheckpointSlot,
+                      RunPersistenceTechnicalReason::CodecError);
+    }
+    return writeSnapshotTransaction(snapshot, periodic, before, mutationKind,
+                                    commandId, fallbackDirective, rollbackState,
+                                    target, previousCommandIdHighWater);
+}
+
+RunPersistenceCoordinator::SnapshotRecordPreparation
+RunPersistenceCoordinator::prepareSnapshotRecord(
+    const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time) {
     std::string payload;
     if (encodeRunPersistenceSnapshot(snapshot, payload) !=
         RunPersistenceCodecStatus::Success) {
-        state_ = rollbackState;
-        return result(RunPersistenceResultStatus::InvalidDecision,
-                      RunPersistenceStep::CheckpointSlot,
-                      RunPersistenceTechnicalReason::CodecError);
+        return SnapshotRecordPreparation::InvalidSnapshot;
     }
-    device_platform::StorageEnvelope env{
-        kCheckpointRecordType,   kCurrentRunPersistenceSchema, epoch_,
-        nextCheckpointRevision_, time.utcUnixSeconds,          payload};
-    std::string targetBytes;
-    if (device_platform::encodeEnvelope(env, targetBytes,
+    device_platform::StorageEnvelope env{kCheckpointRecordType,
+                                         kCurrentRunPersistenceSchema,
+                                         epoch_,
+                                         nextCheckpointRevision_,
+                                         time.utcUnixSeconds,
+                                         std::move(payload)};
+    if (device_platform::encodeEnvelope(env, workingSet_.record.bytes,
                                         kMaximumCheckpointRecordBytes) !=
         device_platform::EnvelopeEncodeStatus::Success) {
-        state_ = rollbackState;
-        return result(RunPersistenceResultStatus::CapacityExceeded,
-                      RunPersistenceStep::CheckpointSlot,
-                      RunPersistenceTechnicalReason::CodecError);
+        return SnapshotRecordPreparation::CapacityExceeded;
     }
-    workingSet_.record.bytes = targetBytes;
     workingSet_.record.snapshot = snapshot;
     workingSet_.record.checkpointRevision = nextCheckpointRevision_;
     workingSet_.record.utcUnixSeconds = time.utcUnixSeconds;
+    return SnapshotRecordPreparation::Success;
+}
+
+RunPersistenceResult RunPersistenceCoordinator::writeSnapshotTransaction(
+    const RunPersistenceSnapshot& snapshot, bool periodic,
+    const RunPersistenceBefore& before, RunPersistenceMutationKind mutationKind,
+    std::optional<CommandId> commandId,
+    const RunPersistenceFallbackDirective& fallbackDirective,
+    RunPersistenceCoordinatorState rollbackState, std::size_t target,
+    std::optional<CommandId> previousCommandIdHighWater) {
     const auto ref =
         makeRunCheckpointReference(target, workingSet_.record, epoch_);
-    RunPersistenceHead prepared;
-    RunPersistenceHead committed;
+    const std::uint64_t firstHeadRevision = nextHeadRevision_;
+    std::optional<RunPersistenceHead> headStorage{std::in_place};
     std::optional<std::string> preparedBytes;
     std::optional<std::string> committedBytes;
     if (periodic) {
-        committed.state = RunPersistenceHeadState::Committed;
-        committed.revision = nextHeadRevision_;
-        committed.current = ref;
-        committed.commandIdHighWater = previousCommandIdHighWater;
+        headStorage->state = RunPersistenceHeadState::Committed;
+        headStorage->revision = firstHeadRevision;
+        headStorage->current = ref;
+        headStorage->commandIdHighWater = previousCommandIdHighWater;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
             if (fallbackDirective.mode ==
                 RunPersistenceFallbackMode::SetExplicitReference) {
-                committed.fallback = fallbackDirective.reference;
+                headStorage->fallback = fallbackDirective.reference;
             } else if (fallbackDirective.mode ==
                        RunPersistenceFallbackMode::UseStandardFallback) {
-                committed.fallback = currentHead_->current;
+                headStorage->fallback = currentHead_->current;
             }
         }
-        committedBytes = encodeRunPersistenceHead(committed, epoch_);
+        committedBytes = encodeRunPersistenceHead(*headStorage, epoch_);
         if (!committedBytes.has_value()) {
             state_ = rollbackState;
             return result(RunPersistenceResultStatus::CapacityExceeded,
@@ -2385,37 +2426,42 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
                           RunPersistenceDurability::Unchanged);
         }
     } else {
-        prepared.state = RunPersistenceHeadState::Prepared;
-        prepared.revision = nextHeadRevision_;
-        prepared.target = ref;
-        prepared.mutationKind = mutationKind;
-        prepared.commandId = commandId;
-        prepared.oldRunRevision = before.runRevision;
-        prepared.newRunRevision = snapshot.runRevision;
-        prepared.oldTransitionSequence = before.processState.transitionSequence;
-        prepared.newTransitionSequence =
+        headStorage->state = RunPersistenceHeadState::Prepared;
+        headStorage->revision = firstHeadRevision;
+        headStorage->target = ref;
+        headStorage->mutationKind = mutationKind;
+        headStorage->commandId = commandId;
+        headStorage->oldRunRevision = before.runRevision;
+        headStorage->newRunRevision = snapshot.runRevision;
+        headStorage->oldTransitionSequence = before.transitionSequence;
+        headStorage->newTransitionSequence =
             snapshot.processState.transitionSequence;
         if (currentHead_.has_value()) {
-            prepared.preparedCurrent = currentHead_->current;
-            prepared.preparedFallback = currentHead_->fallback;
+            headStorage->preparedCurrent = currentHead_->current;
+            headStorage->preparedFallback = currentHead_->fallback;
         }
-        committed.state = RunPersistenceHeadState::Committed;
-        committed.revision = prepared.revision + 1U;
-        committed.current = ref;
-        prepared.commandIdHighWater = previousCommandIdHighWater;
-        committed.commandIdHighWater = previousCommandIdHighWater;
+        headStorage->commandIdHighWater = previousCommandIdHighWater;
+        preparedBytes = encodeRunPersistenceHead(*headStorage, epoch_);
+        // No reference into the Prepared value survives. The encoded bytes own
+        // their data and remain distinct from Committed NEW until all writes
+        // end.
+        headStorage.reset();
+        headStorage.emplace();
+        headStorage->state = RunPersistenceHeadState::Committed;
+        headStorage->revision = firstHeadRevision + 1U;
+        headStorage->current = ref;
+        headStorage->commandIdHighWater = previousCommandIdHighWater;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
             if (fallbackDirective.mode ==
                 RunPersistenceFallbackMode::SetExplicitReference) {
-                committed.fallback = fallbackDirective.reference;
+                headStorage->fallback = fallbackDirective.reference;
             } else if (fallbackDirective.mode ==
                        RunPersistenceFallbackMode::UseStandardFallback) {
-                committed.fallback = currentHead_->current;
+                headStorage->fallback = currentHead_->current;
             }
         }
-        preparedBytes = encodeRunPersistenceHead(prepared, epoch_);
-        committedBytes = encodeRunPersistenceHead(committed, epoch_);
+        committedBytes = encodeRunPersistenceHead(*headStorage, epoch_);
         if (!preparedBytes.has_value() || !committedBytes.has_value()) {
             state_ = rollbackState;
             return result(RunPersistenceResultStatus::CapacityExceeded,
@@ -2432,12 +2478,12 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     // Read every target before writing.  `slots_` only tracks decoded records;
     // this read preserves an orphaned or otherwise undecodable old byte value
     // as Existing rather than silently treating it as Absent.
-    const auto physicalTarget =
+    auto physicalTarget =
         store_.readSlot(target, kMaximumCheckpointRecordBytes);
     std::optional<std::string> oldSlot;
     if (physicalTarget.status ==
         device_platform::StateStoreReadStatus::Success) {
-        oldSlot = physicalTarget.value;
+        oldSlot = std::move(physicalTarget.value);
     } else if (physicalTarget.status !=
                device_platform::StateStoreReadStatus::NotFound) {
         enterBlockedIndeterminate();
@@ -2477,8 +2523,9 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     };
 
     if (periodic) {
-        const auto slotWrite = store_.writeSlotExact(
-            target, targetBytes, oldSlot, kMaximumCheckpointRecordBytes);
+        const auto slotWrite =
+            store_.writeSlotExact(target, workingSet_.record.bytes, oldSlot,
+                                  kMaximumCheckpointRecordBytes);
         if (slotWrite != RunPersistenceStoreWriteResult::Written) {
             if (slotWrite != RunPersistenceStoreWriteResult::Indeterminate)
                 readyState();
@@ -2499,8 +2546,8 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
             return writeFailure(headWrite, RunPersistenceStep::CommittedHead,
                                 RunPersistenceDurability::Changed);
         }
-        committed.bytes = *committedBytes;
-        currentHead_ = std::move(committed);
+        headStorage->bytes = std::move(*committedBytes);
+        currentHead_ = std::move(*headStorage);
     } else {
         const auto preparedWrite = store_.writeHeadExact(
             *preparedBytes, oldHead, kMaximumHeadRecordBytes);
@@ -2510,9 +2557,9 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
             return writeFailure(preparedWrite, RunPersistenceStep::PreparedHead,
                                 RunPersistenceDurability::Unchanged);
         }
-        prepared.bytes = *preparedBytes;
-        const auto slotWrite = store_.writeSlotExact(
-            target, targetBytes, oldSlot, kMaximumCheckpointRecordBytes);
+        const auto slotWrite =
+            store_.writeSlotExact(target, workingSet_.record.bytes, oldSlot,
+                                  kMaximumCheckpointRecordBytes);
         if (slotWrite != RunPersistenceStoreWriteResult::Written) {
             enterBlockedIndeterminate();
             return writeFailure(slotWrite, RunPersistenceStep::CheckpointSlot,
@@ -2525,18 +2572,16 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
                 ? 0U
                 : workingSet_.record.checkpointRevision + 1U;
         const auto committedWrite = store_.writeHeadExact(
-            *committedBytes, std::optional<std::string>{prepared.bytes},
-            kMaximumHeadRecordBytes);
+            *committedBytes, preparedBytes, kMaximumHeadRecordBytes);
         if (committedWrite != RunPersistenceStoreWriteResult::Written) {
             enterBlockedIndeterminate();
             return writeFailure(committedWrite,
                                 RunPersistenceStep::CommittedHead,
                                 RunPersistenceDurability::Changed);
         }
-        committed.bytes = *committedBytes;
-        currentHead_ = std::move(committed);
+        headStorage->bytes = std::move(*committedBytes);
+        currentHead_ = std::move(*headStorage);
     }
-    slots_[target] = workingSet_.record;
     nextHeadRevision_ =
         currentHead_->revision == std::numeric_limits<std::uint64_t>::max()
             ? 0U
@@ -2563,6 +2608,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     const bool freshProductiveStart =
         decision.kind == CommandKind::StartProgram ||
         decision.kind == CommandKind::StartManualHolding;
@@ -2580,12 +2626,14 @@ RunPersistenceResult RunPersistenceCoordinator::persistFreshStartCommand(
     const FreshStartSnapshotProvenance& provenance,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     return persistCommandInternal(current, decision, time, liveSensorEvidence,
                                   &provenance);
 }
 
+template <typename Decision>
 RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
-    RunCommandState& current, const CommandDecision& decision,
+    RunCommandState& current, const Decision& decision,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence,
     const FreshStartSnapshotProvenance* freshStartProvenance) {
@@ -2684,8 +2732,15 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
                       RunPersistenceDurability::Unchanged);
     }
 #endif
-    workingSet_.candidate = current;
-    const auto apply = applyRunCommand(workingSet_.candidate, decision);
+    CommandStatus apply;
+    if constexpr (std::is_same_v<Decision, CommandDecisionView>) {
+        if (&decision.after != &workingSet_.candidate || !commandBorrowed_)
+            return result(RunPersistenceResultStatus::InvalidDecision);
+        apply = validateRunCommand(current, decision);
+    } else {
+        workingSet_.candidate = current;
+        apply = applyRunCommand(workingSet_.candidate, decision);
+    }
     if (apply != CommandStatus::Applied)
         return result(apply == CommandStatus::StaleState
                           ? RunPersistenceResultStatus::StaleDecision
@@ -2700,7 +2755,23 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
                 freshStartProvenance->snapshot();
         }
     }
-    auto ids = persistedIds_;
+    // Only the private borrowed path owns the snapshot for the entire
+    // operation, including post-write apply/cleanup. Direct Value consumers
+    // retain their independent local ID window, as before (no new reentrancy
+    // guarantee).
+    auto idStorage = [&]() {
+        if constexpr (std::is_same_v<Decision, CommandDecisionView>)
+            return &workingSet_.snapshot.persistedRunCommandIds;
+        else
+            return persistedIds_;
+    }();
+    auto& ids = [&]() -> auto& {
+        if constexpr (std::is_same_v<Decision, CommandDecisionView>)
+            return *idStorage;
+        else
+            return idStorage;
+    }();
+    ids = persistedIds_;
     auto count = persistedIdCount_;
     if (count < ids.size())
         ids[count++] = decision.envelope.id;
@@ -2716,12 +2787,18 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
+    const RunPersistenceBefore frozenBefore = [&]() {
+        if constexpr (std::is_same_v<Decision, CommandDecisionView>)
+            return RunPersistenceBefore(decision.guard);
+        else
+            return RunPersistenceBefore(current);
+    }();
     const auto persisted = writeSnapshot(
-        workingSet_.snapshot, time, false, current,
+        workingSet_.snapshot, time, false, frozenBefore,
         RunPersistenceMutationKind::Command, decision.envelope.id);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
-    if (applyRunCommand(current, decision) != CommandStatus::Applied) {
+    if (validateRunCommand(current, decision) != CommandStatus::Applied) {
         state_ =
             RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;
         return result(
@@ -2730,6 +2807,10 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
             RunPersistenceTechnicalReason::InvalidProjection,
             RunPersistenceDurability::Changed);
     }
+    if constexpr (std::is_same_v<Decision, CommandDecisionView>)
+        current = std::move(workingSet_.candidate);
+    else
+        current = decision.after;
     if (freshProductiveStart) {
         current.actuatorPlannerParametersSnapshot.reset();
         if (freshStartProvenance->present()) {
@@ -2762,6 +2843,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistRecoveryCandidate(
     RunCommandState& current, const RunCommandState& candidate,
     const RunCheckpointTime& time,
     RunPersistenceFallbackDirective fallbackDirective) {
+    if (commandBorrowed_) return borrowedBusyResult();
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::LoadedActiveRun) {
         return unavailableResult();
@@ -2809,6 +2891,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
     RunCommandState& current, const TransitionDecision& decision,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     if (state_ != RunPersistenceCoordinatorState::Ready)
         return unavailableResult();
     if (!decision.proposed() || !eligibleTransition(decision.reason))
@@ -2922,6 +3005,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
 RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
     const RunCommandState& current, const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty) {
         return result(RunPersistenceResultStatus::NoActiveRun);
     }
@@ -3016,6 +3100,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     RunCommandState& current, const SensorSelectionStateMutation& mutation,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (commandBorrowed_) return borrowedBusyResult();
     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty)
         return result(RunPersistenceResultStatus::NoActiveRun);
     if (state_ != RunPersistenceCoordinatorState::Ready)
@@ -3131,4 +3216,40 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     return out;
 }
 
+}  // namespace fermentation
+
+namespace fermentation {
+RunPersistenceResult RunPersistenceCoordinator::borrowedBusyResult() const {
+    auto r = result(RunPersistenceResultStatus::Busy);
+    r.coordinatorState = RunPersistenceCoordinatorState::Busy;
+    return r;
+}
+std::optional<RunPersistenceCoordinator::CommandOperation>
+RunPersistenceCoordinator::beginCommandOperation() {
+    if (commandBorrowed_ || state_ == RunPersistenceCoordinatorState::Busy)
+        return std::nullopt;
+    commandBorrowed_ = true;
+    return CommandOperation{this};
+}
+RunCommandState* RunPersistenceCoordinator::commandCandidate(
+    CommandOperation& op) {
+    if (op.owner_ != this || !commandBorrowed_) return nullptr;
+    return &workingSet_.candidate;
+}
+void RunPersistenceCoordinator::releaseCommandOperation() {
+    // Release dynamic children without constructing a full RunCommandState
+    // temporary.
+    clearActiveRunState(workingSet_.candidate);
+    std::string{}.swap(workingSet_.candidate.activeRunId);
+    commandBorrowed_ = false;
+}
+RunPersistenceResult RunPersistenceCoordinator::persistBorrowedCommand(
+    CommandOperation& op, RunCommandState& current,
+    const CommandDecisionView& d, const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* live,
+    const FreshStartSnapshotProvenance* provenance) {
+    if (op.owner_ != this || !commandBorrowed_ || &d.before != &current)
+        return result(RunPersistenceResultStatus::InvalidDecision);
+    return persistCommandInternal(current, d, time, live, provenance);
+}
 }  // namespace fermentation

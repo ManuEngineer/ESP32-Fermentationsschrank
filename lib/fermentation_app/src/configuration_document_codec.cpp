@@ -623,12 +623,9 @@ ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
         return status;
     }
     if (candidate.schema.version < kCurrentProgramSchemaVersion) {
-        auto migrated = migrateProgramToCurrentSchema(candidate);
-        if (migrated.status != MigrationStatus::Migrated ||
-            !migrated.document.has_value()) {
+        const auto migrated = migrateProgramToCurrentSchemaInto(candidate);
+        if (migrated != MigrationStatus::Migrated)
             return ConfigurationCodecStatus::MigrationFailed;
-        }
-        candidate = std::move(*migrated.document);
     }
     out = std::move(candidate);
     return ConfigurationCodecStatus::Success;

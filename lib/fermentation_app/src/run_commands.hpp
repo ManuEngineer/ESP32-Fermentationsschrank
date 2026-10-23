@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +13,7 @@
 #include "run_command_limits.hpp"
 #include "run_recovery_types.hpp"
 #include "run_snapshot.hpp"
+#include "run_limits.hpp"
 #include "sensor_selection_types.hpp"
 #include "control_context_types.hpp"
 
@@ -380,12 +383,10 @@ effectivePriorElapsedForFermenting(const RunCommandState& current);
 [[nodiscard]] std::optional<std::uint32_t> deriveFermentingSecondsDelta(
     const RunCommandState& before, std::uint64_t atMillis);
 
-struct CommandDecision {
+struct CommandDecisionMetadata {
     CommandStatus status{CommandStatus::InvalidInput};
     CommandKind kind{CommandKind::StartProgram};
     CommandEnvelope envelope;
-    RunCommandState before;
-    RunCommandState after;
     std::optional<StartSummary> startSummary;
     std::optional<RunAdjustmentPreview> adjustmentPreview;
     std::array<CommandEffect, run_command_limits::kMaximumCommandEffects>
@@ -411,13 +412,59 @@ struct CommandDecision {
         return status == CommandStatus::Proposed;
     }
 };
+// Frozen fields of the existing apply predicate. The private application path
+// has a validated run id; an oversized external id cannot pass this guard.
+struct CommandApplyGuard {
+    ProcessRuntimeState processState;
+    std::uint32_t commandSequence, runRevision, messageRevision, faultRevision;
+    bool criticalSafetyEventPending;
+    std::optional<RunSensorMode> activeRunSensorMode;
+    SensorSelectionRuntimeState sensorSelectionRuntime;
+    std::optional<PersistedSensorSelectionState> sensorSelection;
+    std::uint32_t recoveryEpisodeRevision;
+    struct RunId {
+        std::array<char, run_limits::kMaximumRunIdBytes> bytes{};
+        std::size_t size{0};
+        bool valid{true};
+        friend bool operator!=(const std::string& s, const RunId& id) {
+            return !id.valid || s.size() != id.size ||
+                   !std::equal(s.begin(), s.end(), id.bytes.begin());
+        }
+    } activeRunId;
+    explicit CommandApplyGuard(const RunCommandState& s);
+};
+struct CommandDecision : CommandDecisionMetadata {
+    RunCommandState before;
+    RunCommandState after;
+};
+// The coordinator borrows a distinct candidate for one operation. Current must
+// remain immutable during decision building; apply rechecks the frozen guard.
+struct CommandDecisionView : CommandDecisionMetadata {
+    const RunCommandState& before;
+    RunCommandState& after;
+    const CommandApplyGuard guard;
+    CommandDecisionView(const RunCommandState& current,
+                        RunCommandState& candidate)
+        : before(current), after(candidate), guard(current) {}
+};
+CommandStatus validateRunCommand(const RunCommandState&,
+                                 const CommandDecision&);
+CommandStatus validateRunCommand(const RunCommandState&,
+                                 const CommandDecisionView&);
+CommandStatus applyRunCommand(RunCommandState&, const CommandDecisionView&);
 
 void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
                 CommandKind kind, CommandStatus status,
                 CommandDecision& destination);
+void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                CommandKind kind, CommandStatus status,
+                CommandDecisionView& destination);
 void beginDecisionInto(const RunCommandState& current,
                        const CommandEnvelope& envelope, CommandKind kind,
                        CommandDecision& destination);
+void beginDecisionInto(const RunCommandState& current,
+                       const CommandEnvelope& envelope, CommandKind kind,
+                       CommandDecisionView& destination);
 
 // #21 start matrix, structural part only (independent of any sensor
 // evidence): the requested mode a stored SensorPreference asks for without a
@@ -433,9 +480,15 @@ void beginDecisionInto(const RunCommandState& current,
 void decideProgramStartInto(const RunCommandState& current,
                             const ProgramStartRequest& request,
                             CommandDecision& destination);
+void decideProgramStartInto(const RunCommandState& current,
+                            const ProgramStartRequest& request,
+                            CommandDecisionView& destination);
 void decideManualStartInto(const RunCommandState& current,
                            const ManualStartRequest& request,
                            CommandDecision& destination);
+void decideManualStartInto(const RunCommandState& current,
+                           const ManualStartRequest& request,
+                           CommandDecisionView& destination);
 
 [[nodiscard]] CommandDecision decideProgramStart(
     const RunCommandState& current, const ProgramStartRequest& request);
@@ -495,5 +548,34 @@ void applySensorSelectionMutation(RunCommandState& state,
 // produce that validated state-machine transition.
 [[nodiscard]] bool applySensorRoleChangeQualificationReset(
     RunCommandState& state, std::uint64_t monotonicMillis);
+
+void decideStopInto(const RunCommandState& current, const StopRequest& request,
+                    CommandDecision& destination);
+void decideStopInto(const RunCommandState& current, const StopRequest& request,
+                    CommandDecisionView& destination);
+void decideCompletionInto(const RunCommandState& current,
+                          const CompletionRequest& request,
+                          CommandDecision& destination);
+void decideCompletionInto(const RunCommandState& current,
+                          const CompletionRequest& request,
+                          CommandDecisionView& destination);
+void decideRunAdjustmentInto(const RunCommandState& current,
+                             const RunAdjustmentCommandRequest& request,
+                             CommandDecision& destination);
+void decideRunAdjustmentInto(const RunCommandState& current,
+                             const RunAdjustmentCommandRequest& request,
+                             CommandDecisionView& destination);
+void decideAcknowledgeMessageInto(const RunCommandState& current,
+                                  const MessageCommandRequest& request,
+                                  CommandDecision& destination);
+void decideAcknowledgeMessageInto(const RunCommandState& current,
+                                  const MessageCommandRequest& request,
+                                  CommandDecisionView& destination);
+void decideMuteMessageInto(const RunCommandState& current,
+                           const MessageCommandRequest& request,
+                           CommandDecision& destination);
+void decideMuteMessageInto(const RunCommandState& current,
+                           const MessageCommandRequest& request,
+                           CommandDecisionView& destination);
 
 }  // namespace fermentation

@@ -465,56 +465,94 @@ FermentationUiCommandBridge::decideProductInsertedConfirmed(
     return fromTransitionDecision(decision.status);
 }
 
-FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
+template <typename Decision>
+FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedIntoCore(
     const RunCommandState& current,
     const FermentationApplicationPreparedRequest& request,
     const std::optional<FermentationUiConfirmationRequest>& confirmation,
-    CommandDecision* decisionOut) {
+    Decision& decisionOut) {
     return std::visit(
-        [&current, &request, &confirmation, decisionOut](const auto& prepared) {
+        [&current, &request, &confirmation,
+         &decisionOut](const auto& prepared) {
             using Request = std::decay_t<decltype(prepared)>;
-            CommandDecision decision;
+            auto& decision = decisionOut;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
-                decision =
-                    ::fermentation::decideProgramStart(current, prepared);
+                ::fermentation::decideProgramStartInto(current, prepared,
+                                                       decision);
             } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
-                decision = ::fermentation::decideManualStart(current, prepared);
+                ::fermentation::decideManualStartInto(current, prepared,
+                                                      decision);
             } else if constexpr (std::is_same_v<Request, StopRequest>) {
-                decision = ::fermentation::decideStop(current, prepared);
+                ::fermentation::decideStopInto(current, prepared, decision);
             } else if constexpr (std::is_same_v<Request, CompletionRequest>) {
-                decision = ::fermentation::decideCompletion(current, prepared);
+                ::fermentation::decideCompletionInto(current, prepared,
+                                                     decision);
             } else if constexpr (std::is_same_v<Request,
                                                 RunAdjustmentCommandRequest>) {
-                decision =
-                    ::fermentation::decideRunAdjustment(current, prepared);
+                ::fermentation::decideRunAdjustmentInto(current, prepared,
+                                                        decision);
             } else if constexpr (std::is_same_v<
                                      Request,
                                      ApplyRecoveryTimeCorrectionRequest>) {
-                decision = ::fermentation::decideApplyRecoveryTimeCorrection(
-                    current, prepared);
+                if constexpr (std::is_same_v<Decision, CommandDecision>) {
+                    decision =
+                        ::fermentation::decideApplyRecoveryTimeCorrection(
+                            current, prepared);
+                } else {
+                    return FermentationUiCommandBridge::unsupportedAppDetail();
+                }
             } else if constexpr (std::is_same_v<
                                      Request,
                                      FermentationApplicationPreparedRequest::
                                          PreparedAcknowledgeMessage>) {
-                decision = ::fermentation::decideAcknowledgeMessage(
-                    current, prepared.request);
+                ::fermentation::decideAcknowledgeMessageInto(
+                    current, prepared.request, decision);
             } else if constexpr (std::is_same_v<
                                      Request,
                                      FermentationApplicationPreparedRequest::
                                          PreparedMuteMessage>) {
-                decision = ::fermentation::decideMuteMessage(current,
-                                                             prepared.request);
+                ::fermentation::decideMuteMessageInto(current, prepared.request,
+                                                      decision);
             } else {
                 if (!request.owningPlausibility().has_value())
                     return FermentationUiCommandBridge::unsupportedAppDetail();
-                decision = decideApplySensorSelectionAction(
-                    current, prepared, *request.owningPlausibility());
+                if constexpr (std::is_same_v<Decision, CommandDecision>) {
+                    decision = decideApplySensorSelectionAction(
+                        current, prepared, *request.owningPlausibility());
+                } else {
+                    return FermentationUiCommandBridge::unsupportedAppDetail();
+                }
             }
-            if (decisionOut != nullptr) *decisionOut = decision;
+
             return FermentationUiCommandBridge::fromCommandStatus(
                 decision.status, confirmation);
         },
         request.storage());
+}
+FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedInto(
+    const RunCommandState& current,
+    const FermentationApplicationPreparedRequest& request,
+    const std::optional<FermentationUiConfirmationRequest>& confirmation,
+    CommandDecision& decision) {
+    return decidePreparedIntoCore(current, request, confirmation, decision);
+}
+FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedInto(
+    const RunCommandState& current,
+    const FermentationApplicationPreparedRequest& request,
+    const std::optional<FermentationUiConfirmationRequest>& confirmation,
+    CommandDecisionView& decision) {
+    return decidePreparedIntoCore(current, request, confirmation, decision);
+}
+FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
+    const RunCommandState& current,
+    const FermentationApplicationPreparedRequest& request,
+    const std::optional<FermentationUiConfirmationRequest>& confirmation,
+    CommandDecision* out) {
+    if (out != nullptr) {
+        return decidePreparedInto(current, request, confirmation, *out);
+    }
+    CommandDecision local;
+    return decidePreparedInto(current, request, confirmation, local);
 }
 
 bool hasStartCandidateOverride(

@@ -678,7 +678,17 @@ Weitere Produktkorrekturen benoetigen einen neuen expliziten Ownerentscheid;
 Independent Full Review, Pre-Ready und D9 bleiben getrennte Gates.
 
 
-## 13. HTTPD-Run-Stackdiagnose und minimaler Korrekturkandidat (Q4, NICHT FREIGEGEBEN)
+## 13. HTTPD-Run-Stackdiagnose und begrenzte Q4-Implementierung (Option A)
+
+**Aktueller Ownerentscheid:** Plan-SHA
+`623bc4520bcf3601d3666e7c717ae00213047901` ist fuer die zusammenhaengende
+**Q4-Produktimplementierung Option A** freigegeben (Ownerauftrag 2026-10-23).
+Die folgenden Diagnose-/Prototypabschnitte dokumentieren ihre jeweiligen
+historischen Entscheidstaende; ihr damaliger Implementierungs-HOLD ist fuer
+Option A aufgehoben. Ressourcen-, Merge- und Aktorfreigabe bleiben offen.
+Q3 und C0–C5 sowie das 8192-B-HTTPD-Budget bleiben unveraendert.
+Option B (Settings-Decode) ist nicht Teil dieser Umsetzung.
+
 
 ### Diagnose und Quellen
 

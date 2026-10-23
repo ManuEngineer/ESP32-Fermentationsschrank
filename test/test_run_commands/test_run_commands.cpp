@@ -2629,10 +2629,230 @@ void test_program_start_sensor_structure_is_one_definition() {
         SensorPreference::AirProductOptional, static_cast<RunSensorMode>(9U)));
 }
 
+// Compare owning and borrowed decisions through the same public Into entry.
+// This checks full meaningful metadata, not just Proposed/Applied.
+void assertDecisionMetadata(const CommandDecision& value,
+                            const CommandDecisionView& view) {
+    TEST_ASSERT_TRUE(value.status == view.status);
+    TEST_ASSERT_TRUE(value.kind == view.kind);
+    TEST_ASSERT_EQUAL_UINT64(value.envelope.id, view.envelope.id);
+    TEST_ASSERT_TRUE(value.envelope.source == view.envelope.source);
+    TEST_ASSERT_EQUAL_UINT32(value.effectCount, view.effectCount);
+    for (std::size_t i = 0; i < value.effectCount; ++i)
+        TEST_ASSERT_TRUE(value.effects[i] == view.effects[i]);
+    TEST_ASSERT_TRUE(value.sensorSelectionApplyStatus ==
+                     view.sensorSelectionApplyStatus);
+    TEST_ASSERT_EQUAL(value.sensorSelectionEvent.has_value(),
+                      view.sensorSelectionEvent.has_value());
+    TEST_ASSERT_EQUAL(value.sensorSelectionNotice.has_value(),
+                      view.sensorSelectionNotice.has_value());
+    TEST_ASSERT_EQUAL(value.startSensorSelectionNotice.has_value(),
+                      view.startSensorSelectionNotice.has_value());
+    if (value.sensorSelectionEvent) {
+        const auto& x = *value.sensorSelectionEvent;
+        const auto& y = *view.sensorSelectionEvent;
+        TEST_ASSERT_TRUE(x.beforeMode == y.beforeMode &&
+                         x.afterMode == y.afterMode && x.cause == y.cause &&
+                         x.runRevision == y.runRevision &&
+                         x.monotonicMillis == y.monotonicMillis &&
+                         x.utcUnixSeconds == y.utcUnixSeconds);
+    }
+    if (value.sensorSelectionNotice) {
+        const auto& x = *value.sensorSelectionNotice;
+        const auto& y = *view.sensorSelectionNotice;
+        TEST_ASSERT_TRUE(
+            x.cause == y.cause && x.monotonicMillis == y.monotonicMillis &&
+            x.runRevision == y.runRevision && x.activeMode == y.activeMode &&
+            x.blockReason == y.blockReason);
+    }
+    if (value.startSensorSelectionNotice) {
+        const auto& x = *value.startSensorSelectionNotice;
+        const auto& y = *view.startSensorSelectionNotice;
+        TEST_ASSERT_TRUE(x.requestedMode == y.requestedMode &&
+                         x.effectiveMode == y.effectiveMode &&
+                         x.runRevision == y.runRevision);
+    }
+    TEST_ASSERT_TRUE(value.committedControlContextTransition ==
+                     view.committedControlContextTransition);
+    TEST_ASSERT_EQUAL(value.startSummary.has_value(),
+                      view.startSummary.has_value());
+    if (value.startSummary) {
+        const auto& a = *value.startSummary;
+        const auto& b = *view.startSummary;
+        TEST_ASSERT_TRUE(a.runId == b.runId && a.sourceKind == b.sourceKind &&
+                         a.programName == b.programName &&
+                         a.durationMinutes == b.durationMinutes &&
+                         a.sensorMode == b.sensorMode &&
+                         a.preheatEnabled == b.preheatEnabled &&
+                         a.completionMode == b.completionMode &&
+                         a.kind == b.kind);
+        TEST_ASSERT_EQUAL_DOUBLE(a.targetTemperatureCelsius,
+                                 b.targetTemperatureCelsius);
+    }
+    TEST_ASSERT_EQUAL(value.adjustmentPreview.has_value(),
+                      view.adjustmentPreview.has_value());
+    if (value.adjustmentPreview) {
+        const auto& a = *value.adjustmentPreview;
+        const auto& b = *view.adjustmentPreview;
+        TEST_ASSERT_TRUE(equalEffectiveRunValues(a.before, b.before));
+        TEST_ASSERT_TRUE(equalEffectiveRunValues(a.after, b.after));
+        TEST_ASSERT_TRUE(a.phase == b.phase &&
+                         a.targetRequalificationRequired ==
+                             b.targetRequalificationRequired &&
+                         a.timerContinuesWithoutBiologicalCorrection ==
+                             b.timerContinuesWithoutBiologicalCorrection);
+    }
+}
+
+template <typename Request, typename Decide>
+void checkValueViewMatrix(const RunCommandState& basis, Request request,
+                          Decide decide) {
+    for (unsigned scenario = 0; scenario < 8; ++scenario) {
+        auto current = basis;
+        auto input = request;
+        if (scenario == 1) input.envelope.confirmed = false;
+        if (scenario == 2) ++input.envelope.expectedStateSequence;
+        if (scenario == 3) current.criticalSafetyEventPending = true;
+        if (scenario == 4)
+            current.commandSequence = std::numeric_limits<std::uint32_t>::max();
+        if (scenario == 5) input.envelope.id = 0;
+        if (scenario == 6) {
+            current.processedCommandIds[0] = input.envelope.id;
+            current.processedCommandCount = 1;
+        }
+        if (scenario == 7) current.processState.state = ProcessState::SafeBoot;
+        const auto unchanged = current;
+        CommandDecision value;
+        RunCommandState candidate;
+        CommandDecisionView view(current, candidate);
+        decide(current, input, value);
+        decide(current, input, view);
+        assertDecisionMetadata(value, view);
+        TEST_ASSERT_TRUE(equalRunCommandStates(unchanged, current));
+        TEST_ASSERT_TRUE(equalRunCommandStates(value.before, view.before));
+        TEST_ASSERT_TRUE(equalRunCommandStates(value.after, view.after));
+        auto applied = current;
+        const auto expected = applyRunCommand(applied, value);
+        TEST_ASSERT_TRUE(expected == applyRunCommand(current, view));
+        TEST_ASSERT_TRUE(equalRunCommandStates(applied, current));
+    }
+}
+
+void test_value_view_equivalence_all_seven_web_commands() {
+    auto idle = standbyState();
+    checkValueViewMatrix(idle, programStart(idle, 20),
+                         [](const auto& s, const auto& r, auto& d) {
+                             decideProgramStartInto(s, r, d);
+                         });
+    checkValueViewMatrix(idle, manualStart(idle, 20, manualPlan("view-manual")),
+                         [](const auto& s, const auto& r, auto& d) {
+                             decideManualStartInto(s, r, d);
+                         });
+    auto active = startedProgramState();
+    StopRequest stop{envelope(20, active), StopOption::AbortAndTurnOff,
+                     std::nullopt, true};
+    checkValueViewMatrix(
+        active, stop,
+        [](const auto& s, const auto& r, auto& d) { decideStopInto(s, r, d); });
+    active.processState.state = ProcessState::Completed;
+    CompletionRequest completion{envelope(20, active), false, std::nullopt,
+                                 true};
+    checkValueViewMatrix(active, completion,
+                         [](const auto& s, const auto& r, auto& d) {
+                             decideCompletionInto(s, r, d);
+                         });
+    active = startedProgramState();
+    checkValueViewMatrix(active, targetChange(active, 20, 39.0, 200),
+                         [](const auto& s, const auto& r, auto& d) {
+                             decideRunAdjustmentInto(s, r, d);
+                         });
+    idle.messageCount = 1;
+    idle.messages[0] =
+        message(7, MessageCode::RunCompleted, MessageClass::Information, 1,
+                MessageTrigger::Process);
+    MessageCommandRequest msg{envelope(20, idle), 7};
+    checkValueViewMatrix(idle, msg, [](const auto& s, const auto& r, auto& d) {
+        decideAcknowledgeMessageInto(s, r, d);
+    });
+    checkValueViewMatrix(idle, msg, [](const auto& s, const auto& r, auto& d) {
+        decideMuteMessageInto(s, r, d);
+    });
+}
+
+void test_view_guard_rechecks_every_safety_and_stale_field() {
+    for (unsigned field = 0; field < 11; ++field) {
+        auto state = standbyState();
+        RunCommandState candidate;
+        CommandDecisionView view(state, candidate);
+        decideProgramStartInto(state, programStart(state, 20), view);
+        TEST_ASSERT_TRUE(view.proposed());
+        switch (field) {
+            case 0:
+                ++state.commandSequence;
+                break;
+            case 1:
+                ++state.runRevision;
+                break;
+            case 2:
+                ++state.messageRevision;
+                break;
+            case 3:
+                ++state.faultRevision;
+                break;
+            case 4:
+                state.criticalSafetyEventPending = true;
+                break;
+            case 5:
+                state.activeRunId = "changed";
+                break;
+            case 6:
+                state.activeRunSensorMode = RunSensorMode::Air;
+                break;
+            case 7:
+                state.sensorSelectionRuntime.phase =
+                    SensorSelectionPhase::SafeLocked;
+                break;
+            case 8:
+                state.sensorSelection = PersistedSensorSelectionState{};
+                break;
+            case 9:
+                ++state.recoveryEpisodeRevision;
+                break;
+            default:
+                ++state.processState.transitionSequence;
+                break;
+        }
+        const auto before = state;
+        const auto result = applyRunCommand(state, view);
+        TEST_ASSERT_TRUE(result == CommandStatus::StaleState ||
+                         result == CommandStatus::SafetyRejected);
+        TEST_ASSERT_TRUE(equalRunCommandStates(before, state));
+    }
+}
+
+void test_view_rejects_aliased_or_foreign_storage_without_state_mutation() {
+    auto a = standbyState();
+    auto b = a;
+    const auto original = a;
+    CommandDecisionView aliased(a, a);
+    decideProgramStartInto(a, programStart(a, 20), aliased);
+    TEST_ASSERT_TRUE(aliased.status == CommandStatus::InvalidInput);
+    TEST_ASSERT_TRUE(equalRunCommandStates(original, a));
+    CommandDecisionView foreign(a, b);
+    decideProgramStartInto(b, programStart(b, 20), foreign);
+    TEST_ASSERT_TRUE(foreign.status == CommandStatus::InvalidInput);
+    TEST_ASSERT_TRUE(equalRunCommandStates(original, a));
+    TEST_ASSERT_TRUE(equalRunCommandStates(original, b));
+}
+
 }  // namespace
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_value_view_equivalence_all_seven_web_commands);
+    RUN_TEST(test_view_guard_rechecks_every_safety_and_stale_field);
+    RUN_TEST(
+        test_view_rejects_aliased_or_foreign_storage_without_state_mutation);
     RUN_TEST(
         test_program_start_requires_confirmation_safety_and_current_context);
     RUN_TEST(test_run_id_boundary_is_shared_by_program_and_manual_start);

@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <functional>
 #include <limits>
 #include <map>
 #include <new>
@@ -72,6 +73,23 @@ class FixedRecoveryProgressModel final : public RecoveryProgressWeightingModel {
 
 class RunPersistenceCoordinatorTestAccess {
    public:
+    static auto borrow(RunPersistenceCoordinator& c) {
+        return c.beginCommandOperation();
+    }
+    static RunCommandState* candidate(
+        RunPersistenceCoordinator& c,
+        RunPersistenceCoordinator::CommandOperation& op) {
+        return c.commandCandidate(op);
+    }
+    static RunPersistenceResult persistBorrowed(
+        RunPersistenceCoordinator& c,
+        RunPersistenceCoordinator::CommandOperation& op, RunCommandState& state,
+        const CommandDecisionView& d, const RunCheckpointTime& time) {
+        const auto provenance = FreshStartSnapshotProvenance::absent();
+        return c.persistBorrowedCommand(op, state, d, time, nullptr,
+                                        &provenance);
+    }
+
     static AuthorizedRunEpochHandoffProof epochHandoffProof(
         device_platform::StorageEpoch previous,
         device_platform::StorageEpoch current) {
@@ -164,6 +182,8 @@ class SequencedWriteStore final : public device_platform::IStateStore {
         ForeignBytes
     };
 
+    std::function<void(std::size_t)> afterWrite;
+
     device_platform::StateStoreWriteStatus write(
         const device_platform::StateStoreKey& key,
         const std::string& value) override {
@@ -176,7 +196,9 @@ class SequencedWriteStore final : public device_platform::IStateStore {
             return device_platform::StateStoreWriteStatus::CommitOutcomeUnknown;
         const auto fault = faults_.find(writeCount_);
         if (fault != faults_.end()) backing_.setNextWriteFault(fault->second);
-        return backing_.write(key, value);
+        const auto result = backing_.write(key, value);
+        if (afterWrite) afterWrite(writeCount_);
+        return result;
     }
 
     device_platform::StateStoreReadResult read(
@@ -10651,10 +10673,184 @@ void test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable() {
     }
 }
 
+ProgramStartRequest borrowedStartRequest(const RunCommandState& state,
+                                         CommandId id) {
+    const auto value = startDecision(state, id, 1000);
+    ProgramStartRequest request;
+    request.envelope = value.envelope;
+    request.runId = value.after.activeRunId;
+    request.program = value.after.activeProgramRun->snapshot().source;
+    request.sourceProgramRevision = RunProgramSourceRevision{1};
+    request.sensorMode = RunSensorMode::Product;
+    request.safetyAllowsStart = request.airSensorValid =
+        request.coolingSensorValid = request.productSensorValid = true;
+    return request;
+}
+
+void test_borrowed_value_transaction_bytes_and_complete_failure_matrix_match() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    using Fault = SequencedWriteStore::WriteFault;
+    using Read = SequencedWriteStore::ReadFault;
+    for (bool existing : {false, true})
+        for (std::size_t cut = 1; cut <= 3; ++cut)
+            for (unsigned failure = 0; failure < 9; ++failure) {
+                SequencedWriteStore a, b;
+                if (existing) {
+                    commitTombstone(a.backing());
+                    commitTombstone(b.backing());
+                }
+                RunPersistenceCoordinator ca(a,
+                                             device_platform::StorageEpoch{1},
+                                             RunCheckpointSchedule{});
+                RunPersistenceCoordinator cb(b,
+                                             device_platform::StorageEpoch{1},
+                                             RunCheckpointSchedule{});
+                static_cast<void>(ca.loadAndInitialize());
+                static_cast<void>(cb.loadAndInitialize());
+                for (auto* store : {&a, &b}) {
+                    if (failure == 1)
+                        store->faultAt(cut, Fault::FailBeforeBegin);
+                    if (failure == 2)
+                        store->faultAt(cut,
+                                       Fault::PowerCutAfterCommitBeforeReturn);
+                    if (failure >= 3 && failure <= 6)
+                        store->unknownWithoutCommitAt(cut);
+                    if (failure == 4) store->readFaultAt(cut, Read::ReadError);
+                    if (failure == 5) store->readFaultAt(cut, Read::NotFound);
+                    if (failure == 6)
+                        store->readFaultAt(cut, Read::ForeignBytes);
+                    if (failure == 7)
+                        store->faultAt(cut, Fault::CapacityExceeded);
+                    if (failure == 8)
+                        store->faultAt(cut, Fault::PowerCutBeforeCommit);
+                }
+                RunCommandState x, y;
+                x.processState.state = y.processState.state =
+                    ProcessState::Standby;
+                auto request = borrowedStartRequest(x, 9000);
+                const auto value = decideProgramStart(x, request);
+                auto op = Access::borrow(cb);
+                TEST_ASSERT_TRUE(op.has_value());
+                auto* candidate = Access::candidate(cb, *op);
+                TEST_ASSERT_NOT_NULL(candidate);
+                CommandDecisionView view(y, *candidate);
+                decideProgramStartInto(y, request, view);
+                TEST_ASSERT_TRUE(view.proposed());
+                TEST_ASSERT_EQUAL_UINT32(0, y.processedCommandCount);
+                const auto oldIds = Access::persistedIdCount(cb);
+                const auto ra =
+                    ca.persistCommand(x, value, trustedCheckpointTime(1000));
+                const auto rb = Access::persistBorrowed(
+                    cb, *op, y, view, trustedCheckpointTime(1000));
+                TEST_ASSERT_TRUE(ra.status == rb.status && ra.step == rb.step &&
+                                 ra.technicalReason == rb.technicalReason &&
+                                 ra.durability == rb.durability &&
+                                 ra.coordinatorState == rb.coordinatorState);
+                TEST_ASSERT_EQUAL_UINT32(ra.effectCount, rb.effectCount);
+                for (std::size_t i = 0; i < ra.effectCount; ++i)
+                    TEST_ASSERT_TRUE(ra.effects[i] == rb.effects[i]);
+                TEST_ASSERT_EQUAL_UINT32(x.commandSequence, y.commandSequence);
+                TEST_ASSERT_EQUAL_UINT32(x.processedCommandCount,
+                                         y.processedCommandCount);
+                TEST_ASSERT_EQUAL_UINT32(x.runRevision, y.runRevision);
+                TEST_ASSERT_TRUE(x.activeRunId == y.activeRunId);
+                TEST_ASSERT_EQUAL(Access::persistedIdCount(ca),
+                                  Access::persistedIdCount(cb));
+                if (rb.status != RunPersistenceResultStatus::Applied)
+                    TEST_ASSERT_EQUAL(oldIds, Access::persistedIdCount(cb));
+                for (const char* name : {"rh0", "rc0", "rc1"}) {
+                    const auto key =
+                        *device_platform::StateStoreKey::create(name).key;
+                    const auto ba = a.backing().read(key, 8240);
+                    const auto bb = b.backing().read(key, 8240);
+                    TEST_ASSERT_TRUE(ba.status == bb.status &&
+                                     ba.value == bb.value);
+                }
+                op.reset();
+                TEST_ASSERT_FALSE(candidate->activeProgramRun.has_value());
+                TEST_ASSERT_TRUE(candidate->activeRunId.empty());
+                TEST_ASSERT_TRUE(Access::borrow(cb).has_value());
+            }
+}
+
+void test_borrow_reentrancy_foreign_token_and_post_commit_safety_stale() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    for (unsigned mutate = 0; mutate < 3; ++mutate) {
+        SequencedWriteStore store, otherStore;
+        RunPersistenceCoordinator c(store, device_platform::StorageEpoch{1},
+                                    RunCheckpointSchedule{});
+        RunPersistenceCoordinator other(otherStore,
+                                        device_platform::StorageEpoch{1},
+                                        RunCheckpointSchedule{});
+        static_cast<void>(c.loadAndInitialize());
+        static_cast<void>(other.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        const auto request = borrowedStartRequest(state, 55);
+        const auto value = decideProgramStart(state, request);
+        auto op = Access::borrow(c);
+        TEST_ASSERT_TRUE(op.has_value());
+        auto unrelated = Access::borrow(other);
+        TEST_ASSERT_TRUE(unrelated.has_value());
+        TEST_ASSERT_NULL(Access::candidate(c, *unrelated));
+        unrelated.reset();
+        auto* candidate = Access::candidate(c, *op);
+        CommandDecisionView view(state, *candidate);
+        decideProgramStartInto(state, request, view);
+        unsigned callbacks = 0;
+        store.afterWrite = [&](std::size_t number) {
+            ++callbacks;
+            TEST_ASSERT_FALSE(Access::borrow(c).has_value());
+            TEST_ASSERT_TRUE(Access::borrow(other).has_value());
+            const auto rejected =
+                c.persistCommand(state, value, trustedCheckpointTime(1000));
+            TEST_ASSERT_TRUE(rejected.status ==
+                             RunPersistenceResultStatus::Busy);
+            TEST_ASSERT_EQUAL_UINT32(0, state.processedCommandCount);
+            TEST_ASSERT_EQUAL_UINT32(0, Access::persistedIdCount(c));
+            if (number == 3 && mutate == 1)
+                state.criticalSafetyEventPending = true;
+            if (number == 3 && mutate == 2)
+                state.sensorSelectionRuntime.phase =
+                    SensorSelectionPhase::SafeLocked;
+        };
+        const auto result = Access::persistBorrowed(
+            c, *op, state, view, trustedCheckpointTime(1000));
+        TEST_ASSERT_EQUAL_UINT32(3, callbacks);
+        TEST_ASSERT_TRUE(result.durability ==
+                         RunPersistenceDurability::Changed);
+        if (mutate == 0) {
+            TEST_ASSERT_TRUE(result.status ==
+                             RunPersistenceResultStatus::Applied);
+            TEST_ASSERT_EQUAL_UINT32(1, state.processedCommandCount);
+            TEST_ASSERT_EQUAL_UINT32(1, Access::persistedIdCount(c));
+        } else {
+            TEST_ASSERT_TRUE(
+                result.status ==
+                RunPersistenceResultStatus::PersistenceCommittedApplyFailed);
+            TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
+            TEST_ASSERT_EQUAL_UINT32(0, state.processedCommandCount);
+            TEST_ASSERT_EQUAL_UINT32(0, Access::persistedIdCount(c));
+            const auto head = store.backing().read(
+                *device_platform::StateStoreKey::create("rh0").key, 256);
+            const auto decoded = decodeRunPersistenceHead(
+                head.value, device_platform::StorageEpoch{1});
+            TEST_ASSERT_TRUE(decoded.has_value() &&
+                             decoded->state ==
+                                 RunPersistenceHeadState::Committed);
+        }
+        op.reset();
+        TEST_ASSERT_TRUE(Access::borrow(c).has_value());
+    }
+}
+
 }  // namespace
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_borrowed_value_transaction_bytes_and_complete_failure_matrix_match);
+    RUN_TEST(test_borrow_reentrancy_foreign_token_and_post_commit_safety_stale);
     RUN_TEST(test_load_empty_then_commit_and_restore_run_projection);
     RUN_TEST(test_load_result_into_clears_stale_snapshot_on_reuse);
     RUN_TEST(test_load_result_error_never_exposes_a_stale_snapshot);

@@ -178,6 +178,17 @@ class ActiveRun {
     ActiveRun(RestoreConstructionTag restoreTag, RunProgramSnapshot snapshot,
               EffectiveRunValues initialValues);
 
+    struct StartConstructionTag {
+       private:
+        StartConstructionTag() = default;
+        friend class ActiveRun;
+    };
+    ActiveRun(StartConstructionTag, const ProgramRunSource&,
+              std::optional<RunProgramSourceRevision>,
+              const EffectiveRunValues&);
+    static bool startInto(const ProgramRunSource&,
+                          std::optional<RunProgramSourceRevision>,
+                          std::optional<ActiveRun>&);
     [[nodiscard]] static std::optional<ActiveRun> start(
         const ProgramRunSource& source,
         std::optional<RunProgramSourceRevision> sourceProgramRevision);

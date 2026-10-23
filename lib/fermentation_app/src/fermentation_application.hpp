@@ -477,6 +477,8 @@ class FermentationApplication {
     // Confirmation reuses the already application-bound request.  It only
     // changes the existing envelope confirmation bit; it never allocates a
     // new CommandId or derives a replacement runId.
+    FermentationApplicationRequestStatus confirmPreparedInPlace(
+        FermentationApplicationRequestResult&);
     [[nodiscard]] FermentationApplicationRequestResult confirmPrepared(
         const FermentationApplicationRequestResult& prepared);
     // The single confirmed envelope handoff for local and future UI
@@ -532,6 +534,9 @@ class FermentationApplication {
         const FermentationUiCommandContext& context);
 
    private:
+    FermentationUiCommandResult applyConfirmedPreparedValue(
+        const FermentationApplicationPreparedRequest&);
+
 #ifdef APP_PROFILE_NATIVE
     std::size_t webConfigurationCallsForTest_{0U};
 #endif
@@ -574,7 +579,7 @@ class FermentationApplication {
                                const FermentationUiCompleteRunIntent& intent);
     template <typename Request>
     [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
-        Request request,
+        Request&& request,
         std::optional<CrossRolePlausibilityContext> owningPlausibility =
             std::nullopt);
     template <typename Intent>

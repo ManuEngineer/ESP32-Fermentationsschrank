@@ -343,16 +343,25 @@ ActiveRun::ActiveRun(RestoreConstructionTag restoreTag,
     static_cast<void>(restoreTag);
 }
 
+ActiveRun::ActiveRun(StartConstructionTag, const ProgramRunSource& source,
+                     std::optional<RunProgramSourceRevision> rev,
+                     const EffectiveRunValues& values)
+    : snapshot_{source, programSourceKind(source), rev},
+      effectiveValues_(values) {}
+bool ActiveRun::startInto(const ProgramRunSource& source,
+                          std::optional<RunProgramSourceRevision> rev,
+                          std::optional<ActiveRun>& out) {
+    EffectiveRunValues initial;
+    if (!makeInitialEffectiveRunValues(source, rev, initial)) return false;
+    out.emplace(StartConstructionTag{}, source, rev, initial);
+    return true;
+}
 std::optional<ActiveRun> ActiveRun::start(
     const ProgramRunSource& source,
-    std::optional<RunProgramSourceRevision> sourceProgramRevision) {
-    EffectiveRunValues initialValues;
-    if (!makeInitialEffectiveRunValues(source, sourceProgramRevision,
-                                       initialValues)) {
-        return std::nullopt;
-    }
-    return ActiveRun{{source, programSourceKind(source), sourceProgramRevision},
-                     initialValues};
+    std::optional<RunProgramSourceRevision> rev) {
+    std::optional<ActiveRun> out;
+    if (!startInto(source, rev, out)) return std::nullopt;
+    return out;
 }
 
 std::optional<ActiveRun> ActiveRun::start(
