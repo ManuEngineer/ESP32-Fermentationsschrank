@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 2.5 mit Implementierungsnachtrag §13 und Korrekturdelta-Vorschlag §14 (WARTET AUF OWNERFREIGABE) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
+**2026-10-23 · PLAN-REVISION 2.5 mit Implementierungsnachtrag §13 und Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -1322,8 +1322,8 @@ statisch nachgewiesenen 10880-B-Frame nicht freigeben.
 
 ## 14. Q4-Korrekturdelta: Web-erreichbare Value-Stackpfade (Recovery-Zeit, Sensorselektion)
 
-**Status: PLAN – KEINE Produktumsetzung ohne ausdrueckliche Ownerfreigabe der exakten
-Plan-SHA.** Auftrag: `PR209_Q4_Fixauftrag_Web_Value_Stackpfade.md` (Review-Basis
+**Status: auf Plan-SHA `05f8d7482c52ada9f53e70ff7958d5a4e20689f6` vom Owner freigegeben
+und umgesetzt (§14.7).** Auftrag: `PR209_Q4_Fixauftrag_Web_Value_Stackpfade.md` (Review-Basis
 PR-HEAD `2d0fde5`, Produkt-HEAD `e31e952`). Loest die STOP-Frage am Ende von §13 **vorschlagend**:
 die zwei Intents bleiben Web-erreichbar und sollen mit der bestehenden Option-A-Mechanik
 (Borrow/Guard/Candidate, `CommandDecisionView`) gefuehrt, nicht deaktiviert werden. Das
@@ -1437,3 +1437,13 @@ materiell abweichen. Auch bei PASS dieses Deltas bleiben offen: vollstaendiger 8
 Stacknachweis, dynamisches ESP32-RAM/Largest-Free/OOM, getrennte D9-/HWM-Qualifikation
 (Hardware-/Flash-Freigabe separat). `ACTUATOR_RELEASE=NO`; PR bleibt Draft/HOLD;
 kein Ready, Merge oder Hardwarelauf ohne Owner.
+
+### 14.7 Umsetzungsergebnis
+
+Freigegeben und umgesetzt auf Plan-SHA `05f8d7482c52ada9f53e70ff7958d5a4e20689f6`
+(Commits `eeb23ff`, `3a1e664`, Tests `1427dea`). Der 10 880-B-Value-Fallback ist entfernt;
+beide Intents laufen durch den Borrow-Pfad. Zielsystem-Entscheidungspfade: Recovery 5760 B,
+Sensorselektion 6672 B (bekanntes Gesamtmaximum unveraendert 7216 B), alle Summen
+**NOT_PROVEN**. Details: [Evidence](../audits/PR209_Q4_VALUE_DELTA_20261023.md). Die
+statische Ueberlast aus §13 ist beseitigt; Vollkettenobergrenze, ESP32-RAM/Largest-Free/OOM und
+D9/HWM bleiben offen (`C5_RESOURCE_GATE=HOLD`).
