@@ -1,0 +1,15 @@
+profile	variant	type	sizeof_bytes	alignof_bytes
+esp32_release	BASE_COORDINATOR	RunPersistenceCoordinator	21352	8
+esp32_release	OWNERSHIP	RunPersistenceBefore	8	4
+esp32_release	OWNERSHIP	CommandDecisionView	536	8
+esp32_release	OWNERSHIP	CommandApplyGuard	216	8
+esp32_release	OWNERSHIP	RunPersistenceCoordinator::CommandOperation	4	4
+esp32_release	OWNERSHIP	std::optional<RunPersistenceCoordinator::CommandOperation>	8	4
+esp32_release	OWNERSHIP	RunPersistenceCoordinator	21352	8
+esp32_bringup	BASE_COORDINATOR	RunPersistenceCoordinator	21352	8
+esp32_bringup	OWNERSHIP	RunPersistenceBefore	8	4
+esp32_bringup	OWNERSHIP	CommandDecisionView	536	8
+esp32_bringup	OWNERSHIP	CommandApplyGuard	216	8
+esp32_bringup	OWNERSHIP	RunPersistenceCoordinator::CommandOperation	4	4
+esp32_bringup	OWNERSHIP	std::optional<RunPersistenceCoordinator::CommandOperation>	8	4
+esp32_bringup	OWNERSHIP	RunPersistenceCoordinator	21352	8

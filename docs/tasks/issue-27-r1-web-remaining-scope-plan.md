@@ -878,8 +878,8 @@ Variante oder Produktkorrektur aus diesem Auftrag. Q3/C0–C5 und D9 bleiben.
 
 **IMPLEMENTATION_READY=HOLD; OWNERSHIP_GATE=NOT_PROVEN.** Basis
 `d29f76965c4f5e2c91ddd2199523de79630a152d`, Produkt095f393 unveraendert.
-[Gezielte Evidence](../audits/PR209_Q4_WORKSPACE_20261023.md) ist der aktuelle
-Entscheidstand zu §13; die obigen Heap-/A/B/C-Vorschlaege bleiben historische,
+[Gezielte Evidence](../audits/PR209_Q4_WORKSPACE_20261023.md) ist der historische
+Entscheidstand dieses ersten Auftrags; die obigen Heap-/A/B/C-Vorschlaege bleiben historische,
 nicht freigegebene Proben und sind keine Default-Implementierungsrichtung.
 
 Der vorhandene4896-B-Kandidat im12752-B-WorkingSet koennte grundsaetzlich
@@ -921,3 +921,53 @@ Framefix. Alternativ HOLD beibehalten; keine automatische Folgeoptimierung.
 Alle bestehenden Semantik-/Regression-/OOM-/Vollkettenvertraege gelten weiter;
 keine neuen Tests/Builds/Hardwarelaeufe ausgefuehrt. **Zusaetzliche
 Produktimplementierung NICHT FREIGEGEBEN**, auch nicht durch diesen Plan-SHA.
+
+### Q4-Ownership-Prototyp: Vollkettenreserve HOLD (2026-10-23)
+
+**Entscheidung (b): IMPLEMENTATION_READY=HOLD / FULL_CHAIN_RESERVE=NOT_PROVEN.**
+Basis285d8378633f4d7a05f7c691997df4deb94bd63f; Produkt095f393 unveraendert.
+Der ausdruecklich beauftragte [gemeinsame Prototyp](../audits/PR209_Q4_OWNERSHIP_PROTOTYPE_20261023.md)
+bearbeitet den vorigen Ownership-Stop: eine temporaere Sourcekopie, gemeinsame
+Header, neun betroffene App-/Konsumenten-TUs je Profil sowie unveraenderte
+SDK-/Adapter-TUs mit echten Xtensa-Profilbefehlen. Ein Patch/Quellmanifest,
+gemeinsame Frames/ABI/Phasenpfade versioniert; kein Produkt-/Testcode geaendert.
+
+Privater instanzlokaler Borrow vor erstem Candidate-Zugriff, nicht kopierbares
+Token bis Commit/Apply/Abbruch; externe Mutationseingaenge dieses Coordinators
+werden vorher abgewiesen, die eigene private Fortsetzung bleibt zulaessig.
+Keine globalen Locks fuer unabhaengige Instanzen/Value-Konsumenten. Eingefrorener
+Guard der exakten Apply-Felder216 B, View inklusive Guard536 B, Token4 B /
+optional8 B; alte Persistenzrevisionen separat8 B. Coordinator21352 B bleibt
+gleich gross, kein neuer fester Heaprequest/-owner oder zusaetzlicher voller
+Runzustand. Gemeinsame Domain-/Apply-/Persistenzkerne; zweiter Post-Write-Check
+und CommittedApplyFailed erhalten, kein vorzeitiger RAM-Apply. Verhalten und
+Fehlerinjektionen **NOT_TESTED**, keine semantische Qualifikation der Probe.
+
+Gemeinsam gemessen, beide Profile: Application1312 B, Web1200 B, Program-Kern288,
+Manual320, Stop/Completion256, Adjustment416, Ack/Mute48 B; sieben Web-Visitoren32 B.
+StartInto96 / direkter Konstruktor32 B; ProgramPrepare2064 und Requestfactory48 B,
+In-place-Confirm48 B. Internal waechst720→768 B, Write/Core bleiben208/1168 B.
+Keine Addition isolierter Gewinne; verbliebene Optional-/Validatorunterframes
+sind enthalten. Voller bekannter HTTPD-Prefix inklusive Taskwrapper/Adapter/
+Dispatcher/Handler1856 B. Berechnete Phasen-Teilketten: Prepare6016, Confirm4288,
+Decision6144, Ack/Mute4816; Run-Validierungszweig mit normalem Allocatorpfad
+**7856 B**, damit nur **336 B arithmetischer Rest** vor weiteren unaufgeloesten
+Targets/Pfaden. Settings konservativer bekannter Teilpfad7616 B, ebenfalls
+keine Obergrenze. **Kein begruendeter Reserve-/Ressourcen-PASS.** SDK/NVS/Flash,
+weitere libc-/Alias-/OOM-Unterpfade bleiben gegebenenfalls NOT_PROVEN.
+
+Fester Heapdelta gegen095f393 **0 B**, groesster neuer fester Block0 B.
+Absolute/differentielle dynamische String-/Vektor-/Snapshot-/Readback-Spitzen
+und groesster insgesamt notwendiger Block NOT_PROVEN; keine ungemessene
+Move-Heapersparnis behauptet. D9/reale Heap-/HWM-Evidence bleibt getrennt.
+
+**Eine Alternativentscheidung:** Owner kann einen zusammenhaengenden groesseren
+Ressourcen-Refactor des bestehenden Run-Persistenz-/Validierungskerns als Scope
+freigeben oder HOLD beibehalten. Gemessener Ansatzpunkt Internal768 + Write208
++ Core1168 B mit ihren Unterpfaden/Lebensdauern; bestehender Schreib-/Recovery-
+Vertrag bleibt. Keine automatische weitere Factory-/Webframe-Mikroprobe,
+Queue/Worker, grosser Heapowner oder Budgeterhoehung. Gezielte spaetere
+Regressionen fuer Value/View, Borrow/Reentranz, Post-Write-Safety/Stale,
+ID/Replay/Origin, Ack/Mute, OOM/Writefehler/Indeterminate/Recovery/Golden-Bytes
+stehen in der Evidence; jetzt keine davon ausgefuehrt. OOM-Detail/Replay nur
+Vorschlag, keine Produkt-Enum. **Weitere Produktimplementierung NICHT FREIGEGEBEN.**

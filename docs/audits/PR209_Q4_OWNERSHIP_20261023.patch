@@ -1,0 +1,1717 @@
+# COMPILE-ONLY combined ownership prototype. Apply only to a temporary source copy.
+--- a/lib/fermentation_app/src/fermentation_application.cpp
++++ b/lib/fermentation_app/src/fermentation_application.cpp
+@@ -236,16 +236,14 @@
+ }  // namespace
+ 
+ template <typename Request>
+-FermentationApplicationRequestResult
+-FermentationApplication::makePreparedRequest(
+-    Request request,
+-    std::optional<CrossRolePlausibilityContext> owningPlausibility) {
+-    FermentationApplicationPreparedRequest prepared(
+-        FermentationApplicationPreparedRequest::Storage{std::move(request)},
+-        owningPlausibility);
+-    const auto uiRequestId = prepared.commandEnvelope().id;
+-    return {FermentationApplicationRequestStatus::Prepared, std::move(prepared),
+-            device_platform::UiRequestId{uiRequestId}};
++FermentationApplicationRequestResult FermentationApplication::makePreparedRequest(
++ Request&& request, std::optional<CrossRolePlausibilityContext> evidence) {
++ FermentationApplicationRequestResult result;
++ result.request.emplace(FermentationApplicationPreparedRequest::ConstructionTag{},
++   std::forward<Request>(request),evidence);
++ result.status=FermentationApplicationRequestStatus::Prepared;
++ result.uiRequestId=device_platform::UiRequestId{result.request->commandEnvelope().id};
++ return result;
+ }
+ 
+ FermentationApplication::FermentationApplication() noexcept = default;
+@@ -283,12 +281,15 @@
+             FermentationApplicationRequestStatus::StaleProgramCatalog);
+     }
+     const auto& candidate = intent.candidate;
+-    std::optional<ProgramDocument> program =
+-        findProgram(snapshot, candidate.programId);
+-    if (!program.has_value() || !program->program.installed) {
++    const ProgramDocument* sourceProgram=nullptr;
++    for(const auto& item:snapshot.programCatalog().programs) if(item.program.id==candidate.programId) {sourceProgram=&item;break;}
++    if (sourceProgram==nullptr || !sourceProgram->program.installed) {
+         return requestFailure(
+             FermentationApplicationRequestStatus::ProgramUnavailable);
+     }
++    ProgramStartRequest request;
++    request.program=*sourceProgram;
++    auto* program=&std::get<ProgramDocument>(request.program);
+     const bool nextRunOverride = hasStartCandidateOverride(candidate);
+     const auto sensorMode = requestedProgramSensorMode(*program, candidate);
+     if (!sensorMode.has_value()) {
+@@ -317,11 +318,9 @@
+         return requestFailure(
+             FermentationApplicationRequestStatus::Unavailable);
+     }
+-    ProgramStartRequest request;
+     request.envelope =
+         FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
+     request.runId = *runId;
+-    request.program = std::move(*program);
+     request.sourceProgramRevision = *sourceRevision;
+     request.sensorMode = *sensorMode;
+     request.safetyAllowsStart = evidence.safetyAllowsStart;
+@@ -626,21 +625,18 @@
+         payload);
+ }
+ 
+-FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
+-    const FermentationApplicationRequestResult& prepared) {
+-    const auto guard = applicationCallSerializer_.enter();
+-    if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
+-        !prepared.request.has_value()) {
+-        return requestFailure(
+-            FermentationApplicationRequestStatus::Unavailable);
+-    }
+-    auto confirmed = prepared;
+-    if (!revalidatePreparedRequest(*confirmed.request)) {
+-        return requestFailure(
+-            FermentationApplicationRequestStatus::Unavailable);
+-    }
+-    confirmed.request->confirm();
+-    return confirmed;
++FermentationApplicationRequestStatus FermentationApplication::confirmPreparedInPlace(FermentationApplicationRequestResult& prepared) {
++ const auto guard=applicationCallSerializer_.enter();
++ if(prepared.status!=FermentationApplicationRequestStatus::Prepared || !prepared.request) return FermentationApplicationRequestStatus::Unavailable;
++ if(!revalidatePreparedRequest(*prepared.request)) return FermentationApplicationRequestStatus::Unavailable;
++ prepared.request->confirm(); return FermentationApplicationRequestStatus::Prepared;
++}
++FermentationApplicationRequestResult FermentationApplication::confirmPrepared(const FermentationApplicationRequestResult& prepared) {
++ const auto guard=applicationCallSerializer_.enter();
++ if(prepared.status!=FermentationApplicationRequestStatus::Prepared || !prepared.request) return requestFailure(FermentationApplicationRequestStatus::Unavailable);
++ auto confirmed=prepared;
++ if(confirmPreparedInPlace(confirmed)!=FermentationApplicationRequestStatus::Prepared) return requestFailure(FermentationApplicationRequestStatus::Unavailable);
++ return confirmed;
+ }
+ 
+ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
+@@ -657,9 +653,16 @@
+             CommandStatus::ContextMissing);
+     }
+ 
+-    CommandDecision decision;
+-    auto decisionResult = FermentationUiCommandBridge::decidePrepared(
+-        *runtimeRunState_, confirmed, std::nullopt, &decision);
++    if(runPersistenceCoordinator_->commandOperationActive()) return {}; // compile-only unavailable detail; no enum change
++    if(std::holds_alternative<ApplyRecoveryTimeCorrectionRequest>(confirmed.storage_) ||
++       std::holds_alternative<SensorSelectionCommandRequest>(confirmed.storage_)) return applyConfirmedPreparedValue(confirmed);
++    auto operation=runPersistenceCoordinator_->beginCommandOperation();
++    if(!operation) return {}; // DecisionOnly/Unavailable; detail remains a plan option
++    auto* candidate=runPersistenceCoordinator_->commandCandidate(*operation);
++    if(!candidate) return {};
++    CommandDecisionView decision(*runtimeRunState_,*candidate);
++    auto decisionResult = FermentationUiCommandBridge::decidePreparedInto(
++        *runtimeRunState_, confirmed, std::nullopt, decision);
+     if (!std::holds_alternative<CommandStatus>(decisionResult.detail) ||
+         std::get<CommandStatus>(decisionResult.detail) !=
+             CommandStatus::Proposed) {
+@@ -692,6 +695,65 @@
+                     runtime.lease);
+             }
+         }
++        persisted = runPersistenceCoordinator_->persistBorrowedCommand(
++            *operation,*runtimeRunState_,decision,checkpointTime,liveEvidence,&provenance);
++    } else {
++        persisted = runPersistenceCoordinator_->persistBorrowedCommand(
++            *operation,*runtimeRunState_,decision,checkpointTime,liveEvidence,nullptr);
++    }
++    return FermentationUiCommandBridge::fromRunPersistenceResult(
++        persisted.status);
++}
++
++FermentationUiCommandResult FermentationApplication::applyConfirmedPreparedValue(
++    const FermentationApplicationPreparedRequest& confirmed) {
++    const auto guard = applicationCallSerializer_.enter();
++    if (!confirmed.commandEnvelope().confirmed) {
++        return FermentationUiCommandBridge::fromCommandStatus(
++            CommandStatus::NotConfirmed);
++    }
++    if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr) {
++        // No owning path was entered. Keep this a decision-only result instead
++        // of mislabelling an unavailable application as a persisted outcome.
++        return FermentationUiCommandBridge::fromCommandStatus(
++            CommandStatus::ContextMissing);
++    }
++
++    CommandDecision decision;
++    auto decisionResult = FermentationUiCommandBridge::decidePrepared(
++        *runtimeRunState_, confirmed, std::nullopt, &decision);
++    if (!std::holds_alternative<CommandStatus>(decisionResult.detail) ||
++        std::get<CommandStatus>(decisionResult.detail) !=
++            CommandStatus::Proposed) {
++        return decisionResult;
++    }
++
++    // Message acknowledgement/muting is an existing RAM-owned command path;
++    // messages are deliberately outside the run-persistence wire projection.
++    if (decision.kind == CommandKind::AcknowledgeMessage ||
++        decision.kind == CommandKind::MuteMessage) {
++        const auto applied = applyRunCommand(*runtimeRunState_, decision);
++        return FermentationUiCommandBridge::fromOwningCommandApplyStatus(
++            applied);
++    }
++
++    auto checkpointTime = currentCheckpointTime();
++    checkpointTime.monotonicMillis =
++        confirmed.commandEnvelope().monotonicMillis;
++    RunPersistenceResult persisted;
++    const auto* liveEvidence = &owningRuntimeEvidence_;
++    if (decision.kind == CommandKind::StartProgram ||
++        decision.kind == CommandKind::StartManualHolding) {
++        FreshStartSnapshotProvenance provenance =
++            FreshStartSnapshotProvenance::absent();
++        if (configurationService_ != nullptr) {
++            const auto runtime = configurationService_->acquireRuntime();
++            if (runtime.status ==
++                RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
++                provenance = FreshStartSnapshotProvenance::fromRuntimeLease(
++                    runtime.lease);
++            }
++        }
+         persisted = runPersistenceCoordinator_->persistFreshStartCommand(
+             *runtimeRunState_, decision, provenance, checkpointTime,
+             liveEvidence);
+@@ -734,6 +796,7 @@
+ bool FermentationApplication::begin(
+     device_platform::IPlatformServices& platformServices,
+     const device_platform::IResetCauseSource* resetCauseSource) {
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return false;
+     if (!platformServices.ready()) {
+         return false;
+     }
+@@ -762,6 +825,7 @@
+     device_platform::IStateStore& store,
+     const device_platform::ITimeZoneResolver& timeZoneResolver,
+     const device_platform::IResetCauseSource* resetCauseSource) {
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return false;
+     return beginPersistent(platformServices, store, timeZoneResolver, nullptr,
+                            resetCauseSource);
+ }
+@@ -772,6 +836,7 @@
+     const device_platform::ITimeZoneResolver& timeZoneResolver,
+     const device_platform::ITimeSource& timeSource,
+     const device_platform::IResetCauseSource* resetCauseSource) {
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return false;
+     return beginPersistent(platformServices, store, timeZoneResolver,
+                            &timeSource, resetCauseSource, nullptr, nullptr);
+ }
+@@ -785,6 +850,7 @@
+     device_platform::IHttpServerLifecycle& httpServerLifecycle,
+     device_platform::ISecureRandomSource& randomSource,
+     const device_platform::IResetCauseSource* resetCauseSource) {
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return false;
+     return beginPersistent(platformServices, store, timeZoneResolver,
+                            &timeSource, resetCauseSource, &networkLifecycle,
+                            &httpServerLifecycle, &randomSource, nullptr,
+@@ -801,6 +867,7 @@
+     device_platform::ISecureRandomSource& randomSource,
+     IAuthenticationKdf& authenticationKdf,
+     const device_platform::IResetCauseSource* resetCauseSource) {
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return false;
+     return beginPersistent(platformServices, store, timeZoneResolver,
+                            &timeSource, resetCauseSource, &networkLifecycle,
+                            &httpServerLifecycle, &randomSource,
+@@ -818,6 +885,7 @@
+     IAuthenticationKdf& authenticationKdf,
+     device_platform::IReplayDigest& replayDigest,
+     const device_platform::IResetCauseSource* resetCauseSource) {
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return false;
+     return beginPersistent(platformServices, store, timeZoneResolver,
+                            &timeSource, resetCauseSource, &networkLifecycle,
+                            &httpServerLifecycle, &randomSource,
+@@ -2062,6 +2130,7 @@
+     device_platform::ISecureRandomSource* randomSource,
+     IAuthenticationKdf* authenticationKdf,
+     device_platform::IReplayDigest* replayDigest) {
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return false;
+     if (!platformServices.ready()) {
+         return false;
+     }
+@@ -2573,6 +2642,7 @@
+ ConfigurationRecoveryResult
+ FermentationApplication::beginAuthorizedFactoryReset() {
+     const auto guard = applicationCallSerializer_.enter();
++    if(runPersistenceCoordinator_ && runPersistenceCoordinator_->commandOperationActive()) return {ConfigurationRecoveryStatus::ConfigurationMutationBusy,{}};
+     ConfigurationRecoveryResult unavailable{
+         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
+     const auto knownEpoch = factoryResetPreviousEpochUnlocked();
+--- a/lib/fermentation_app/src/fermentation_application.hpp
++++ b/lib/fermentation_app/src/fermentation_application.hpp
+@@ -477,6 +477,7 @@
+     // Confirmation reuses the already application-bound request.  It only
+     // changes the existing envelope confirmation bit; it never allocates a
+     // new CommandId or derives a replacement runId.
++    FermentationApplicationRequestStatus confirmPreparedInPlace(FermentationApplicationRequestResult&);
+     [[nodiscard]] FermentationApplicationRequestResult confirmPrepared(
+         const FermentationApplicationRequestResult& prepared);
+     // The single confirmed envelope handoff for local and future UI
+@@ -532,6 +533,8 @@
+         const FermentationUiCommandContext& context);
+ 
+    private:
++    FermentationUiCommandResult applyConfirmedPreparedValue(const FermentationApplicationPreparedRequest&);
++
+ #ifdef APP_PROFILE_NATIVE
+     std::size_t webConfigurationCallsForTest_{0U};
+ #endif
+@@ -574,7 +577,7 @@
+                                const FermentationUiCompleteRunIntent& intent);
+     template <typename Request>
+     [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
+-        Request request,
++        Request&& request,
+         std::optional<CrossRolePlausibilityContext> owningPlausibility =
+             std::nullopt);
+     template <typename Intent>
+--- a/lib/fermentation_app/src/fermentation_ui_commands.cpp
++++ b/lib/fermentation_app/src/fermentation_ui_commands.cpp
+@@ -465,28 +465,26 @@
+     return fromTransitionDecision(decision.status);
+ }
+ 
+-FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
++FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedInto(
+     const RunCommandState& current,
+     const FermentationApplicationPreparedRequest& request,
+     const std::optional<FermentationUiConfirmationRequest>& confirmation,
+-    CommandDecision* decisionOut) {
++    CommandDecision& decisionOut) {
+     return std::visit(
+-        [&current, &request, &confirmation, decisionOut](const auto& prepared) {
++        [&current, &request, &confirmation, &decisionOut](const auto& prepared) {
+             using Request = std::decay_t<decltype(prepared)>;
+-            CommandDecision decision;
++            auto& decision = decisionOut;
+             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
+-                decision =
+-                    ::fermentation::decideProgramStart(current, prepared);
++                ::fermentation::decideProgramStartInto(current, prepared, decision);
+             } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
+-                decision = ::fermentation::decideManualStart(current, prepared);
++                ::fermentation::decideManualStartInto(current, prepared, decision);
+             } else if constexpr (std::is_same_v<Request, StopRequest>) {
+-                decision = ::fermentation::decideStop(current, prepared);
++                ::fermentation::decideStopInto(current, prepared, decision);
+             } else if constexpr (std::is_same_v<Request, CompletionRequest>) {
+-                decision = ::fermentation::decideCompletion(current, prepared);
++                ::fermentation::decideCompletionInto(current, prepared, decision);
+             } else if constexpr (std::is_same_v<Request,
+                                                 RunAdjustmentCommandRequest>) {
+-                decision =
+-                    ::fermentation::decideRunAdjustment(current, prepared);
++                ::fermentation::decideRunAdjustmentInto(current, prepared, decision);
+             } else if constexpr (std::is_same_v<
+                                      Request,
+                                      ApplyRecoveryTimeCorrectionRequest>) {
+@@ -496,25 +494,76 @@
+                                      Request,
+                                      FermentationApplicationPreparedRequest::
+                                          PreparedAcknowledgeMessage>) {
+-                decision = ::fermentation::decideAcknowledgeMessage(
+-                    current, prepared.request);
++                ::fermentation::decideAcknowledgeMessageInto(current, prepared.request, decision);
+             } else if constexpr (std::is_same_v<
+                                      Request,
+                                      FermentationApplicationPreparedRequest::
+                                          PreparedMuteMessage>) {
+-                decision = ::fermentation::decideMuteMessage(current,
+-                                                             prepared.request);
++                ::fermentation::decideMuteMessageInto(current, prepared.request, decision);
+             } else {
+                 if (!request.owningPlausibility().has_value())
+                     return FermentationUiCommandBridge::unsupportedAppDetail();
+                 decision = decideApplySensorSelectionAction(
+                     current, prepared, *request.owningPlausibility());
+             }
+-            if (decisionOut != nullptr) *decisionOut = decision;
++
+             return FermentationUiCommandBridge::fromCommandStatus(
+                 decision.status, confirmation);
+         },
+         request.storage());
++}
++FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedInto(
++    const RunCommandState& current,
++    const FermentationApplicationPreparedRequest& request,
++    const std::optional<FermentationUiConfirmationRequest>& confirmation,
++    CommandDecisionView& decisionOut) {
++    return std::visit(
++        [&current, &request, &confirmation, &decisionOut](const auto& prepared) {
++            using Request = std::decay_t<decltype(prepared)>;
++            auto& decision = decisionOut;
++            if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
++                ::fermentation::decideProgramStartInto(current, prepared, decision);
++            } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
++                ::fermentation::decideManualStartInto(current, prepared, decision);
++            } else if constexpr (std::is_same_v<Request, StopRequest>) {
++                ::fermentation::decideStopInto(current, prepared, decision);
++            } else if constexpr (std::is_same_v<Request, CompletionRequest>) {
++                ::fermentation::decideCompletionInto(current, prepared, decision);
++            } else if constexpr (std::is_same_v<Request,
++                                                RunAdjustmentCommandRequest>) {
++                ::fermentation::decideRunAdjustmentInto(current, prepared, decision);
++            } else if constexpr (std::is_same_v<
++                                     Request,
++                                     ApplyRecoveryTimeCorrectionRequest>) {
++                return FermentationUiCommandBridge::unsupportedAppDetail();
++            } else if constexpr (std::is_same_v<
++                                     Request,
++                                     FermentationApplicationPreparedRequest::
++                                         PreparedAcknowledgeMessage>) {
++                ::fermentation::decideAcknowledgeMessageInto(current, prepared.request, decision);
++            } else if constexpr (std::is_same_v<
++                                     Request,
++                                     FermentationApplicationPreparedRequest::
++                                         PreparedMuteMessage>) {
++                ::fermentation::decideMuteMessageInto(current, prepared.request, decision);
++            } else {
++                if (!request.owningPlausibility().has_value())
++                    return FermentationUiCommandBridge::unsupportedAppDetail();
++                return FermentationUiCommandBridge::unsupportedAppDetail();
++            }
++
++            return FermentationUiCommandBridge::fromCommandStatus(
++                decision.status, confirmation);
++        },
++        request.storage());
++}
++
++FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
++ const RunCommandState& current, const FermentationApplicationPreparedRequest& request,
++ const std::optional<FermentationUiConfirmationRequest>& confirmation, CommandDecision* out) {
++ if (out != nullptr) { return decidePreparedInto(current, request, confirmation, *out); }
++ CommandDecision local;
++ return decidePreparedInto(current, request, confirmation, local);
+ }
+ 
+ bool hasStartCandidateOverride(
+--- a/lib/fermentation_app/src/fermentation_ui_commands.hpp
++++ b/lib/fermentation_app/src/fermentation_ui_commands.hpp
+@@ -224,6 +224,10 @@
+         FermentationApplicationPreparedRequest&&) noexcept = default;
+     FermentationApplicationPreparedRequest& operator=(
+         FermentationApplicationPreparedRequest&&) noexcept = default;
++    struct ConstructionTag { private: ConstructionTag()=default; friend class FermentationApplication; };
++    template <typename Request> FermentationApplicationPreparedRequest(ConstructionTag,
++       Request&& request, std::optional<CrossRolePlausibilityContext> evidence)
++       : storage_(std::forward<Request>(request)), owningPlausibility_(evidence) {}
+     ~FermentationApplicationPreparedRequest() = default;
+ 
+     [[nodiscard]] CommandId commandId() const noexcept;
+@@ -406,6 +410,16 @@
+         const std::optional<FermentationUiConfirmationRequest>& confirmation =
+             std::nullopt,
+         CommandDecision* decisionOut = nullptr);
++    [[nodiscard]] static FermentationUiCommandResult decidePreparedInto(
++        const RunCommandState& current,
++        const FermentationApplicationPreparedRequest& request,
++        const std::optional<FermentationUiConfirmationRequest>& confirmation,
++        CommandDecision& decisionOut);
++    [[nodiscard]] static FermentationUiCommandResult decidePreparedInto(
++        const RunCommandState& current,
++        const FermentationApplicationPreparedRequest& request,
++        const std::optional<FermentationUiConfirmationRequest>& confirmation,
++        CommandDecisionView& decisionOut);
+     [[nodiscard]] static FermentationUiCommandResult fromFallbackResult(
+         RunPersistenceResultStatus status);
+ 
+--- a/lib/fermentation_app/src/run_commands.cpp
++++ b/lib/fermentation_app/src/run_commands.cpp
+@@ -1,3 +1,4 @@
++#include <type_traits>
+ #include "run_commands.hpp"
+ 
+ #include <cmath>
+@@ -174,9 +175,10 @@
+     state.processedCommandIds.back() = id;
+ }
+ 
++template <typename Decision>
+ void resultIntoLocal(const RunCommandState& current,
+                      const CommandEnvelope& envelope, CommandKind kind,
+-                     CommandStatus status, CommandDecision& destination) {
++                     CommandStatus status, Decision& destination) {
+     destination.startSummary.reset();
+     destination.adjustmentPreview.reset();
+     destination.effectCount = 0U;
+@@ -188,13 +190,14 @@
+     destination.status = status;
+     destination.kind = kind;
+     destination.envelope = envelope;
+-    destination.before = current;
++    if constexpr (std::is_same_v<Decision, CommandDecision>) destination.before = current;
+     destination.after = current;
+ }
+ 
++template <typename Decision>
+ void beginDecisionIntoLocal(const RunCommandState& current,
+                             const CommandEnvelope& envelope, CommandKind kind,
+-                            CommandDecision& destination) {
++                            Decision& destination) {
+     resultIntoLocal(current, envelope, kind, CommandStatus::Proposed,
+                     destination);
+     auto& decision = destination;
+@@ -229,14 +232,16 @@
+ // Sie wird deshalb erst nach allen nicht mutierenden Fachpruefungen unmittelbar
+ // an der Commit-Grenze erhoeht. Abgelehnte Entscheidungen behalten damit einen
+ // zu `before` identischen `after`-Zustand.
+-void beginMutation(CommandDecision& decision) {
++template <typename Decision>
++void beginMutation(Decision& decision) {
+     decision.after.commandSequence = decision.before.commandSequence + 1U;
+     rememberProcessedCommand(decision.after, decision.envelope.id);
+     decision.after.lastCommandMonotonicMillis =
+         decision.envelope.monotonicMillis;
+ }
+ 
+-bool requireRunRevision(CommandDecision& decision) {
++template <typename Decision>
++bool requireRunRevision(Decision& decision) {
+     if (!decision.proposed()) {
+         return false;
+     }
+@@ -251,7 +256,8 @@
+     return true;
+ }
+ 
+-bool requireRecoveryEpisodeRevision(CommandDecision& decision) {
++template <typename Decision>
++bool requireRecoveryEpisodeRevision(Decision& decision) {
+     if (!decision.proposed()) {
+         return false;
+     }
+@@ -267,7 +273,8 @@
+     return true;
+ }
+ 
+-bool requireMessageRevision(CommandDecision& decision) {
++template <typename Decision>
++bool requireMessageRevision(Decision& decision) {
+     if (!decision.proposed()) {
+         return false;
+     }
+@@ -289,7 +296,8 @@
+ // aufgerufen werden, damit ein bereits an `UINT32_MAX` stehender Zaehler
+ // `CapacityReached` liefert, ohne eine teilweise erzeugte Entscheidung, einen
+ // veraenderten `after`-Zustand oder einen Effect-Eintrag zu hinterlassen.
+-bool requireRevisionCapacity(CommandDecision& decision,
++template <typename Decision>
++bool requireRevisionCapacity(Decision& decision,
+                              std::uint32_t revision) {
+     if (!decision.proposed()) {
+         return false;
+@@ -301,7 +309,8 @@
+     return true;
+ }
+ 
+-bool addEffect(CommandDecision& decision, CommandEffect effect) {
++template <typename Decision>
++bool addEffect(Decision& decision, CommandEffect effect) {
+     if (decision.effectCount >= decision.effects.size()) {
+         decision.status = CommandStatus::CapacityReached;
+         return false;
+@@ -462,6 +471,10 @@
+ // Produkt bei ProductIfAvailableElseAir, aber zum Startzeitpunkt nicht
+ // gueltig - automatischer Ersatz auf Luft). Die Luft-/Kuehlkoerper-
+ // Vorbedingung (Zeile-uebergreifend) wird vom Aufrufer separat geprueft.
++template <typename Decision> struct RestoreRejectedAfter {
++ Decision& decision;
++ ~RestoreRejectedAfter() { if (!decision.proposed()) decision.after = decision.before; }
++};
+ }  // namespace
+ 
+ std::optional<RunSensorMode> defaultProgramStartSensorMode(
+@@ -607,17 +620,31 @@
+ 
+ }  // namespace
+ 
++template <typename Decision>
++void resultIntoCore(const RunCommandState& current, const CommandEnvelope& envelope,
++                CommandKind kind, CommandStatus status,
++                Decision& destination) {
++    resultIntoLocal(current, envelope, kind, status, destination);
++}
+ void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                 CommandKind kind, CommandStatus status,
+-                CommandDecision& destination) {
+-    resultIntoLocal(current, envelope, kind, status, destination);
+-}
+-
++                CommandDecision& destination) { resultIntoCore(current, envelope, kind, status, destination); }
++void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
++                CommandKind kind, CommandStatus status,
++                CommandDecisionView& destination) { resultIntoCore(current, envelope, kind, status, destination); }
++
++template <typename Decision>
++void beginDecisionIntoCore(const RunCommandState& current,
++                       const CommandEnvelope& envelope, CommandKind kind,
++                       Decision& destination) {
++    beginDecisionIntoLocal(current, envelope, kind, destination);
++}
+ void beginDecisionInto(const RunCommandState& current,
+                        const CommandEnvelope& envelope, CommandKind kind,
+-                       CommandDecision& destination) {
+-    beginDecisionIntoLocal(current, envelope, kind, destination);
+-}
++                       CommandDecision& destination) { beginDecisionIntoCore(current, envelope, kind, destination); }
++void beginDecisionInto(const RunCommandState& current,
++                       const CommandEnvelope& envelope, CommandKind kind,
++                       CommandDecisionView& destination) { beginDecisionIntoCore(current, envelope, kind, destination); }
+ 
+ // #21, 6.14.6: einzige Implementierung; ersetzt das vormalige
+ // run_commands.cpp::clearActiveRun (nur intern sichtbar) und
+@@ -736,12 +763,14 @@
+                : std::nullopt;
+ }
+ 
+-void decideProgramStartInto(const RunCommandState& current,
++template <typename Decision>
++void decideProgramStartIntoCore(const RunCommandState& current,
+                             const ProgramStartRequest& request,
+-                            CommandDecision& destination) {
++                            Decision& destination) {
+     beginDecisionInto(current, request.envelope, CommandKind::StartProgram,
+                       destination);
+     auto& decision = destination;
++    RestoreRejectedAfter<Decision> rollback{decision};
+     if (!requireRunRevision(decision)) {
+         return;
+     }
+@@ -783,8 +812,8 @@
+         return;
+     }
+ 
+-    auto run = ActiveRun::start(request.program, request.sourceProgramRevision);
+-    if (!run.has_value()) {
++    auto& run = decision.after.activeProgramRun;
++    if (!ActiveRun::startInto(request.program, request.sourceProgramRevision, run)) {
+         decision.status = CommandStatus::InvalidInput;
+         return;
+     }
+@@ -839,7 +868,7 @@
+         return;
+     }
+ 
+-    auto candidate = decision.before;
++    auto& candidate = decision.after;
+     if (!applyTransition(candidate, ProcessEvent::StartRun,
+                          request.envelope.monotonicMillis, &*snapshot)) {
+         decision.status = CommandStatus::InvalidInput;
+@@ -853,10 +882,8 @@
+ 
+     candidate.activeRunId = request.runId;
+     candidate.activeRunSensorMode = resolution.effectiveMode;
+-    candidate.activeProgramRun = std::move(run);
+     candidate.activeManualRun.reset();
+     candidate.processRunSnapshot = *snapshot;
+-    decision.after = std::move(candidate);
+     beginMutation(decision);
+     ++decision.after.runRevision;
+     const auto outcome = startSensorSelectionOutcome(
+@@ -867,13 +894,21 @@
+     decision.after.sensorSelection = outcome.persisted;
+     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
+ }
+-
+-void decideManualStartInto(const RunCommandState& current,
++void decideProgramStartInto(const RunCommandState& current,
++                            const ProgramStartRequest& request,
++                            CommandDecision& destination) { decideProgramStartIntoCore(current, request, destination); }
++void decideProgramStartInto(const RunCommandState& current,
++                            const ProgramStartRequest& request,
++                            CommandDecisionView& destination) { decideProgramStartIntoCore(current, request, destination); }
++
++template <typename Decision>
++void decideManualStartIntoCore(const RunCommandState& current,
+                            const ManualStartRequest& request,
+-                           CommandDecision& destination) {
++                           Decision& destination) {
+     beginDecisionInto(current, request.envelope,
+                       CommandKind::StartManualHolding, destination);
+     auto& decision = destination;
++    RestoreRejectedAfter<Decision> rollback{decision};
+     if (!requireRunRevision(decision)) {
+         return;
+     }
+@@ -920,7 +955,7 @@
+         return;
+     }
+ 
+-    auto candidate = decision.before;
++    auto& candidate = decision.after;
+     if (!installManualRun(candidate, decision.envelope, std::move(*plan))) {
+         decision.status = CommandStatus::InvalidInput;
+         return;
+@@ -929,7 +964,6 @@
+         decision.status = CommandStatus::NotConfirmed;
+         return;
+     }
+-    decision.after = std::move(candidate);
+     beginMutation(decision);
+     ++decision.after.runRevision;
+     // #21, 6.8: kein automatischer Ersatz bei manuellem Start - substituted
+@@ -946,6 +980,12 @@
+     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
+     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
+ }
++void decideManualStartInto(const RunCommandState& current,
++                           const ManualStartRequest& request,
++                           CommandDecision& destination) { decideManualStartIntoCore(current, request, destination); }
++void decideManualStartInto(const RunCommandState& current,
++                           const ManualStartRequest& request,
++                           CommandDecisionView& destination) { decideManualStartIntoCore(current, request, destination); }
+ 
+ CommandDecision decideProgramStart(const RunCommandState& current,
+                                    const ProgramStartRequest& request) {
+@@ -961,60 +1001,62 @@
+     return decision;
+ }
+ 
+-CommandDecision decideStop(const RunCommandState& current,
+-                           const StopRequest& request) {
+-    auto decision =
+-        beginDecision(current, request.envelope, CommandKind::AbortAndTurnOff);
++template <typename Decision>
++void decideStopIntoCore(const RunCommandState& current,
++                           const StopRequest& request, Decision& destination) {
++    beginDecisionInto(current, request.envelope, CommandKind::AbortAndTurnOff, destination);
++    auto& decision = destination;
++    RestoreRejectedAfter<Decision> rollback{decision};
+     if (!decision.proposed()) {
+-        return decision;
++        return;
+     }
+     if (!validStopOption(request.option)) {
+         decision.status = CommandStatus::InvalidInput;
+-        return decision;
++        return;
+     }
+     if (request.option == StopOption::Back) {
+         decision.status = CommandStatus::NoChange;
+-        return decision;
++        return;
+     }
+     if (request.option == StopOption::AbortAndCool) {
+         decision.kind = CommandKind::AbortAndCool;
+     }
+     if (!requireRunRevision(decision)) {
+-        return decision;
++        return;
+     }
+     if (!activeProcessState(current.processState.state) ||
+         !current.processRunSnapshot.has_value()) {
+         decision.status = CommandStatus::NotAllowedInState;
+-        return decision;
++        return;
+     }
+ 
+     std::optional<ManualRunPlan> coolingPlan;
+     if (request.option == StopOption::AbortAndCool) {
+         if (!request.safetyAllowsCooling) {
+             decision.status = CommandStatus::SafetyRejected;
+-            return decision;
++            return;
+         }
+         if (!request.coolingPlan.has_value()) {
+             decision.status = CommandStatus::ContextMissing;
+-            return decision;
++            return;
+         }
+         coolingPlan = makeManualPlan(*request.coolingPlan, request.envelope);
+         if (!coolingPlan.has_value()) {
+             decision.status = CommandStatus::InvalidInput;
+-            return decision;
++            return;
+         }
+     }
+ 
+     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+-        return decision;
+-    }
+-
+-    auto candidate = decision.before;
++        return;
++    }
++
++    auto& candidate = decision.after;
+     if (!applyTransition(candidate, ProcessEvent::Abort,
+                          request.envelope.monotonicMillis,
+                          &*current.processRunSnapshot)) {
+         decision.status = CommandStatus::NotAllowedInState;
+-        return decision;
++        return;
+     }
+     clearActiveRunState(candidate);
+ 
+@@ -1022,15 +1064,14 @@
+         !installManualRun(candidate, decision.envelope,
+                           std::move(*coolingPlan))) {
+         decision.status = CommandStatus::InvalidInput;
+-        return decision;
++        return;
+     }
+ 
+     if (!request.envelope.confirmed) {
+         decision.status = CommandStatus::NotConfirmed;
+-        return decision;
+-    }
+-
+-    decision.after = std::move(candidate);
++        return;
++    }
++
+     beginMutation(decision);
+     ++decision.after.runRevision;
+     // #21, 6.5/6.14.6: der Kuehl-Ersatzlauf ist ebenfalls ein aktiver Lauf
+@@ -1061,63 +1102,76 @@
+         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
+         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
+     }
++    return;
++}
++void decideStopInto(const RunCommandState& current,
++                           const StopRequest& request, CommandDecision& destination) { decideStopIntoCore(current, request, destination); }
++void decideStopInto(const RunCommandState& current,
++                           const StopRequest& request, CommandDecisionView& destination) { decideStopIntoCore(current, request, destination); }
++
++CommandDecision decideStop(const RunCommandState& current,
++                           const StopRequest& request) {
++    CommandDecision decision;
++    decideStopInto(current, request, decision);
+     return decision;
+ }
+ 
+-CommandDecision decideCompletion(const RunCommandState& current,
+-                                 const CompletionRequest& request) {
++template <typename Decision>
++void decideCompletionIntoCore(const RunCommandState& current,
++                                 const CompletionRequest& request, Decision& destination) {
+     const auto kind = request.startCooling ? CommandKind::CoolAfterCompletion
+                                            : CommandKind::AcknowledgeCompletion;
+-    auto decision = beginDecision(current, request.envelope, kind);
++    beginDecisionInto(current, request.envelope, kind, destination);
++    auto& decision = destination;
++    RestoreRejectedAfter<Decision> rollback{decision};
+     if (!requireRunRevision(decision)) {
+-        return decision;
++        return;
+     }
+     if (current.processState.state != ProcessState::Completed) {
+         decision.status = CommandStatus::NotAllowedInState;
+-        return decision;
++        return;
+     }
+ 
+     std::optional<ManualRunPlan> coolingPlan;
+     if (request.startCooling) {
+         if (!request.safetyAllowsCooling) {
+             decision.status = CommandStatus::SafetyRejected;
+-            return decision;
++            return;
+         }
+         if (!request.coolingPlan.has_value()) {
+             decision.status = CommandStatus::ContextMissing;
+-            return decision;
++            return;
+         }
+         coolingPlan = makeManualPlan(*request.coolingPlan, request.envelope);
+         if (!coolingPlan.has_value()) {
+             decision.status = CommandStatus::InvalidInput;
+-            return decision;
++            return;
+         }
+     }
+ 
+     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+-        return decision;
+-    }
+-
+-    auto candidate = decision.before;
++        return;
++    }
++
++    auto& candidate = decision.after;
+     if (!applyTransition(candidate, ProcessEvent::AcknowledgeCompletion,
+                          request.envelope.monotonicMillis, nullptr)) {
+         decision.status = CommandStatus::NotAllowedInState;
+-        return decision;
++        return;
+     }
+     clearActiveRunState(candidate);
+     if (coolingPlan.has_value() &&
+         !installManualRun(candidate, decision.envelope,
+                           std::move(*coolingPlan))) {
+         decision.status = CommandStatus::InvalidInput;
+-        return decision;
++        return;
+     }
+ 
+     if (!request.envelope.confirmed) {
+         decision.status = CommandStatus::NotConfirmed;
+-        return decision;
+-    }
+-
+-    decision.after = std::move(candidate);
++        return;
++    }
++
+     beginMutation(decision);
+     ++decision.after.runRevision;
+     // #21, 6.5/6.14.6: siehe decideStop - derselbe Kuehl-Ersatzlauf-Fall
+@@ -1136,22 +1190,35 @@
+         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
+         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
+     }
++    return;
++}
++void decideCompletionInto(const RunCommandState& current,
++                                 const CompletionRequest& request, CommandDecision& destination) { decideCompletionIntoCore(current, request, destination); }
++void decideCompletionInto(const RunCommandState& current,
++                                 const CompletionRequest& request, CommandDecisionView& destination) { decideCompletionIntoCore(current, request, destination); }
++
++CommandDecision decideCompletion(const RunCommandState& current,
++                                 const CompletionRequest& request) {
++    CommandDecision decision;
++    decideCompletionInto(current, request, decision);
+     return decision;
+ }
+ 
+-CommandDecision decideRunAdjustment(
++template <typename Decision>
++void decideRunAdjustmentIntoCore(
+     const RunCommandState& current,
+-    const RunAdjustmentCommandRequest& request) {
+-    auto decision =
+-        beginDecision(current, request.envelope, CommandKind::AdjustRun);
++    const RunAdjustmentCommandRequest& request, Decision& destination) {
++    beginDecisionInto(current, request.envelope, CommandKind::AdjustRun, destination);
++    auto& decision = destination;
++    RestoreRejectedAfter<Decision> rollback{decision};
+     if (!requireRunRevision(decision)) {
+-        return decision;
++        return;
+     }
+     if (!adjustmentAllowedIn(current.processState.state) ||
+         !current.activeProgramRun.has_value() ||
+         !current.processRunSnapshot.has_value()) {
+         decision.status = CommandStatus::NotAllowedInState;
+-        return decision;
++        return;
+     }
+ 
+     RunAdjustmentRequest adjustment;
+@@ -1168,11 +1235,11 @@
+         current.activeProgramRun->decideAdjustment(adjustment, context);
+     if (!runDecision.proposed()) {
+         decision.status = mapAdjustmentStatus(runDecision.status);
+-        return decision;
++        return;
+     }
+ 
+     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+-        return decision;
++        return;
+     }
+ 
+     const auto beforeValues = current.activeProgramRun->effectiveValues();
+@@ -1185,27 +1252,27 @@
+             current, request.envelope.monotonicMillis);
+         if (!observedDelta.has_value()) {
+             decision.status = CommandStatus::InvalidInput;
+-            return decision;
+-        }
+-    }
+-    auto candidate = decision.before;
++            return;
++        }
++    }
++    auto& candidate = decision.after;
+     if (durationChanged &&
+         current.processState.state == ProcessState::Fermenting) {
+         if (!observedDelta.has_value() ||
+             !foldObservedRunSeconds(candidate, *observedDelta)) {
+             decision.status = CommandStatus::InvalidInput;
+-            return decision;
++            return;
+         }
+     }
+     if (!candidate.activeProgramRun.has_value()) {
+         decision.status = CommandStatus::InvalidInput;
+-        return decision;
++        return;
+     }
+     auto& adjustedRun = candidate.activeProgramRun.value();
+     const auto applied = adjustedRun.applyAdjustment(runDecision);
+     if (!applied.applied()) {
+         decision.status = CommandStatus::InvalidInput;
+-        return decision;
++        return;
+     }
+     const auto afterValues = adjustedRun.effectiveValues();
+     const bool targetChanged = beforeValues.targetTemperatureCelsius !=
+@@ -1213,7 +1280,7 @@
+     candidate.processRunSnapshot = makeProcessRunSnapshot(adjustedRun);
+     if (!candidate.processRunSnapshot.has_value()) {
+         decision.status = CommandStatus::InvalidInput;
+-        return decision;
++        return;
+     }
+ 
+     if (targetChanged &&
+@@ -1222,7 +1289,7 @@
+                          request.envelope.monotonicMillis,
+                          &*candidate.processRunSnapshot)) {
+         decision.status = CommandStatus::InvalidInput;
+-        return decision;
++        return;
+     }
+     decision.committedControlContextTransition =
+         targetContextTransition(targetChanged);
+@@ -1246,10 +1313,9 @@
+ 
+     if (!request.envelope.confirmed) {
+         decision.status = CommandStatus::NotConfirmed;
+-        return decision;
+-    }
+-
+-    decision.after = std::move(candidate);
++        return;
++    }
++
+     beginMutation(decision);
+     ++decision.after.runRevision;
+     decision.adjustmentPreview = RunAdjustmentPreview{
+@@ -1261,6 +1327,20 @@
+             RunAdjustmentEffect::ContinueFermentationWithoutRequalification,
+     };
+     static_cast<void>(addEffect(decision, CommandEffect::RunAdjusted));
++    return;
++}
++void decideRunAdjustmentInto(
++    const RunCommandState& current,
++    const RunAdjustmentCommandRequest& request, CommandDecision& destination) { decideRunAdjustmentIntoCore(current, request, destination); }
++void decideRunAdjustmentInto(
++    const RunCommandState& current,
++    const RunAdjustmentCommandRequest& request, CommandDecisionView& destination) { decideRunAdjustmentIntoCore(current, request, destination); }
++
++CommandDecision decideRunAdjustment(
++    const RunCommandState& current,
++    const RunAdjustmentCommandRequest& request) {
++    CommandDecision decision;
++    decideRunAdjustmentInto(current, request, decision);
+     return decision;
+ }
+ 
+@@ -1322,59 +1402,86 @@
+     return decision;
+ }
+ 
+-CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
+-                                         const MessageCommandRequest& request) {
+-    auto decision = beginDecision(current, request.envelope,
+-                                  CommandKind::AcknowledgeMessage);
++template <typename Decision>
++void decideAcknowledgeMessageIntoCore(const RunCommandState& current,
++                                         const MessageCommandRequest& request, Decision& destination) {
++    beginDecisionInto(current, request.envelope,
++                                  CommandKind::AcknowledgeMessage, destination);
++    auto& decision = destination;
++    RestoreRejectedAfter<Decision> rollback{decision};
+     if (!requireMessageRevision(decision)) {
+-        return decision;
++        return;
+     }
+     auto* message = findMessage(decision.after, request.messageId);
+     if (message == nullptr) {
+         decision.status = CommandStatus::ContextMissing;
+-        return decision;
++        return;
+     }
+     if (message->acknowledged) {
+         decision.status = CommandStatus::NoChange;
+-        return decision;
++        return;
+     }
+     if (!requireRevisionCapacity(decision, message->revision) ||
+         !requireRevisionCapacity(decision, decision.after.messageRevision)) {
+-        return decision;
++        return;
+     }
+     beginMutation(decision);
+     message->acknowledged = true;
+     ++message->revision;
+     ++decision.after.messageRevision;
+     static_cast<void>(addEffect(decision, CommandEffect::MessageAcknowledged));
++    return;
++}
++void decideAcknowledgeMessageInto(const RunCommandState& current,
++                                         const MessageCommandRequest& request, CommandDecision& destination) { decideAcknowledgeMessageIntoCore(current, request, destination); }
++void decideAcknowledgeMessageInto(const RunCommandState& current,
++                                         const MessageCommandRequest& request, CommandDecisionView& destination) { decideAcknowledgeMessageIntoCore(current, request, destination); }
++
++CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
++                                         const MessageCommandRequest& request) {
++    CommandDecision decision;
++    decideAcknowledgeMessageInto(current, request, decision);
+     return decision;
+ }
+ 
+-CommandDecision decideMuteMessage(const RunCommandState& current,
+-                                  const MessageCommandRequest& request) {
+-    auto decision =
+-        beginDecision(current, request.envelope, CommandKind::MuteMessage);
++template <typename Decision>
++void decideMuteMessageIntoCore(const RunCommandState& current,
++                                  const MessageCommandRequest& request, Decision& destination) {
++    beginDecisionInto(current, request.envelope, CommandKind::MuteMessage, destination);
++    auto& decision = destination;
++    RestoreRejectedAfter<Decision> rollback{decision};
+     if (!requireMessageRevision(decision)) {
+-        return decision;
++        return;
+     }
+     auto* message = findMessage(decision.after, request.messageId);
+     if (message == nullptr) {
+         decision.status = CommandStatus::ContextMissing;
+-        return decision;
++        return;
+     }
+     if (message->acousticMuted) {
+         decision.status = CommandStatus::NoChange;
+-        return decision;
++        return;
+     }
+     if (!requireRevisionCapacity(decision, message->revision) ||
+         !requireRevisionCapacity(decision, decision.after.messageRevision)) {
+-        return decision;
++        return;
+     }
+     beginMutation(decision);
+     message->acousticMuted = true;
+     ++message->revision;
+     ++decision.after.messageRevision;
+     static_cast<void>(addEffect(decision, CommandEffect::AcousticMuted));
++    return;
++}
++void decideMuteMessageInto(const RunCommandState& current,
++                                  const MessageCommandRequest& request, CommandDecision& destination) { decideMuteMessageIntoCore(current, request, destination); }
++void decideMuteMessageInto(const RunCommandState& current,
++                                  const MessageCommandRequest& request, CommandDecisionView& destination) { decideMuteMessageIntoCore(current, request, destination); }
++
++CommandDecision decideMuteMessage(const RunCommandState& current,
++                                  const MessageCommandRequest& request) {
++    CommandDecision decision;
++    decideMuteMessageInto(current, request, decision);
+     return decision;
+ }
+ 
+@@ -1503,8 +1610,9 @@
+     return decision;
+ }
+ 
+-CommandStatus applyRunCommand(RunCommandState& current,
+-                              const CommandDecision& decision) {
++template <typename Decision, typename Before>
++CommandStatus validateRunCommandCore(const RunCommandState& current,
++ const Decision& decision, const Before& before) {
+     if (containsProcessedCommand(current, decision.envelope.id)) {
+         return CommandStatus::AlreadyProcessed;
+     }
+@@ -1513,16 +1621,16 @@
+         return CommandStatus::SafetyRejected;
+     }
+     if (!decision.proposed() ||
+-        current.commandSequence != decision.before.commandSequence ||
++        current.commandSequence != before.commandSequence ||
+         !equalProcessRuntimeState(current.processState,
+-                                  decision.before.processState) ||
+-        current.runRevision != decision.before.runRevision ||
+-        current.messageRevision != decision.before.messageRevision ||
+-        current.faultRevision != decision.before.faultRevision ||
++                                  before.processState) ||
++        current.runRevision != before.runRevision ||
++        current.messageRevision != before.messageRevision ||
++        current.faultRevision != before.faultRevision ||
+         current.criticalSafetyEventPending !=
+-            decision.before.criticalSafetyEventPending ||
+-        current.activeRunId != decision.before.activeRunId ||
+-        current.activeRunSensorMode != decision.before.activeRunSensorMode ||
++            before.criticalSafetyEventPending ||
++        current.activeRunId != before.activeRunId ||
++        current.activeRunSensorMode != before.activeRunSensorMode ||
+         // #21, 6.14.2 (Review-Blocking 1): ohne diese zwei Felder wuerde ein
+         // zwischen Entscheidung und Anwendung durch eine parallele
+         // automatische Bewertung veraenderter Auswahlzustand (z. B. ein
+@@ -1531,17 +1639,42 @@
+         // ueberschrieben - ein Sicherheits-Lock koennte verloren gehen. Gilt
+         // fuer jeden CommandKind, nicht nur ApplySensorSelectionAction.
+         current.sensorSelectionRuntime !=
+-            decision.before.sensorSelectionRuntime ||
+-        current.sensorSelection != decision.before.sensorSelection ||
++            before.sensorSelectionRuntime ||
++        current.sensorSelection != before.sensorSelection ||
+         current.recoveryEpisodeRevision !=
+-            decision.before.recoveryEpisodeRevision ||
++            before.recoveryEpisodeRevision ||
+         decision.after.commandSequence != current.commandSequence + 1U) {
+         return CommandStatus::StaleState;
+     }
+ 
+-    current = decision.after;
+     return CommandStatus::Applied;
+ }
++CommandApplyGuard::CommandApplyGuard(const RunCommandState& s)
++ : processState(s.processState), commandSequence(s.commandSequence),
++ runRevision(s.runRevision), messageRevision(s.messageRevision), faultRevision(s.faultRevision),
++ criticalSafetyEventPending(s.criticalSafetyEventPending), activeRunSensorMode(s.activeRunSensorMode),
++ sensorSelectionRuntime(s.sensorSelectionRuntime), sensorSelection(s.sensorSelection),
++ recoveryEpisodeRevision(s.recoveryEpisodeRevision) {
++ activeRunId.size=s.activeRunId.size(); activeRunId.valid=activeRunId.size<=activeRunId.bytes.size();
++ if(activeRunId.valid) std::copy(s.activeRunId.begin(),s.activeRunId.end(),activeRunId.bytes.begin());
++}
++CommandStatus validateRunCommand(const RunCommandState& current, const CommandDecision& d) {
++ return validateRunCommandCore(current,d,d.before);
++}
++CommandStatus validateRunCommand(const RunCommandState& current, const CommandDecisionView& d) {
++ return validateRunCommandCore(current,d,d.guard);
++}
++CommandStatus applyRunCommand(RunCommandState& current, const CommandDecision& d) {
++ auto status=validateRunCommand(current,d);
++ if(status==CommandStatus::Applied) current=d.after;
++ return status;
++}
++CommandStatus applyRunCommand(RunCommandState& current, const CommandDecisionView& d) {
++ auto status=validateRunCommand(current,d);
++ if(status==CommandStatus::Applied) current=std::move(d.after);
++ return status;
++}
++
+ 
+ const RuntimeMessage* highestPriorityActiveMessage(
+     const RunCommandState& state) {
+--- a/lib/fermentation_app/src/run_commands.hpp
++++ b/lib/fermentation_app/src/run_commands.hpp
+@@ -1,3 +1,4 @@
++#include <algorithm>
+ #pragma once
+ 
+ #include <array>
+@@ -380,12 +381,10 @@
+ [[nodiscard]] std::optional<std::uint32_t> deriveFermentingSecondsDelta(
+     const RunCommandState& before, std::uint64_t atMillis);
+ 
+-struct CommandDecision {
++struct CommandDecisionMetadata {
+     CommandStatus status{CommandStatus::InvalidInput};
+     CommandKind kind{CommandKind::StartProgram};
+     CommandEnvelope envelope;
+-    RunCommandState before;
+-    RunCommandState after;
+     std::optional<StartSummary> startSummary;
+     std::optional<RunAdjustmentPreview> adjustmentPreview;
+     std::array<CommandEffect, run_command_limits::kMaximumCommandEffects>
+@@ -411,13 +410,53 @@
+         return status == CommandStatus::Proposed;
+     }
+ };
++struct CommandApplyGuard {
++    ProcessRuntimeState processState;
++    std::uint32_t commandSequence, runRevision, messageRevision, faultRevision;
++    bool criticalSafetyEventPending;
++    std::optional<RunSensorMode> activeRunSensorMode;
++    SensorSelectionRuntimeState sensorSelectionRuntime;
++    std::optional<PersistedSensorSelectionState> sensorSelection;
++    std::uint32_t recoveryEpisodeRevision;
++    struct RunId {
++        std::array<char, 48> bytes{};
++        std::size_t size{0};
++        bool valid{true};
++        friend bool operator!=(const std::string& s, const RunId& id) {
++            return !id.valid || s.size() != id.size ||
++                !std::equal(s.begin(), s.end(), id.bytes.begin());
++        }
++    } activeRunId;
++    explicit CommandApplyGuard(const RunCommandState& s);
++};
++struct CommandDecision : CommandDecisionMetadata {
++    RunCommandState before;
++    RunCommandState after;
++};
++struct CommandDecisionView : CommandDecisionMetadata {
++    const RunCommandState& before;
++    RunCommandState& after;
++    const CommandApplyGuard guard;
++    CommandDecisionView(const RunCommandState& current, RunCommandState& candidate)
++        : before(current), after(candidate), guard(current) {}
++};
++CommandStatus validateRunCommand(const RunCommandState&, const CommandDecision&);
++CommandStatus validateRunCommand(const RunCommandState&, const CommandDecisionView&);
++CommandStatus applyRunCommand(RunCommandState&, const CommandDecisionView&);
++
+ 
+ void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                 CommandKind kind, CommandStatus status,
+                 CommandDecision& destination);
++void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
++                CommandKind kind, CommandStatus status,
++                CommandDecisionView& destination);
+ void beginDecisionInto(const RunCommandState& current,
+                        const CommandEnvelope& envelope, CommandKind kind,
+                        CommandDecision& destination);
++void beginDecisionInto(const RunCommandState& current,
++                       const CommandEnvelope& envelope, CommandKind kind,
++                       CommandDecisionView& destination);
+ 
+ // #21 start matrix, structural part only (independent of any sensor
+ // evidence): the requested mode a stored SensorPreference asks for without a
+@@ -433,9 +472,15 @@
+ void decideProgramStartInto(const RunCommandState& current,
+                             const ProgramStartRequest& request,
+                             CommandDecision& destination);
++void decideProgramStartInto(const RunCommandState& current,
++                            const ProgramStartRequest& request,
++                            CommandDecisionView& destination);
+ void decideManualStartInto(const RunCommandState& current,
+                            const ManualStartRequest& request,
+                            CommandDecision& destination);
++void decideManualStartInto(const RunCommandState& current,
++                           const ManualStartRequest& request,
++                           CommandDecisionView& destination);
+ 
+ [[nodiscard]] CommandDecision decideProgramStart(
+     const RunCommandState& current, const ProgramStartRequest& request);
+@@ -496,4 +541,27 @@
+ [[nodiscard]] bool applySensorRoleChangeQualificationReset(
+     RunCommandState& state, std::uint64_t monotonicMillis);
+ 
++void decideStopInto(const RunCommandState& current,
++                           const StopRequest& request, CommandDecision& destination);
++void decideStopInto(const RunCommandState& current,
++                           const StopRequest& request, CommandDecisionView& destination);
++void decideCompletionInto(const RunCommandState& current,
++                                 const CompletionRequest& request, CommandDecision& destination);
++void decideCompletionInto(const RunCommandState& current,
++                                 const CompletionRequest& request, CommandDecisionView& destination);
++void decideRunAdjustmentInto(
++    const RunCommandState& current,
++    const RunAdjustmentCommandRequest& request, CommandDecision& destination);
++void decideRunAdjustmentInto(
++    const RunCommandState& current,
++    const RunAdjustmentCommandRequest& request, CommandDecisionView& destination);
++void decideAcknowledgeMessageInto(const RunCommandState& current,
++                                         const MessageCommandRequest& request, CommandDecision& destination);
++void decideAcknowledgeMessageInto(const RunCommandState& current,
++                                         const MessageCommandRequest& request, CommandDecisionView& destination);
++void decideMuteMessageInto(const RunCommandState& current,
++                                  const MessageCommandRequest& request, CommandDecision& destination);
++void decideMuteMessageInto(const RunCommandState& current,
++                                  const MessageCommandRequest& request, CommandDecisionView& destination);
++
+ }  // namespace fermentation
+--- a/lib/fermentation_app/src/run_persistence_coordinator.cpp
++++ b/lib/fermentation_app/src/run_persistence_coordinator.cpp
+@@ -1,3 +1,4 @@
++#include <type_traits>
+ #include "run_persistence_coordinator.hpp"
+ 
+ #include <algorithm>
+@@ -399,6 +400,7 @@
+ RunEpochHandoffSlotsPreparedResult
+ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
+     const AuthorizedRunEpochHandoffProof& proof) {
++    if(commandBorrowed_) return {borrowedBusyResult(),std::nullopt};
+     RunPersistenceDurability durability = RunPersistenceDurability::Unchanged;
+     const auto reject = [this, &durability](
+                             RunPersistenceStep step,
+@@ -578,6 +580,7 @@
+ RunEpochHandoffHeadFinalizedResult
+ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
+     const AuthorizedRunEpochHandoffProof& proof) {
++    if(commandBorrowed_) return {borrowedBusyResult(),std::nullopt};
+     RunPersistenceDurability durability = RunPersistenceDurability::Unchanged;
+     const auto reject = [this, &durability](
+                             RunPersistenceStep step,
+@@ -767,6 +770,7 @@
+ 
+ void RunPersistenceCoordinator::loadAndInitializeInto(
+     RunPersistenceLoadResult& destination) {
++    if(commandBorrowed_) { destination.status=RunPersistenceLoadStatus::AlreadyInitialized; destination.snapshot.reset(); return; }
+     destination.status = RunPersistenceLoadStatus::ReadFailed;
+     destination.snapshot.reset();
+     pendingR1CheckpointRevision_.reset();
+@@ -1063,6 +1067,7 @@
+ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
+     const RunCommandState& current, const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext& liveSensorEvidence) {
++    if(commandBorrowed_) return {borrowedBusyResult(),current};
+     const auto invalid = [this](const RunCommandState& state) {
+         return RecoveryActivationOutcome{
+             result(RunPersistenceResultStatus::InvalidDecision,
+@@ -1324,6 +1329,7 @@
+ RunPersistenceResult RunPersistenceCoordinator::activateR1EligibleRun(
+     RunCommandState& current, const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     if (state_ != RunPersistenceCoordinatorState::LoadedActiveRun ||
+         !currentHead_.has_value() ||
+         !slots_[currentHead_->current.slot].has_value()) {
+@@ -1544,6 +1550,7 @@
+ R1RecoveryEvaluation
+ RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
+     RunCommandState& current, const RunCheckpointTime& time) {
++    if(commandBorrowed_) return {RecoveryDisposition::RecoveryRejectedOrFailClosed,borrowedBusyResult()};
+     const auto rejected =
+         [this](RunPersistenceResultStatus status,
+                RunPersistenceStep step = RunPersistenceStep::CandidateApply,
+@@ -1654,6 +1661,7 @@
+ 
+ bool RunPersistenceCoordinator::prepareRecoveryEvaluationState(
+     RunCommandState& current, std::uint64_t monotonicMillis) const {
++    if(commandBorrowed_) return false;
+     auto candidate = current;
+     const auto transition =
+         propose(candidate.processState, ProcessState::RecoveryEvaluation,
+@@ -1673,6 +1681,7 @@
+ RunPersistenceCoordinator::activateFallbackRecoveredRun(
+     const RunCommandState& current, const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext& liveSensorEvidence) {
++    if(commandBorrowed_) return {borrowedBusyResult(),current};
+     const auto invalid = [this](const RunCommandState& state) {
+         return RecoveryActivationOutcome{
+             result(RunPersistenceResultStatus::InvalidDecision,
+@@ -1770,6 +1779,7 @@
+ RunPersistenceResult RunPersistenceCoordinator::reevaluateRecoveryEvaluation(
+     RunCommandState& current, const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     const auto notAllowed = [this]() {
+         return result(RunPersistenceResultStatus::NotAllowedInState,
+                       RunPersistenceStep::CandidateApply);
+@@ -1916,6 +1926,7 @@
+     RunCommandState& current, const ResolveRecoveryUncertaintyRequest& request,
+     const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext& liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     const auto notAllowed = [this]() {
+         return result(RunPersistenceResultStatus::NotAllowedInState,
+                       RunPersistenceStep::CandidateApply);
+@@ -2154,7 +2165,7 @@
+ 
+ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
+     const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+-    bool periodic, const RunCommandState& before,
++    bool periodic, const RunPersistenceBefore& before,
+     RunPersistenceMutationKind mutationKind,
+     std::optional<CommandId> commandId) {
+     if (state_ != RunPersistenceCoordinatorState::Ready &&
+@@ -2168,6 +2179,7 @@
+ 
+ RunPersistenceResult RunPersistenceCoordinator::discardAsNoActiveRun(
+     RunCommandState& current, const RunCheckpointTime& time) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     if (state_ != RunPersistenceCoordinatorState::Ready &&
+         state_ != RunPersistenceCoordinatorState::LoadedActiveRun) {
+         return unavailableResult();
+@@ -2222,7 +2234,7 @@
+ 
+ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
+     const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+-    bool periodic, const RunCommandState& before,
++    bool periodic, const RunPersistenceBefore& before,
+     RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId,
+     std::optional<std::size_t> targetSlotOverride,
+     RunPersistenceFallbackDirective fallbackDirective,
+@@ -2392,7 +2404,7 @@
+         prepared.commandId = commandId;
+         prepared.oldRunRevision = before.runRevision;
+         prepared.newRunRevision = snapshot.runRevision;
+-        prepared.oldTransitionSequence = before.processState.transitionSequence;
++        prepared.oldTransitionSequence = before.transitionSequence;
+         prepared.newTransitionSequence =
+             snapshot.processState.transitionSequence;
+         if (currentHead_.has_value()) {
+@@ -2563,6 +2575,7 @@
+     RunCommandState& current, const CommandDecision& decision,
+     const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     const bool freshProductiveStart =
+         decision.kind == CommandKind::StartProgram ||
+         decision.kind == CommandKind::StartManualHolding;
+@@ -2580,12 +2593,14 @@
+     const FreshStartSnapshotProvenance& provenance,
+     const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     return persistCommandInternal(current, decision, time, liveSensorEvidence,
+                                   &provenance);
+ }
+ 
++template <typename Decision>
+ RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
+-    RunCommandState& current, const CommandDecision& decision,
++    RunCommandState& current, const Decision& decision,
+     const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence,
+     const FreshStartSnapshotProvenance* freshStartProvenance) {
+@@ -2684,8 +2699,14 @@
+                       RunPersistenceDurability::Unchanged);
+     }
+ #endif
+-    workingSet_.candidate = current;
+-    const auto apply = applyRunCommand(workingSet_.candidate, decision);
++    CommandStatus apply;
++    if constexpr(std::is_same_v<Decision,CommandDecisionView>) {
++        if(&decision.after != &workingSet_.candidate || !commandBorrowed_) return result(RunPersistenceResultStatus::InvalidDecision);
++        apply=validateRunCommand(current,decision);
++    } else {
++        workingSet_.candidate = current;
++        apply=applyRunCommand(workingSet_.candidate,decision);
++    }
+     if (apply != CommandStatus::Applied)
+         return result(apply == CommandStatus::StaleState
+                           ? RunPersistenceResultStatus::StaleDecision
+@@ -2716,12 +2737,16 @@
+         return result(RunPersistenceResultStatus::InvalidDecision,
+                       RunPersistenceStep::CandidateApply,
+                       RunPersistenceTechnicalReason::InvalidProjection);
++    const RunPersistenceBefore frozenBefore = [&]() {
++        if constexpr(std::is_same_v<Decision,CommandDecisionView>) return RunPersistenceBefore(decision.guard);
++        else return RunPersistenceBefore(current);
++    }();
+     const auto persisted = writeSnapshot(
+-        workingSet_.snapshot, time, false, current,
++        workingSet_.snapshot, time, false, frozenBefore,
+         RunPersistenceMutationKind::Command, decision.envelope.id);
+     if (persisted.status != RunPersistenceResultStatus::Applied)
+         return persisted;
+-    if (applyRunCommand(current, decision) != CommandStatus::Applied) {
++    if (validateRunCommand(current, decision) != CommandStatus::Applied) {
+         state_ =
+             RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;
+         return result(
+@@ -2730,6 +2755,8 @@
+             RunPersistenceTechnicalReason::InvalidProjection,
+             RunPersistenceDurability::Changed);
+     }
++    if constexpr(std::is_same_v<Decision,CommandDecisionView>) current=std::move(workingSet_.candidate);
++    else current=decision.after;
+     if (freshProductiveStart) {
+         current.actuatorPlannerParametersSnapshot.reset();
+         if (freshStartProvenance->present()) {
+@@ -2762,6 +2789,7 @@
+     RunCommandState& current, const RunCommandState& candidate,
+     const RunCheckpointTime& time,
+     RunPersistenceFallbackDirective fallbackDirective) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     if (state_ != RunPersistenceCoordinatorState::Ready &&
+         state_ != RunPersistenceCoordinatorState::LoadedActiveRun) {
+         return unavailableResult();
+@@ -2809,6 +2837,7 @@
+     RunCommandState& current, const TransitionDecision& decision,
+     const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     if (state_ != RunPersistenceCoordinatorState::Ready)
+         return unavailableResult();
+     if (!decision.proposed() || !eligibleTransition(decision.reason))
+@@ -2922,6 +2951,7 @@
+ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
+     const RunCommandState& current, const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty) {
+         return result(RunPersistenceResultStatus::NoActiveRun);
+     }
+@@ -3016,6 +3046,7 @@
+     RunCommandState& current, const SensorSelectionStateMutation& mutation,
+     const RunCheckpointTime& time,
+     const CrossRolePlausibilityContext* liveSensorEvidence) {
++    if(commandBorrowed_) return borrowedBusyResult();
+     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty)
+         return result(RunPersistenceResultStatus::NoActiveRun);
+     if (state_ != RunPersistenceCoordinatorState::Ready)
+@@ -3132,3 +3163,30 @@
+ }
+ 
+ }  // namespace fermentation
++
++namespace fermentation {
++RunPersistenceResult RunPersistenceCoordinator::borrowedBusyResult() const {
++ auto r=result(RunPersistenceResultStatus::Busy); r.coordinatorState=RunPersistenceCoordinatorState::Busy; return r;
++}
++std::optional<RunPersistenceCoordinator::CommandOperation> RunPersistenceCoordinator::beginCommandOperation() {
++ if(commandBorrowed_ || state_==RunPersistenceCoordinatorState::Busy) return std::nullopt;
++ commandBorrowed_=true;
++ return CommandOperation{this};
++}
++RunCommandState* RunPersistenceCoordinator::commandCandidate(CommandOperation& op) {
++ if(op.owner_!=this || !commandBorrowed_) return nullptr;
++ return &workingSet_.candidate;
++}
++void RunPersistenceCoordinator::releaseCommandOperation() {
++ // Release dynamic children without constructing a full RunCommandState temporary.
++ clearActiveRunState(workingSet_.candidate);
++ std::string{}.swap(workingSet_.candidate.activeRunId);
++ commandBorrowed_=false;
++}
++RunPersistenceResult RunPersistenceCoordinator::persistBorrowedCommand(CommandOperation& op,
++ RunCommandState& current, const CommandDecisionView& d, const RunCheckpointTime& time,
++ const CrossRolePlausibilityContext* live, const FreshStartSnapshotProvenance* provenance) {
++ if(op.owner_!=this || !commandBorrowed_ || &d.before!=&current) return result(RunPersistenceResultStatus::InvalidDecision);
++ return persistCommandInternal(current,d,time,live,provenance);
++}
++}
+--- a/lib/fermentation_app/src/run_persistence_coordinator.hpp
++++ b/lib/fermentation_app/src/run_persistence_coordinator.hpp
+@@ -194,7 +194,32 @@
+     RunCommandState& current,
+     const CrossRolePlausibilityContext& liveSensorEvidence);
+ 
++struct RunPersistenceBefore {
++ const std::uint32_t runRevision;
++ const std::uint32_t transitionSequence;
++ RunPersistenceBefore(const RunCommandState& state):runRevision(state.runRevision),transitionSequence(state.processState.transitionSequence){}
++ RunPersistenceBefore(const CommandApplyGuard& guard):runRevision(guard.runRevision),transitionSequence(guard.processState.transitionSequence){}
++};
+ class RunPersistenceCoordinator {
++   public:
++    class CommandOperation {
++        friend class RunPersistenceCoordinator;
++        RunPersistenceCoordinator* owner_;
++        explicit CommandOperation(RunPersistenceCoordinator* p):owner_(p){}
++      public:
++        CommandOperation(const CommandOperation&)=delete;
++        CommandOperation& operator=(const CommandOperation&)=delete;
++        CommandOperation(CommandOperation&& o) noexcept:owner_(o.owner_){o.owner_=nullptr;}
++        ~CommandOperation(){if(owner_) owner_->releaseCommandOperation();}
++    };
++   private:
++    friend class FermentationApplication;
++    std::optional<CommandOperation> beginCommandOperation();
++    bool commandOperationActive() const { return commandBorrowed_; }
++    RunCommandState* commandCandidate(CommandOperation&);
++    RunPersistenceResult persistBorrowedCommand(CommandOperation&, RunCommandState&,
++      const CommandDecisionView&, const RunCheckpointTime&,
++      const CrossRolePlausibilityContext*, const FreshStartSnapshotProvenance*);
+    public:
+     // Private implementation data is declared here solely because the
+     // canonical wire helpers in the implementation unit need their complete
+@@ -305,8 +330,9 @@
+         RunPersistenceFallbackDirective fallbackDirective = {});
+ 
+    private:
++    template <typename Decision>
+     [[nodiscard]] RunPersistenceResult persistCommandInternal(
+-        RunCommandState& current, const CommandDecision& decision,
++        RunCommandState& current, const Decision& decision,
+         const RunCheckpointTime& time,
+         const CrossRolePlausibilityContext* liveSensorEvidence,
+         const FreshStartSnapshotProvenance* freshStartProvenance);
+@@ -325,12 +351,12 @@
+     // records a mutation kind).
+     [[nodiscard]] RunPersistenceResult writeSnapshot(
+         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+-        bool periodic, const RunCommandState& before,
++        bool periodic, const RunPersistenceBefore& before,
+         RunPersistenceMutationKind mutationKind,
+         std::optional<CommandId> commandId = std::nullopt);
+     [[nodiscard]] RunPersistenceResult writeSnapshotCore(
+         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+-        bool periodic, const RunCommandState& before,
++        bool periodic, const RunPersistenceBefore& before,
+         RunPersistenceMutationKind mutationKind,
+         std::optional<CommandId> commandId,
+         std::optional<std::size_t> targetSlotOverride,
+@@ -362,6 +388,9 @@
+     device_platform::StorageEpoch epoch_;
+     RunCheckpointSchedule schedule_;
+     RunPersistenceWorkingSet workingSet_;
++    void releaseCommandOperation();
++    bool commandBorrowed_{false};
++    RunPersistenceResult borrowedBusyResult() const;
+     RunPersistenceCoordinatorState state_{
+         RunPersistenceCoordinatorState::Uninitialized};
+     std::optional<RunPersistenceRawRecord> slots_[2];
+--- a/lib/fermentation_app/src/run_snapshot.cpp
++++ b/lib/fermentation_app/src/run_snapshot.cpp
+@@ -343,16 +343,21 @@
+     static_cast<void>(restoreTag);
+ }
+ 
+-std::optional<ActiveRun> ActiveRun::start(
+-    const ProgramRunSource& source,
+-    std::optional<RunProgramSourceRevision> sourceProgramRevision) {
+-    EffectiveRunValues initialValues;
+-    if (!makeInitialEffectiveRunValues(source, sourceProgramRevision,
+-                                       initialValues)) {
+-        return std::nullopt;
+-    }
+-    return ActiveRun{{source, programSourceKind(source), sourceProgramRevision},
+-                     initialValues};
++ActiveRun::ActiveRun(StartConstructionTag, const ProgramRunSource& source,
++ std::optional<RunProgramSourceRevision> rev, const EffectiveRunValues& values)
++ : snapshot_{source, programSourceKind(source), rev}, effectiveValues_(values) {}
++bool ActiveRun::startInto(const ProgramRunSource& source,
++ std::optional<RunProgramSourceRevision> rev, std::optional<ActiveRun>& out) {
++ EffectiveRunValues initial;
++ if(!makeInitialEffectiveRunValues(source,rev,initial)) return false;
++ out.emplace(StartConstructionTag{},source,rev,initial);
++ return true;
++}
++std::optional<ActiveRun> ActiveRun::start(const ProgramRunSource& source,
++ std::optional<RunProgramSourceRevision> rev) {
++ std::optional<ActiveRun> out;
++ if(!startInto(source,rev,out)) return std::nullopt;
++ return out;
+ }
+ 
+ std::optional<ActiveRun> ActiveRun::start(
+--- a/lib/fermentation_app/src/run_snapshot.hpp
++++ b/lib/fermentation_app/src/run_snapshot.hpp
+@@ -178,6 +178,11 @@
+     ActiveRun(RestoreConstructionTag restoreTag, RunProgramSnapshot snapshot,
+               EffectiveRunValues initialValues);
+ 
++    struct StartConstructionTag { private: StartConstructionTag()=default; friend class ActiveRun; };
++    ActiveRun(StartConstructionTag, const ProgramRunSource&,
++        std::optional<RunProgramSourceRevision>, const EffectiveRunValues&);
++    static bool startInto(const ProgramRunSource&,
++        std::optional<RunProgramSourceRevision>, std::optional<ActiveRun>&);
+     [[nodiscard]] static std::optional<ActiveRun> start(
+         const ProgramRunSource& source,
+         std::optional<RunProgramSourceRevision> sourceProgramRevision);
+--- a/lib/fermentation_app/src/web_application_routes.cpp
++++ b/lib/fermentation_app/src/web_application_routes.cpp
+@@ -629,19 +629,19 @@
+     context.monotonicMillis = nowMs;
+     context.expected = run.expected;
+ 
+-    const auto prepared = application_.prepareEnvelope(context, run.intent);
++    auto prepared = application_.prepareEnvelope(context, run.intent);
+     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
+         !prepared.request.has_value()) {
+         projected = projectRequestStatus(prepared.status);
+     } else {
+-        const auto confirmed = application_.confirmPrepared(prepared);
+-        if (confirmed.status !=
++        const auto confirmedStatus = application_.confirmPreparedInPlace(prepared);
++        if (confirmedStatus !=
+                 FermentationApplicationRequestStatus::Prepared ||
+-            !confirmed.request.has_value()) {
+-            projected = projectRequestStatus(confirmed.status);
++            !prepared.request.has_value()) {
++            projected = projectRequestStatus(confirmedStatus);
+         } else {
+             projected = projectCommandResult(
+-                application_.applyConfirmedPrepared(*confirmed.request));
++                application_.applyConfirmedPrepared(*prepared.request));
+         }
+     }
+     return projected;
