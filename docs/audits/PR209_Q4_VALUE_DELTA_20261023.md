@@ -28,6 +28,23 @@ Write-Fehler/Power-cut/Unknown, RAM-only ohne Write und ohne `persistedIds_`, Fo
 Recovery Value=Borrow; Web: beide Intents im Standby und bei aktivem Lauf über den Borrow-Pfad,
 Replay identisch, Borrow freigegeben.
 
+## Fix Verification: Testdelta (Commit `a8a1c41`)
+
+| Nachweis | Test (Assertion) |
+|---|---|
+| Rollback nach `QualificationReset`-Fehler | `test_run_commands::test_sensor_selection_rollback_after_reset_failure_and_not_confirmed`: `QualifyingTarget` ohne `processRunSnapshot`, Entscheidung `AppliedPersistentCandidate` erreicht; Value und View `InvalidInput` (bestätigt und unbestätigt – die Reset-Prüfung liegt vor der Bestätigungsprüfung); `after == before`, Eingangszustand unverändert, kein Event, keine Effects |
+| `NotConfirmed`-Rollback | derselbe Test, normaler Kontext: Value und View `NotConfirmed`, `after == before`, Metadaten identisch (`assertDecisionMetadata`) |
+| persisted-ID-Priorität | `test_run_persistence_coordinator::test_borrowed_view_persisted_id_has_priority_over_sensor_ram_only`: durabel persistierte Start-ID, leeres RAM-ID-Fenster (kontrolliertes Fixture), Entscheidung ist `AppliedRamOnly`; zweimal `AlreadyPersisted`, `writeCount` und `persistedIdCount` unverändert, Phase und `commandSequence` unverändert |
+| Post-Commit-Safety/Stale | `…::test_borrowed_view_post_commit_guard_failure_for_sensor_and_recovery`: Mutation nach dem 3. Write (Safety-Flag bzw. `recoveryEpisodeRevision`) → `PersistenceCommittedApplyFailed`, `Changed`, keine Effects/Event, persistierte-ID-Zahl und `processedCommandCount` unverändert, Sensorphase `UserDecisionRequired`/`Blocked`/Produktmodus bzw. keine `nominalRecoveryAdjustment`; ohne Mutation `Applied` mit +1 ID |
+
+**Fund:** Das Fixture des Recovery-Paritätstests (`…recovery_time_correction_matches_value_path`) lehnte
+den Befehl auf beiden Pfaden gleich ab (`InvalidDecision`), der Vergleich war damit leer. Das
+Fixture setzt jetzt die Fermenting-Prozessfelder wie der bestehende Persistenztest, und der Test
+prüft für den fehlerfreien Lauf `Applied` und die gesetzte Anpassung. Kein Produktfehler.
+
+Native Suiten: `test_run_commands` 53, `test_run_persistence_coordinator` 173,
+`test_fermentation_ui_commands` 14, `test_web_application_routes` 120 – alle PASS.
+
 ## Stackbilanz (beide Profile identisch)
 
 Dateien: [SUMMARY](PR209_Q4_VALUE_DELTA_20261023_SUMMARY.tsv),
