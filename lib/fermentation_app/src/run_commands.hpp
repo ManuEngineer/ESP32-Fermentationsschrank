@@ -519,6 +519,25 @@ void decideManualStartInto(const RunCommandState& current,
     const SensorSelectionCommandRequest& request,
     const CrossRolePlausibilityContext& plausibility);
 
+void decideApplyRecoveryTimeCorrectionInto(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request,
+    CommandDecision& destination);
+void decideApplyRecoveryTimeCorrectionInto(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request,
+    CommandDecisionView& destination);
+void decideApplySensorSelectionActionInto(
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility,
+    CommandDecision& destination);
+void decideApplySensorSelectionActionInto(
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility,
+    CommandDecisionView& destination);
+
 [[nodiscard]] CommandStatus applyRunCommand(RunCommandState& current,
                                             const CommandDecision& decision);
 [[nodiscard]] const RuntimeMessage* highestPriorityActiveMessage(

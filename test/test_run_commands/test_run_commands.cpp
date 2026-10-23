@@ -2779,6 +2779,58 @@ void test_value_view_equivalence_all_seven_web_commands() {
     });
 }
 
+void test_value_view_equivalence_recovery_and_sensor_selection_commands() {
+    auto recovery = startedProgramState();
+    recovery.processState.state = ProcessState::Fermenting;
+    recovery.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{100U, 300U}};
+    recovery.recoveryEpisodeRevision = 4U;
+    checkValueViewMatrix(recovery, recoveryCorrection(recovery, 20U, 50U, 100U),
+                         [](const auto& s, const auto& r, auto& d) {
+                             decideApplyRecoveryTimeCorrectionInto(s, r, d);
+                         });
+    // Rejected: delta beyond the known upper bound.
+    checkValueViewMatrix(recovery,
+                         recoveryCorrection(recovery, 21U, 500U, 100U),
+                         [](const auto& s, const auto& r, auto& d) {
+                             decideApplyRecoveryTimeCorrectionInto(s, r, d);
+                         });
+    // Rejected: not Fermenting.
+    auto notFermenting = recovery;
+    notFermenting.processState.state = ProcessState::Preheating;
+    checkValueViewMatrix(notFermenting,
+                         recoveryCorrection(notFermenting, 22U, 50U, 100U),
+                         [](const auto& s, const auto& r, auto& d) {
+                             decideApplyRecoveryTimeCorrectionInto(s, r, d);
+                         });
+
+    const auto invalidProduct =
+        plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot());
+    const auto sensorStep = [&invalidProduct](const RunCommandState& basis,
+                                              SensorSelectionUserAction action,
+                                              CommandId id) {
+        checkValueViewMatrix(
+            basis, sensorSelectionRequest(basis, id, action),
+            [&invalidProduct](const auto& s, const auto& r, auto& d) {
+                decideApplySensorSelectionActionInto(s, r, invalidProduct, d);
+            });
+    };
+    auto blocked = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                       ReturnStrategy::ManualReturnToProduct),
+                                   SensorSelectionPhase::UserDecisionRequired,
+                                   SensorPeltierPermission::Blocked,
+                                   RunSensorMode::Product);
+    // Applied (persistent candidate), Applied (role change) and NoChange.
+    sensorStep(blocked, SensorSelectionUserAction::ContinueWithAir, 30U);
+    sensorStep(blocked, SensorSelectionUserAction::RecheckProduct, 31U);
+    auto standby = standbyState();
+    sensorStep(standby, SensorSelectionUserAction::ContinueWithAir, 32U);
+    auto pending = blocked;
+    pending.criticalSafetyEventPending = true;
+    sensorStep(pending, SensorSelectionUserAction::ContinueWithAir, 33U);
+    sensorStep(pending, SensorSelectionUserAction::RecheckProduct, 34U);
+}
+
 void test_view_guard_rechecks_every_safety_and_stale_field() {
     for (unsigned field = 0; field < 11; ++field) {
         auto state = standbyState();
@@ -2850,6 +2902,8 @@ void test_view_rejects_aliased_or_foreign_storage_without_state_mutation() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_value_view_equivalence_all_seven_web_commands);
+    RUN_TEST(
+        test_value_view_equivalence_recovery_and_sensor_selection_commands);
     RUN_TEST(test_view_guard_rechecks_every_safety_and_stale_field);
     RUN_TEST(
         test_view_rejects_aliased_or_foreign_storage_without_state_mutation);
