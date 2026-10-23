@@ -873,3 +873,51 @@ nahen2592/1680-B-Prepare-Requestkonstruktion beauftragen oder HOLD beibehalten.
 Bevorzugt bestehendes Decision-after-Storage untersuchen, kein weiterer
 Heapowner/WorkingSet, kein Budgetwechsel/Worker/Queue. Keine solche weitere
 Variante oder Produktkorrektur aus diesem Auftrag. Q3/C0–C5 und D9 bleiben.
+
+### Q4-Wiederverwendung: Ownership-Stop (2026-10-23)
+
+**IMPLEMENTATION_READY=HOLD; OWNERSHIP_GATE=NOT_PROVEN.** Basis
+`d29f76965c4f5e2c91ddd2199523de79630a152d`, Produkt095f393 unveraendert.
+[Gezielte Evidence](../audits/PR209_Q4_WORKSPACE_20261023.md) ist der aktuelle
+Entscheidstand zu §13; die obigen Heap-/A/B/C-Vorschlaege bleiben historische,
+nicht freigegebene Proben und sind keine Default-Implementierungsrichtung.
+
+Der vorhandene4896-B-Kandidat im12752-B-WorkingSet koennte grundsaetzlich
+das einzige mutierbare after sein: Snapshot und Record liegen daneben,
+keine pauschale Behauptung, der gesamte WorkingSet sei frei. Die private
+Application-Instanz und ihr Serializer sind belegt, ein durchgehender
+Ausleih-/Reentranzvertrag fuer alle Coordinator-Konsumenten dagegen nicht.
+Busy beginnt heute erst nach Candidate-Apply. Rekursive Application-Mutation
+kann nicht allein durch recursive_mutex ausgeschlossen werden. Ein
+before-Referenzalias auf current macht die heutigen Stale-/Safety-Vergleiche
+zu Selbstvergleichen; nur Revisionen zu sichern genuegt insbesondere fuer
+Sensor-/Safety-Locks nicht. Kein beobachteter produktiver Race behauptet.
+
+Damit greift das ausdrueckliche erste Stop-Kriterium des neuen Auftrags:
+**COMBINED_REUSE_PROBE=NOT_RUN_OWNERSHIP_STOP**, keine ungesicherte gemeinsame
+Aliasvariante kompiliert oder als Loesung ausgegeben. Originale Xtensa-.su
+beider Profile erneut gelesen: Application10880, Web2048, Handler544 B;
+Untergrenze13472 B bleibt FAIL. Prepare-Teilpfad mit bekanntem Adapter/
+Dispatcher/handleRun7744 B hat nur448 B arithmetischen Rest vor weiteren
+unbestimmten Unterpfaden. Settings-Teilpfad2928 B unveraendert, Vollketten
+Run/Settings einschliesslich SDK/NVS NOT_PROVEN. Keine neuen View-/Factory-/
+Requestframes oder positive Reserve bewiesen; gestrige Proben nicht addieren.
+
+Realisierter Netto-RAM-Effekt gegen095f393: Stack0 B / fester Heap0 B /
+dynamischer Produkt-RAM0 B Aenderung. Kein10104-B-Decision- oder zusaetzlicher
+Runowner. Peak-/Lifetime-Bilanz in der Evidence; Unterpuffer, Copy-/Move-/
+Rollback-/Serialisierungsueberlappung und groesster Block einer abgesicherten
+Variante bleiben NOT_PROVEN, keine angenommene Heapgutschrift.
+
+**Owneroption:** durchgehenden Coordinator-eigenen Besitzvertrag fuer den
+vorhandenen Kandidaten plus kleinen unveraenderlichen Guard der exakten
+applyRunCommand-Vergleichsfelder verbindlich abgrenzen; Value/View verwenden
+denselben Entscheidungskern. Erst dann waere eine gemeinsame Probe von
+Domain/Bridge/Application/Coordinator, In-place-ActiveRun und Web-Prepare/
+Confirm mit allen Konsumenten sinnvoll. Post-Commit-Pruefung und
+PersistenceCommittedApplyFailed bleiben erhalten; kein frueher RAM-Apply.
+Das ist eine neue interne API-/Lebensdauergrenze, noch kein belegter kleiner
+Framefix. Alternativ HOLD beibehalten; keine automatische Folgeoptimierung.
+Alle bestehenden Semantik-/Regression-/OOM-/Vollkettenvertraege gelten weiter;
+keine neuen Tests/Builds/Hardwarelaeufe ausgefuehrt. **Zusaetzliche
+Produktimplementierung NICHT FREIGEGEBEN**, auch nicht durch diesen Plan-SHA.
