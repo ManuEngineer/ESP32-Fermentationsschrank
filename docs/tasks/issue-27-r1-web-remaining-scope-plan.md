@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 2.4 (gezieltes Run-Stack-Diagnose-/Plandelta §13, Ressourcen-Refactor ergaenzt) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 NICHT FREIGEGEBEN · PRODUKTARBEIT WEITER HOLD.**
+**2026-10-23 · PLAN-REVISION 2.4 (gezieltes Run-Stack-Diagnose-/Plandelta §13, Ressourcen-Refactor/Head-Recycling ergaenzt) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 NICHT FREIGEGEBEN · PRODUKTARBEIT WEITER HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -1111,3 +1111,113 @@ keine zugesagte Einsparung. Ohne diese explizite Scopeentscheidung bleibt
 HOLD; hier keine weitere Probe automatisch beginnen. **Zusaetzliche
 Produktimplementierung NICHT FREIGEGEBEN**, weder durch die Planung noch
 durch deren neue exakte Commit-SHA. Danach anhalten.
+
+### Q4-Head-Recycling und RAM-Duplikatbilanz (2026-10-23)
+
+**Aktueller Entscheid: IMPLEMENTATION_READY=HOLD; FULL_CHAIN_RESERVE=NOT_PROVEN.**
+Basis `a38ba893091350f1c325b0fc379f25883d87703c`, Produkt095f393 unveraendert.
+Der neue Ownerauftrag autorisiert genau die fortgesetzte gemeinsame Headprobe
+und gezielte Duplikatbilanz, **keine Produktumsetzung**. Vorige Q4-Abschluesse
+sind historische Entscheidstaende. [Gezieltes Evidence-Delta](../audits/PR209_Q4_RESOURCE_REFACTOR_20261023.md#head-recycling-und-priorisierte-ram-bilanz-2026-10-23)
+enthaelt Patch, finale Target-ABI/Frames/Pfade und die Bilanz aller fuenf
+Prioritaeten; kein zweiter Plan und keine zweite Implementierungsvariante.
+
+**Ein Head, derselbe Transaktionskern.** In der temporaeren
+`run_persistence_coordinator.cpp::writeSnapshotTransaction` genau ein
+optionaler Headowner: Prepared encodieren, denselben Speicher per
+reset/emplace neu initialisieren, Committed encodieren.8 B unveraenderliche
+erste Headrevision ersetzen den nach Reset ungueltigen Prepared-Wert;
+Committedrevision exakt+1, bestehender Overflowcheck bleibt. Keine Headalias-
+Referenz ueber Reset, keine versteckte zweite Valueflaeche. Beide unabhaengigen
+kodierten Headbytes stehen vor dem ersten Write bereit; bei Prepared-
+Encodefehler Committed wie bisher noch encodieren und identische Fehlerstufe
+melden. Periodisch bleibt nur Committed erforderlich. Physisches OLD,
+Head-OLD, NEW und Unknown-Readback bleiben eigenstaendige Byteevidenz.
+Storefolge/Durability/Indeterminate/fruehe Slotadoption/Recovery und erst
+nachfolgender Post-Commit-Guard/Current-Apply bleiben erhalten. Quelle/Compiler
+belegen die Speicherform, nicht die noch ungetestete Laufzeitsemantik.
+
+**Finale gemeinsame Messung, beide Originalprofile:**22 App-/Konsumenten-TUs
+mit allen bisherigen Borrow/Guard/View-/ActiveRun-/Web-/Record-/Settings-
+Migrationsaenderungen plus zwei Target-ABI-Objekte. SDK-Evidence unveraendert
+hashgeprueft wiederverwendet; keine neuen Links oder Firmwarebuilds.
+Head320 B/Alignment8; optionaler Head328/8 + eingefrorene Revision8 statt
+zwei320-B-Heads:304 B weniger lokale Objektflaeche. Transaction **976→672 B**;
+Core224 / RecordPrepare128 / Internal768 / Write208 B unveraendert. GIMPLE
+zeigt keinen weiteren Head-Value-Temporary; Codec-Returns sind optionale
+Strings28 B. **Der finale Stand mit explizitem Revisionsfreeze ist massgeblich**.
+
+Bekannte gleichzeitig aktive Teilketten: **Run-Store/NVS/Flash7456 B**
+(−304 gegen a38ba893), Run-Validierung7040/7072 B, **Settings6960 B**.
+Prepare6016 / Confirm4288 / Decision6144 / Ack-Mute4816 B bleiben. Head-Encoding
+bekannte6560 B und Post-Commit-Guard5344 B sind getrennte Phasen; folgende
+Move-/Cleanup-/Freigabeziele bleiben offen. Keine Addition isolierter Gewinne.
+
+**8-kB-Entscheidung:** Head-Recycling beseitigt den bisher bekannten
+Reservefehlbetrag;8192−7456=736 B Rest, nach512-B-Boden nur **224 B** vor
+weiteren unaufgeloesten Anteilen (Settings720 B). Ohne vollstaendige SDK-/ROM-/
+libc-/NVS-/Envelope-/Readback-/OOM-/Cleanup-/Alias-/Zyklenobergrenzen ist eine
+vollstaendige Loesung innerhalb8192 B **nicht belegt**. Keine Unmoeglichkeit
+von8 kB behauptet, aber keine belastbare Implementierungs-/Reserveempfehlung.
+Unknown bleibt NOT_PROVEN; weder Compilerframes noch dieser Rest sind HWM.
+
+**RAM-Prioritaeten, maximal fuenf Massnahmen:**
+
+1. Settings Read/Decode: bestaetigter moeglicher2R-Kollisionszweig bis65626
+   logische Zeichen (zwei Requests mindestens je32814 B inkl NUL); davon
+   getrennt R+P-Decode bis65581 logische Bytes. Exakten Bytevergleich behalten.
+   Konsumierendes Decode im bestehenden Pruefkern ist separater Follow-up,
+   kein pauschaler Loesungsnachweis: groesster Readblock/2R bleiben.
+2. Run-Decision/ActiveRun: vorhandenen Kandidaten, Guard und gemeinsamen
+   Value/View-Kern der Probe behalten; owning before/after fuer direkte
+   Konsumenten und unveraenderliche Safety-/Stale-Basis nicht global entfernen.
+3. Run-Persistenz: Head wie gemessen recyceln; Payload/Encoding endet vor
+   Store, notwendige OLD/NEW-/Readback-/Slot-/Recoverykopien erhalten. WS-
+   Snapshot3904 B und RawRecord3952 B sind keine belegte frei verfuegbare
+   Austauschflaeche. IDfenster256 B ist ein konkret bezifferter weiterer
+   Ownershipansatz, jetzt keine Implementierung.
+4. UI/Web-Praesentationskatalog: ganze Katalogkopie beim Web-GET und alt+neu
+   beim Cache-Refill bestaetigt; ProgramDocument200 B, bis16 Document-Slots
+   plus Strings/Notes/Vektoren, Gesamtpeak NOT_MEASURED. Nur separater Follow-up
+   fuer kurzlebige bestehende Runtime-Lease beim Read/Encode; keine neue
+   langlebige Lease oder paralleles UI-Modell. Snapshot-Revisionsbasis,
+   projectInto-/Input-Pufferrecycling und HeaderNetwork-Eviction erhalten.
+5. Web Prepare/Confirm: ein856-B-Resultat /1200-B-Webframe wie im gemeinsamen
+   Prototyp, keine zweite Bestaetigungsidentitaet; verbleibende Requestquellen
+   nicht ohne Lebensdauervertrag vorzeitig freigeben. Kein neues Delta gegen
+   a38ba893 und keine automatische weitere Webframe-Probe.
+
+Besitzer, Quellstellen, maximale relevante Typ-/Formatgroessen bzw.
+NOT_MEASURED, Ueberlappung, Safetybedarf, Vermeidbarkeit, konkrete Massnahme,
+Stack-/Festheap-/Dynamikeffekt und Verifikationsweg stehen je Prioritaet in
+der [kompakten Bilanz](../audits/PR209_Q4_HEAD_20261023_RAM.tsv). Theoretische
+Maxima/verschiedene Phasen sind kein gemessener globaler Peak. Graphkopien
+mit shared_ptr sind keine neuen Vollkataloge. Headdelta fester Heap0 B / neuer
+Block0 B; Coordinator21352 B und Q3-Scratch1856/8 B unveraendert. Dynamischer
+Peak und groesster insgesamt benoetigter Block NOT_PROVEN. String-/Vektor-OOM
+bei -fno-exceptions nicht durch ein Enum behandeln; kein falscher Persistenz-
+oder OwningOutcome-Erfolg, Replay nicht neu starten.
+
+**Zwei Scopeoptionen, keine weitere Probeserie:** A priorisiert Run-
+Persistenzphasen/Parametergrenze:256-B-IDduplikat in bestehender Snapshotflaeche
+vermeiden; IDs erst nach Write und Post-Check uebernehmen. Spaetere gemeinsame
+Compilerziele Internal≤512 statt768 und Write≤80 statt208 B, **keine gemessenen
+Gewinne**, keine daraus addierte Kettenprognose; Snapshot-Aliasing/IDs/Recovery
+sind Risiken, kein neuer grosser Heapowner. B separat Settings: konsumierendes
+semantisches Envelope-Decode kann einen Payloadrequest bis32769 B sparen;
+Stack/Totalpeak offen, grosser Read und2R-Kollisionsnachweis bleiben. Nur
+nach validierter Header-/CRC-/Referenzbasis, nie OLD/NEW/Root-/Recoverybytes
+vorzeitig veraendern. Kein zweiter Codec/Buffer-Manager. Der Owner entscheidet
+einen zusammenhaengenden Implementierungsscope; hier keine weitere rein
+analytische Optimierungsiteration beginnen.
+
+Spaeter nur direkt betroffene Tests aus dem vorherigen §13 konkret ergaenzen:
+beide Head-Goldenbytes und getrennte Encodefehler vor jedem Write, alle
+Transaktions-/periodischen-/Recovery-Fallback-Konsumenten mit unveraenderten
+Return-/Durabilitywerten; OLD/NEW/Absent/Other/Readback/Indeterminate,
+Post-Write-Stale/Safety/CommittedApplyFailed; Value/View/Borrow/Reentranz/
+Replay und kontrollierte Allocation-/Heap-/OOM-/Cleanup-Evidence. Keine
+allgemeinen Tests/Governanceablaeufe wiederholen. Jetzt Compile-/ABI-/Hash-/
+Patch-/Frameparitaets-/Arithmetik-/Linkpruefung, **keine** Semantik-/Golden-/
+Heap-/OOM-/HWM-/Hardwarequalifikation. **STOP; Produktimplementierung bleibt
+NICHT FREIGEGEBEN. Weitere Diagnoseiteration nur mit neuem Ownerentscheid.**

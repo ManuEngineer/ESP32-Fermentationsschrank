@@ -1,5 +1,8 @@
 # PR #209 – Q4-Ressourcen-Refactor: begrenzte Entscheidungsevidence
 
+Aktueller Stand: [Head-Recycling und RAM-Duplikatbilanz unten](#head-recycling-und-priorisierte-ram-bilanz-2026-10-23).
+Die folgende urspruengliche Refactor-Bilanz bleibt historische Ausgangsevidence.
+
 **IMPLEMENTATION_READY=HOLD; FULL_CHAIN_RESERVE=NOT_PROVEN.** Planungsbasis
 `c41a8076e9bafd5ab9040ba16b58200150dddf7b`, Produkt/Firmware unveraendert
 `095f393f0eed4eb95944c164a8e967ce973c3fc9`. Verbindlicher Plan bleibt
@@ -174,3 +177,235 @@ Probe oder Produktumsetzung. Ohne diesen erweiterten Scope bleibt HOLD.
 PASS: beide finalen Compilerprofile, Patchrekonstruktion, Hash-/Frame-/
 Phasenarithmetik und Dokumentationsabgleich. Native-/Golden-/Heaptrace-/
 HWM-Tests nicht ausgefuehrt; Produkt-/Testquellen und Firmware unveraendert.
+
+## Head-Recycling und priorisierte RAM-Bilanz (2026-10-23)
+
+**Aktueller Entscheid: IMPLEMENTATION_READY=HOLD; FULL_CHAIN_RESERVE=NOT_PROVEN.**
+Auftrag/Basis `a38ba893091350f1c325b0fc379f25883d87703c`. Die vorstehenden
+Abschnitte sind die historische Ausgangsbilanz. Produkt/Firmware095f393,
+Q3 und Budgets bleiben unveraendert. Eine einzige fortgesetzte Quellvariante,
+keine neue isolierte Optimierungsreihe oder Produkt-/Testcodeaenderung.
+
+### Ein Speicherplatz, zwei notwendige Bytefolgen
+
+`writeSnapshotTransaction` verwendet genau
+`std::optional<RunPersistenceHead> headStorage{std::in_place}`. Normaler
+Commandpfad: Prepared befuellen und unveraendert encodieren; Byteergebnis
+besitzt seinen Puffer; `reset()`/argumentloses `emplace()` bauen Committed
+in **derselben** Speicherflaeche auf. Keine Headreferenz ueberlebt den Reset.
+Ein eingefrorener8-B-Wert `firstHeadRevision` erhaelt die zuvor im Prepared
+gehaltene Revision: Committed bekommt exakt diesen Wert+1, keinen erneut
+gelesenen Coordinatorzaehler. Der bestehende Preflight prueft Overflow.
+Der ohnehin vorhandene konstante40-B-Checkpointverweis bleibt. Keine zweite
+vollstaendige Headkopie oder zusaetzliche Metadatensammlung.
+
+PreparedBytes und CommittedBytes sind weiterhin **unterschiedliche owning
+Strings**, beide vor dem ersten Storewrite vorhanden. Selbst wenn Prepared-
+Encoding scheitert, wird Committed wie vorher noch encodiert; die bisherige
+Fehlerstufenauswahl bleibt. Der periodische Pfad benoetigt wie vorher nur
+Committed. Physisches OLD, altes Head-OLD und unabhaengiges Unknown-Readback
+bleiben. Die Storeaufrufe referenzieren Bytefolgen, nicht den recycelten
+Prepared-Wert. Prepared→Slot→Committed, fruehe Slotadoption, Zaehler,
+Durability/Indeterminate, Post-Write-Guard und RAM-Apply bleiben derselbe
+Kern. Committed wird erst nach Written nach currentHead verschoben.
+Das ist ein quellseitiger Vertragsabgleich, **kein semantischer Test-PASS**.
+
+### Gemeinsamer finaler Compiler-/ABI-Nachweis
+
+Quelle `/tmp/pr209-q4-head-recycling/src`,139 Dateien, genau eine weitere
+Dateiaenderung gegen a38ba893-Prototyp. [Delta-Patch](PR209_Q4_HEAD_20261023.patch)
+nur auf dessen rekonstruierte temporaere Kopie, `git apply --unidiff-zero`.
+[Quellmanifest](PR209_Q4_HEAD_20261023_SOURCES.tsv), Bundle-SHA256
+`4289b3ac95178c3c267e158583cfe6cc379915537396c955cb1d7c4d014f70fc`.
+Alle Borrow/Guard/View-/Factory-/Web-/Record-/Settings-Migrationsaenderungen
+sind gleichzeitig enthalten. Je Profil elf App-/Konsumenten-TUs mit echten
+Originalflags erneut kompiliert;22 finale TU-Objekte plus zwei ABI-Objekte.
+[Exakte Befehle/Objekthashes](PR209_Q4_HEAD_20261023_COMMANDS.jsonl).
+Unveraenderte SDK-/Adapter-/Codec-Evidence aus den vorigen Messungen wird
+hashgeprueft wiederverwendet; keine angeblich neu ausgefuehrten SDK-/Firmwarebuilds.
+
+[Target-ABI](PR209_Q4_HEAD_20261023_ABI.tsv) aus sizeof/alignof-Konstanten in
+Xtensa-Objekten, [Probequelle](PR209_Q4_HEAD_20261023_ABI.cpp.txt), nicht Host64.
+Head320 B/Alignment8, optionaler Head328/8, optionale Stringrueckgabe28/4.
+Zwei Headwerte640 B werden durch328+8=336 B ersetzt:304 B weniger lokale
+Objektflaeche. [GIMPLE-Deklarationen](PR209_Q4_HEAD_20261023_GIMPLE.txt) zeigen
+nur diesen Headowner; weitere Headnamen sind Pointer/Referenzen, die drei
+Codec-Rueckgabetemporaries sind optionale Strings, keine versteckten Headwerte.
+Der finale Stand friert die Revision explizit ein; ein Zwischenstand ohne
+8-B-Freeze mit656-B-Frame ist **nicht** die hier bilanzierte Quelle.
+
+| gemessener Frame, beide Profile | a38ba893 B | final B |
+|---|---:|---:|
+| Transaction | 976 | **672** |
+| Core / Record-Prepare / Internal / Write | 224 /128 /768 /208 | unveraendert |
+| Application / Web / Handler | 1312 /1200 /544 | unveraendert |
+| Head-Defaultkonstruktor / Reset | keine Gutschrift | je32 |
+| Settings ReadProgram / CatalogValidator | 240 /1088 | unveraendert |
+
+[Rohe gemeinsame Frames](PR209_Q4_HEAD_20261023_FRAMES.tsv) enthalten auch
+Value/View und alle sieben Web-Decisionkerne: Program288, Manual320,
+Stop/Completion256, Adjustment416, Ack/Mute48 B; Visitoren32 B.
+[Phasenpfade](PR209_Q4_HEAD_20261023_PATHS.tsv),
+[unaufgeloeste Symbole je erreichbarer Wurzel](PR209_Q4_HEAD_20261023_UNKNOWN.tsv).
+
+| berechneter gleichzeitig aktiver bekannter Pfad | final B | Aenderung zu a38ba893 |
+|---|---:|---:|
+| Run-Store/NVS/Flash | **7456** | **−304** |
+| Run-Recordvalidierung normal / ausgerichtet | 7040 /7072 | 0 |
+| Head-Encoding, bekannte Anteile | 6560 | kein Obergrenzennachweis |
+| Post-Commit-Guardvalidierung, ohne folgenden Move | 5344 | kein Obergrenzennachweis |
+| Settings-Factory-/Validierungszweig | **6960** | 0 |
+| Prepare / Confirm / Decision / Ack-Mute | 6016 /4288 /6144 /4816 | 0 |
+
+Store7456=Prefix1856+Web1200+App1312+Borrow48+Internal768+Write208+Core224
++Transaction-/Store-/NVS-/Flashunterpfad1840. Head-Encoding und Write/Readback
+sind **verschiedene** Phasen; Write/Core sind beim Post-Commit-Check bereits
+zurueckgekehrt. Cleanup hat einen bekannten Release-Unterpfad352 B, jedoch
+keine abgeschlossene Destruktor-/Freigabeobergrenze. Der echte kontextbezogene
+HTTPD-Prefix und die unverschluesselte Produktpartition bleiben wie oben.
+Keine Addition isolierter Probengewinne.
+
+8192−7456=736 B Rest; gegen den unveraenderten512-B-Reserveboden bleiben
+**224 B**, Settings hat entsprechend720 B oberhalb des Bodens. Fehlende
+Envelope-/String-/Alias-/libc-/Port-/ROM-/indirekte Flash-/NVS-/Readback-/OOM-/
+Abort-/Cleanupziele und geschnittene Zyklen muessen erst vollstaendig begrenzt
+werden. Insbesondere encodeHead160 B allein begrenzt dessen Envelope- und
+Allocatorzweige nicht. Unknown bleibt NOT_PROVEN, keine0-B-Freigabe.
+
+**Das Head-Recycling beseitigt den zuvor bekannten Reservefehlbetrag. Eine
+vollstaendige Loesung des8-kB-Problems ist damit nicht belegt:** nur224 B
+zusaetzlicher Spielraum vor unbekannten Anteilen erlauben keine belastbare
+Vollkettenempfehlung. Keine Behauptung,8 kB seien prinzipiell unmoeglich;
+keine HWM/Hardware-/OOM-/Heap- oder semantische Qualifikation. Keine weitere
+rein diagnostische Variante aus diesem Auftrag.
+
+### Hoechstens fuenf priorisierte Massnahmen / Duplikate
+
+[Vollstaendige kurze Bilanz mit Besitzer, Quellstelle, Groesse, Lebensdauer,
+Safetybedarf, Vermeidbarkeit, Nettoeffekt und Verifikation](PR209_Q4_HEAD_20261023_RAM.tsv).
+Prioritaet ist eine Arbeitsrangfolge nach plausiblem gleichzeitigen Peak und
+verbindlichem Stackblocker, keine Messung eines absoluten System-RAM-Peaks:
+
+1. **Settings Read/Decode, hoechste Heapprioritaet.**
+   `scanGroupMetadata` haelt bei gleicher Revision `read.value` und den erneut
+   gelesenen `previous.value` bis zum **exakten** Bytevergleich. Bei den
+   Eingangsgrenzen sind das2×32813=65626 logische Zeichen, mindestens zwei
+   Requests zu je32814 B inklusive NUL, selbst bei erst spaeter semantisch
+   verworfenen Daten. Dieser Zweig ersetzt Identitaet nicht durch CRC-Gleichheit.
+   Separat entstehen in `loadReferencedRecord`/`decodeEnvelope` R+P bis
+   32813+32768=65581 logische Bytes. Die beiden Phasen **nicht addieren**.
+   Vor der Factoryvalidierung wird der rohe Record bereits per leerem Swap
+   freigegeben: positives vorhandenes Lifetime-Management.
+   Der Metadata-Scan materialisiert selbst keine Payload. Ein unbenutztes
+   `validateStoredReference`-Template mit Bytekopie wird nicht als aktiver
+   dritter grosser Puffer gezaehlt. Kleiner Follow-up: konsumierendes Envelope-
+   Decode nur fuer den semantischen Lader, derselbe Header-/CRC-/Referenzkern;
+   Payloadpuffer bis32769 B Request einsparbar, groesster Readblock und2R-
+   Kollisionsphase bleiben! Q3-Scratch1856=Graph552+PrepareResult1304 B bleibt.
+   Prepared1288 B enthaelt Graphmetadaten/shared_ptr; nicht jeden Graph als
+   erneuten Vollkatalog zaehlen. Factoryarray800 B und gestreamtes Program200 B
+   koennen neben Payload/Runtime/Preview leben; Kapazitaeten/Totalpeak NOT_MEASURED.
+2. **Run-Decision/ActiveRun, verbindlicher Stackblocker.** Produkt besitzt
+   owning before/after in Decision10104 B, weitere Domain-/Visitor-/Factory-
+   Value-/Optionalflaechen. Der Prototyp ersetzt nur den privaten Webpfad durch
+   vorhandenen4896-B-Kandidaten, View536 inklusive Guard216 und direkte
+   ActiveRun-Konstruktion (ActiveRun2816/optional2824 B). Kein grosser neuer
+   Heapowner, externe Value-APIs bleiben. Current/Guard sind notwendige
+   Safety-/Stale-Evidenz. Stackverbesserung ist gemeinsam gemessen; dynamische
+   Run-/Programmstrings, Vektoren und Ruecksetz-/Movepeaks NOT_MEASURED.
+   Massnahme bleibt die bereits gebaute gemeinsame Ownershipvariante, keine
+   globale Abschaffung von before/after oder weitere Probeserie.
+3. **Run-Record/Head/Projektionen.** Payloadreserve8192 B ist auch bei kleinem
+   Payloadinhalt vorhanden; in095f393 haelt der Core sie waehrend des Stores.
+   In der gemeinsamen Variante endet Encoding samt Payload vor der Storephase.
+   Payload→Envelope und Record-/OLD-Kopien sind bereits wie oben reduziert;
+   physisches OLD, NEW, Readback und zwei Headbytes bleiben notwendig.
+   Head-Recycling spart final304 B Stack gegen a38ba893, fester Heap0 B neu,
+   dynamischer Headheap0 B zusaetzlich. WS-Snapshot3904 und Record3952 B samt
+   Slots bleiben getrennte Owner; ihre Programm-Unterpuffer sind noch Kopien.
+   Kein pauschales Freisprechen der12752-B-WS-Flaeche. Ein Zusammenschieben
+   der Projektionen benoetigte alle Recovery-/Load-/Fallback-Lebensdauern und
+   ist jetzt nicht umgesetzt. Konkreter begrenzter Ansatz fuer Stackscope A
+   unten: bestehendes256-B-IDfenster im Snapshot statt lokale zweite IDliste.
+4. **UI-/Web-Praesentationskatalog, separates Follow-up.**
+   `uiPresentationSource` kopiert den ganzen ProgramCatalog, auch fuer einen
+   Web-GET eines einzelnen Programms. Cache-Refill haelt alten und neuen
+   Katalog bis zur erfolgreichen Uebernahme; ein Webread kann daneben eine
+   weitere Kopie besitzen. Je Katalog bis16×200 B logische Document-Slots,
+   Benutzer-Notes bis12×1024 B plus Factorynotes/Namen/IDs/Stufen/Kapazitaeten;
+   kein daraus addierter angeblich gemessener Peak. Snapshot464 B,
+   ProjectionInput272 B, PresentationSource96 B. `published_=snapshot` ist
+   die unabhaengige semantische Revisionsbasis, kein blind entfernbarer Cache.
+   Massnahme nur als Follow-up: fuer synchrones Web-Read/Encode bestehenden
+   Runtime-Lease statt Vollkopie bewerten; keine neue langlebige Lease, die
+   Settingsgenerationen festhaelt. Ein Katalog weniger koennte dynamischen
+   Heap sparen, Totalpeak wegen Generationslebensdauern NOT_PROVEN. Touch-
+   Cache/Locale/Revision/Refillvertrag bleibt. Positiv: projectInto recycelt
+   Vektoren/Run-ID/Programmname, Application den ProjectionInput, HeaderNetwork
+   evictiert die Katalogkopie bereits vor dem Commit. Das nicht zurueckbauen.
+5. **Web Prepare/Confirm, bereits gemeinsam reduziert.** Produkt zwei856-B-
+   Resultate im2048-B-Webframe; Variante ein Result und In-place-Confirm im
+   1200-B-Frame, PreparedRequest824 B. Requestprogramm und seine Strings/
+   Vektoren leben neben Runtime/Kandidat, keine unbewiesene0-B-Dynamik.
+   Kein zusaetzliches Delta gegen a38ba893. Nur die zweite Resultatkopie und
+   grossen Factorytemporaries entfallen; die bestaetigte Requestidentitaet
+   darf unter heutiger synchroner API nicht beliebig frueh freigegeben werden.
+   Value-Confirm/Revalidation/Origin/Replay bleiben; keine weitere Request-
+   Fortsetzungsarchitektur. Verifikation: gezielte Identitaets-/Stale-/Replay-
+   Aequivalenz und Peaktrace von Decode bis Cleanup.
+
+**Gesamtbilanz/OOM:** neuer fester Heap/Block0 B gegen a38ba893; Coordinator
+21352 B unveraendert. Keine neue allokierende Head-Metadatenstruktur. Der
+groesste insgesamt benoetigte zusammenhaengende Block und absoluter/
+differentieller Allocatorpeak bleiben NOT_PROVEN. Die nachgewiesene moegliche
+32814-B-Stringanforderung ist eine Untergrenze fuer diesen Eingang, keine
+allgemeine Kapazitaetsobergrenze. F4/H-RAM-1 sind keine Reservierung. Bei
+-fno-exceptions sind String-/Vektor-/ByteWriter-Requests nicht allgemein
+fallible Statusreturns; ResourceUnavailable heilt keinen abortenden Allocator.
+Ein ausbleibender Write vor OOM ist kein Persistenzerfolg. OOM nach
+Prepared/Slot/Committed kann bereits dauerhafte Bytes hinterlassen; weder
+Unchanged noch ein neuer Versuch darf daraus gefolgert werden. Bestehende
+Recovery-/Durabilityregeln bleiben; DecisionOnly nur vor Owner-Eintritt,
+danach keine Umdeutung echter Owning-/Indeterminate-Ergebnisse. Status-/Replay-
+Vertrag bleibt Vorschlag; keine neue Enum, keine automatische Wiederholung.
+
+### Stop und zwei bezifferte Scopeoptionen fuer den Owner
+
+**A – priorisiert fuer Run:** bestehende Persistenzphasen/Parametergrenze
+verkleinern: vorhandenes Snapshot-IDfenster256 B statt lokaler zweiter32-ID-
+Liste, danach IDs nur nach durablem Write **und** erfolgreichem Post-Check
+uebernehmen. Writewrapper208 B durch schmale referenzierte Parametergrenze
+im selben Kern begrenzen, keine neue grosse Ownerflaeche. Messbare spaetere
+Zielwerte Internal≤512 statt768 B, Write≤80 statt208 B; **unbewiesene Ziele,
+keine verbuchten Gewinne oder neue kombinierte Kettensumme**. Stackpotential
+ist durch das nachgewiesene256-B-Objekt konkret, Compilerresultat offen;
+fester/dynamischer Heap0 neu beabsichtigt. Risiko: Aliasing beim Snapshotreset,
+Persisted-ID-/Fehler-/Post-Commit-Vertrag; keine Anwendung auf sich selbst.
+Erfordert einen zusammenhaengenden Implementierungsscope mit abschliessendem
+Vollketten-/Semantik-/Heapgate, keine weitere isolierte Compiler-Probeserie.
+
+**B – hoechste Heapprioritaet, separater Settingsscope:** den nur semantisch
+benoetigten Record im bestehenden Envelopepruefkern konsumieren statt eine
+zweite Payload zu allokieren. Potentiell ein Request bis32769 B weniger in
+**dieser** Decodephase, fester Heap0 neu; Stackeffekt NOT_MEASURED. R bleibt
+bis32813 Zeichen gross;2R fuer exakte Identitaetskollision bleibt unter der
+heutigen Ganzrecord-Read-API. Daher keine behauptete Loesung des globalen
+Settingspeaks oder des Run-Stackgates. Risiko: rohe Bytebeweise an falscher
+Stelle zerstoeren; consuming nur nach Header/CRC/Referenzpruefung, nicht fuer
+OLD/NEW/Root-/Indeterminate-/Recovery-Vergleiche. Kein paralleler Codec,
+Buffer-Manager oder geaendertes Format. Beide Optionen sind Entscheidungen,
+keine Freigabe weiterer Diagnoseiteration oder Produktimplementierung.
+
+Spaeter nur unmittelbar betroffene Regressionen gemaess §13: Prepared- und
+Committed-Goldenbytes und jeweilige Encodefehler **vor jedem Write**;
+periodisch/Command/Transition/Recovery/Fallback ohne Public-API-Bruch;
+OLD/NEW/Absent/Other/Readback-/Writefehler an jeder Stufe mit identischer
+Durability/Recovery; Write-before-Apply, Post-Commit-Stale/Safety und
+CommittedApplyFailed; Value/View/Borrow/Reentranz/Replay. Differentialtraces
+muessen Allokationsgroessen/-anzahl, Kapazitaet+NUL, groessten Request,
+Allocatorverwaltung und Livepeak bis Fehlercleanup einschliessen, gerade
+Katalogduplikate und konsumierendes Decode. Keine dieser Semantik-/Heap-/
+OOM-/Golden-/HWM-Pruefungen jetzt ausgefuehrt. Compile-/Target-ABI-/Hash-/
+Patch-/Frameparitaets-/Arithmetik-/Linkpruefung PASS ist davon getrennt.
+**STOP; keine zusaetzliche Produktimplementierungsfreigabe und keine weitere
+rein diagnostische Iteration ohne neuen Ownerentscheid.**
