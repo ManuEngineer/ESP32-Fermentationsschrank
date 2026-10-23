@@ -2831,6 +2831,64 @@ void test_value_view_equivalence_recovery_and_sensor_selection_commands() {
     sensorStep(pending, SensorSelectionUserAction::RecheckProduct, 34U);
 }
 
+// Sensor-selection rollback: a real role change during QualifyingTarget whose
+// QualificationReset cannot be applied (no ProcessRunSnapshot) and an
+// unconfirmed mutating action must leave `after` identical to `before` and
+// the input state untouched, for the Value and the borrowed View entry alike.
+void test_sensor_selection_rollback_after_reset_failure_and_not_confirmed() {
+    auto normal = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                      ReturnStrategy::ManualReturnToProduct),
+                                  SensorSelectionPhase::UserDecisionRequired,
+                                  SensorPeltierPermission::Blocked,
+                                  RunSensorMode::Product);
+    auto resetFails = normal;
+    resetFails.processState.state = ProcessState::QualifyingTarget;
+    resetFails.processRunSnapshot.reset();
+    const auto invalidProduct =
+        plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot());
+    // The reset check precedes the confirmation check (existing order), so an
+    // unconfirmed request in the failing context is also InvalidInput; the
+    // pure NotConfirmed rollback uses the normal context.
+    struct Case {
+        const RunCommandState* basis;
+        bool confirmed;
+        CommandStatus expected;
+    };
+    const Case cases[] = {{&resetFails, true, CommandStatus::InvalidInput},
+                          {&resetFails, false, CommandStatus::InvalidInput},
+                          {&normal, false, CommandStatus::NotConfirmed}};
+    for (const auto& c : cases) {
+        auto current = *c.basis;
+        auto request = sensorSelectionRequest(
+            current, 60U, SensorSelectionUserAction::ContinueWithAir);
+        request.envelope.confirmed = c.confirmed;
+        const auto unchanged = current;
+        CommandDecision value;
+        RunCommandState candidate;
+        CommandDecisionView view(current, candidate);
+        decideApplySensorSelectionActionInto(current, request, invalidProduct,
+                                             value);
+        decideApplySensorSelectionActionInto(current, request, invalidProduct,
+                                             view);
+        // The mutating decision was reached (not rejected earlier).
+        TEST_ASSERT_TRUE(
+            value.sensorSelectionApplyStatus ==
+            SensorSelectionApplyStatus::AppliedPersistentCandidate);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(c.expected),
+                              static_cast<int>(value.status));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(c.expected),
+                              static_cast<int>(view.status));
+        assertDecisionMetadata(value, view);
+        TEST_ASSERT_TRUE(equalRunCommandStates(value.before, value.after));
+        TEST_ASSERT_TRUE(equalRunCommandStates(view.before, view.after));
+        TEST_ASSERT_TRUE(equalRunCommandStates(value.after, view.after));
+        TEST_ASSERT_TRUE(equalRunCommandStates(unchanged, current));
+        TEST_ASSERT_FALSE(value.sensorSelectionEvent.has_value());
+        TEST_ASSERT_FALSE(view.sensorSelectionEvent.has_value());
+        TEST_ASSERT_EQUAL_UINT32(0U, view.effectCount);
+    }
+}
+
 void test_view_guard_rechecks_every_safety_and_stale_field() {
     for (unsigned field = 0; field < 11; ++field) {
         auto state = standbyState();
@@ -2904,6 +2962,8 @@ int main() {
     RUN_TEST(test_value_view_equivalence_all_seven_web_commands);
     RUN_TEST(
         test_value_view_equivalence_recovery_and_sensor_selection_commands);
+    RUN_TEST(
+        test_sensor_selection_rollback_after_reset_failure_and_not_confirmed);
     RUN_TEST(test_view_guard_rechecks_every_safety_and_stale_field);
     RUN_TEST(
         test_view_rejects_aliased_or_foreign_storage_without_state_mutation);

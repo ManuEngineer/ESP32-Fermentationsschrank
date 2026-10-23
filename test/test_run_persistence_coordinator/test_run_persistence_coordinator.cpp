@@ -8809,6 +8809,9 @@ void test_borrowed_view_recovery_time_correction_matches_value_path() {
                         .status));
             state.processState.state = ProcessState::Fermenting;
             state.processState.stateEnteredAtMillis = 100U;
+            state.processState.targetReachStartedAtMillis = 0U;
+            state.processState.targetReachWarningIssued = false;
+            state.processState.qualificationValidSinceMillis.reset();
             state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
                 ProcessState::Fermenting, PriorBootPhaseElapsed{100U, 300U}};
             state.recoveryEpisodeRevision = 2U;
@@ -8847,6 +8850,12 @@ void test_borrowed_view_recovery_time_correction_matches_value_path() {
         TEST_ASSERT_TRUE(ra.status == rb.status && ra.step == rb.step &&
                          ra.technicalReason == rb.technicalReason &&
                          ra.durability == rb.durability);
+        if (failure == 0) {
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(RunPersistenceResultStatus::Applied),
+                static_cast<int>(rb.status));
+            TEST_ASSERT_TRUE(y.nominalRecoveryAdjustment.has_value());
+        }
         TEST_ASSERT_EQUAL_UINT32(x.commandSequence, y.commandSequence);
         TEST_ASSERT_TRUE(x.nominalRecoveryAdjustment.has_value() ==
                          y.nominalRecoveryAdjustment.has_value());
@@ -11127,6 +11136,187 @@ void test_borrow_reentrancy_foreign_token_and_post_commit_safety_stale() {
     }
 }
 
+// A durably persisted command id wins over the RAM-only sensor path: the
+// borrowed View must report AlreadyPersisted without write, live mutation or a
+// new persisted id. The empty RAM id window is the controlled fixture for a
+// state that no longer remembers the id (e.g. after a restart).
+void test_borrowed_view_persisted_id_has_priority_over_sensor_ram_only() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    constexpr CommandId kPersistedStartId = 920U;
+    auto state =
+        readyActiveRunWithSensorSelection(coordinator, kPersistedStartId);
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::AirFallbackActive;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.activeRunSensorMode = RunSensorMode::Air;
+    if (state.activeManualRun.has_value())
+        state.activeManualRun->values.sensorMode = RunSensorMode::Air;
+    state.processedCommandCount = 0U;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 700U;
+    plausibility.thermalCompatibility.status = ThermalCompatibility::Stale;
+    plausibility.thermalCompatibility.profileRevision = 9U;
+    const auto request =
+        borrowedSensorRequest(state, kPersistedStartId,
+                              SensorSelectionUserAction::RecheckProduct, 700U);
+    const auto idsBefore = Access::persistedIdCount(coordinator);
+    TEST_ASSERT_TRUE(idsBefore > 0U);
+    const auto writesBefore = store.writeCount();
+    const auto commandSequenceBefore = state.commandSequence;
+    for (unsigned attempt = 0; attempt < 2; ++attempt) {
+        auto op = Access::borrow(coordinator);
+        TEST_ASSERT_TRUE(op.has_value());
+        auto* candidate = Access::candidate(coordinator, *op);
+        TEST_ASSERT_NOT_NULL(candidate);
+        CommandDecisionView view(state, *candidate);
+        decideApplySensorSelectionActionInto(state, request, plausibility,
+                                             view);
+        // Without the persisted-id gate this decision would be RAM-only.
+        TEST_ASSERT_TRUE(view.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionApplyStatus::AppliedRamOnly),
+            static_cast<int>(*view.sensorSelectionApplyStatus));
+        const auto result = Access::persistBorrowed(
+            coordinator, *op, state, view, trustedCheckpointTime(700U));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_UINT(writesBefore, store.writeCount());
+        TEST_ASSERT_EQUAL_UINT(idsBefore,
+                               Access::persistedIdCount(coordinator));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::AirFallbackActive),
+            static_cast<int>(state.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_UINT32(0U, state.processedCommandCount);
+        TEST_ASSERT_EQUAL_UINT32(commandSequenceBefore, state.commandSequence);
+    }
+}
+
+// Live state changes between the durable write and the second guard: the
+// borrowed View reports PersistenceCommittedApplyFailed with Changed
+// durability and neither releases the sensor path nor adopts the command id.
+void test_borrowed_view_post_commit_guard_failure_for_sensor_and_recovery() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    for (const bool sensor : {true, false})
+        for (unsigned mutate = 0; mutate < 3; ++mutate) {
+            SequencedWriteStore store;
+            RunPersistenceCoordinator c(store, device_platform::StorageEpoch{1},
+                                        RunCheckpointSchedule{});
+            static_cast<void>(c.loadAndInitialize());
+            RunCommandState state;
+            if (sensor) {
+                state = readyActiveRunWithSensorSelection(c, 950U);
+                state.sensorSelectionRuntime.phase =
+                    SensorSelectionPhase::UserDecisionRequired;
+                state.sensorSelectionRuntime.permission =
+                    SensorPeltierPermission::Blocked;
+            } else {
+                state.processState.state = ProcessState::Standby;
+                TEST_ASSERT_EQUAL_INT(
+                    static_cast<int>(RunPersistenceResultStatus::Applied),
+                    static_cast<int>(
+                        c.persistCommand(state, startDecision(state, 43U),
+                                         trustedCheckpointTime(100U))
+                            .status));
+                state.processState.state = ProcessState::Fermenting;
+                state.processState.stateEnteredAtMillis = 100U;
+                state.processState.targetReachStartedAtMillis = 0U;
+                state.processState.targetReachWarningIssued = false;
+                state.processState.qualificationValidSinceMillis.reset();
+                state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+                    ProcessState::Fermenting,
+                    PriorBootPhaseElapsed{100U, 300U}};
+                state.recoveryEpisodeRevision = 2U;
+            }
+            auto op = Access::borrow(c);
+            TEST_ASSERT_TRUE(op.has_value());
+            auto* candidate = Access::candidate(c, *op);
+            TEST_ASSERT_NOT_NULL(candidate);
+            CommandDecisionView view(state, *candidate);
+            if (sensor) {
+                decideApplySensorSelectionActionInto(
+                    state,
+                    borrowedSensorRequest(
+                        state, 951U, SensorSelectionUserAction::ContinueWithAir,
+                        600U),
+                    borrowedProductFailedPlausibility(600U), view);
+            } else {
+                ApplyRecoveryTimeCorrectionRequest request;
+                request.envelope.id = 44U;
+                request.envelope.source = CommandSource::LocalDisplay;
+                request.envelope.monotonicMillis = 200U;
+                request.envelope.expectedStateSequence =
+                    state.processState.transitionSequence;
+                request.envelope.expectedRunRevision = state.runRevision;
+                request.envelope.expectedRecoveryEpisodeRevision =
+                    state.recoveryEpisodeRevision;
+                request.envelope.confirmed = true;
+                request.secondsDelta = 50U;
+                decideApplyRecoveryTimeCorrectionInto(state, request, view);
+            }
+            TEST_ASSERT_TRUE(view.proposed());
+            const auto idsBefore = Access::persistedIdCount(c);
+            const auto processedBefore = state.processedCommandCount;
+            const auto base = store.writeCount();
+            unsigned callbacks = 0;
+            store.afterWrite = [&](std::size_t number) {
+                if (number <= base) return;
+                ++callbacks;
+                if (number != base + 3U) return;
+                if (mutate == 1) state.criticalSafetyEventPending = true;
+                if (mutate == 2) ++state.recoveryEpisodeRevision;
+            };
+            const auto result = Access::persistBorrowed(
+                c, *op, state, view,
+                trustedCheckpointTime(sensor ? 600U : 200U));
+            std::printf(
+                "DBG sensor=%d mutate=%u status=%d step=%d cb=%u base=%zu "
+                "writes=%zu\n",
+                sensor, mutate, static_cast<int>(result.status),
+                static_cast<int>(result.step), callbacks, base,
+                store.writeCount());
+            TEST_ASSERT_EQUAL_UINT32(3U, callbacks);
+            TEST_ASSERT_TRUE(result.durability ==
+                             RunPersistenceDurability::Changed);
+            if (mutate == 0) {
+                TEST_ASSERT_TRUE(result.status ==
+                                 RunPersistenceResultStatus::Applied);
+                TEST_ASSERT_EQUAL_UINT(idsBefore + 1U,
+                                       Access::persistedIdCount(c));
+                continue;
+            }
+            TEST_ASSERT_TRUE(
+                result.status ==
+                RunPersistenceResultStatus::PersistenceCommittedApplyFailed);
+            TEST_ASSERT_EQUAL_UINT(idsBefore, Access::persistedIdCount(c));
+            TEST_ASSERT_EQUAL_UINT32(processedBefore,
+                                     state.processedCommandCount);
+            TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+            if (sensor) {
+                TEST_ASSERT_FALSE(result.sensorSelectionEvent.has_value());
+                TEST_ASSERT_EQUAL_INT(
+                    static_cast<int>(
+                        SensorSelectionPhase::UserDecisionRequired),
+                    static_cast<int>(state.sensorSelectionRuntime.phase));
+                TEST_ASSERT_EQUAL_INT(
+                    static_cast<int>(SensorPeltierPermission::Blocked),
+                    static_cast<int>(state.sensorSelectionRuntime.permission));
+                TEST_ASSERT_EQUAL_INT(
+                    static_cast<int>(RunSensorMode::Product),
+                    static_cast<int>(*state.activeRunSensorMode));
+            } else {
+                TEST_ASSERT_FALSE(state.nominalRecoveryAdjustment.has_value());
+            }
+        }
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -11332,6 +11522,9 @@ int main(int, char**) {
     RUN_TEST(
         test_borrowed_view_with_foreign_after_is_rejected_before_ram_only_apply);
     RUN_TEST(test_borrowed_view_recovery_time_correction_matches_value_path);
+    RUN_TEST(test_borrowed_view_persisted_id_has_priority_over_sensor_ram_only);
+    RUN_TEST(
+        test_borrowed_view_post_commit_guard_failure_for_sensor_and_recovery);
     RUN_TEST(
         test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision);
     RUN_TEST(
