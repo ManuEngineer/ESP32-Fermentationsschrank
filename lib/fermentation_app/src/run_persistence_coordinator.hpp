@@ -217,15 +217,20 @@ class RunPersistenceCoordinator {
         CommandOperation(CommandOperation&& o) noexcept : owner_(o.owner_) {
             o.owner_ = nullptr;
         }
+        CommandOperation& operator=(CommandOperation&&) = delete;
         ~CommandOperation() {
-            if (owner_) owner_->releaseCommandOperation();
+            if (owner_ != nullptr) {
+                owner_->releaseCommandOperation();
+            }
         }
     };
 
    private:
     friend class FermentationApplication;
     std::optional<CommandOperation> beginCommandOperation();
-    bool commandOperationActive() const { return commandBorrowed_; }
+    [[nodiscard]] bool commandOperationActive() const {
+        return commandBorrowed_;
+    }
     RunCommandState* commandCandidate(CommandOperation&);
     RunPersistenceResult persistBorrowedCommand(
         CommandOperation&, RunCommandState&, const CommandDecisionView&,
@@ -366,7 +371,7 @@ class RunPersistenceCoordinator {
         bool periodic, const RunPersistenceBefore& before,
         RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId = std::nullopt);
-    enum class SnapshotRecordPreparation {
+    enum class SnapshotRecordPreparation : std::uint8_t {
         Success,
         InvalidSnapshot,
         CapacityExceeded
@@ -414,7 +419,7 @@ class RunPersistenceCoordinator {
     RunPersistenceWorkingSet workingSet_;
     void releaseCommandOperation();
     bool commandBorrowed_{false};
-    RunPersistenceResult borrowedBusyResult() const;
+    [[nodiscard]] RunPersistenceResult borrowedBusyResult() const;
     RunPersistenceCoordinatorState state_{
         RunPersistenceCoordinatorState::Uninitialized};
     std::optional<RunPersistenceRawRecord> slots_[2];

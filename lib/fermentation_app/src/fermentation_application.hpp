@@ -478,7 +478,7 @@ class FermentationApplication {
     // changes the existing envelope confirmation bit; it never allocates a
     // new CommandId or derives a replacement runId.
     FermentationApplicationRequestStatus confirmPreparedInPlace(
-        FermentationApplicationRequestResult&);
+        FermentationApplicationRequestResult& prepared);
     [[nodiscard]] FermentationApplicationRequestResult confirmPrepared(
         const FermentationApplicationRequestResult& prepared);
     // The single confirmed envelope handoff for local and future UI
@@ -534,8 +534,9 @@ class FermentationApplication {
         const FermentationUiCommandContext& context);
 
    private:
+    [[nodiscard]] bool runCommandOperationActive() const;
     FermentationUiCommandResult applyConfirmedPreparedValue(
-        const FermentationApplicationPreparedRequest&);
+        const FermentationApplicationPreparedRequest& confirmed);
 
 #ifdef APP_PROFILE_NATIVE
     std::size_t webConfigurationCallsForTest_{0U};

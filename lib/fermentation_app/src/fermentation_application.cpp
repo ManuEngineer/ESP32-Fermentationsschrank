@@ -237,11 +237,12 @@ ApplicationConfigurationChangeResult commitUserConfigurationChange(
 template <typename Request>
 FermentationApplicationRequestResult
 FermentationApplication::makePreparedRequest(
-    Request&& request, std::optional<CrossRolePlausibilityContext> evidence) {
+    Request&& request,
+    std::optional<CrossRolePlausibilityContext> owningPlausibility) {
     FermentationApplicationRequestResult result;
     result.request.emplace(
         FermentationApplicationPreparedRequest::ConstructionTag{},
-        std::forward<Request>(request), evidence);
+        std::forward<Request>(request), owningPlausibility);
     result.status = FermentationApplicationRequestStatus::Prepared;
     result.uiRequestId =
         device_platform::UiRequestId{result.request->commandEnvelope().id};
@@ -284,11 +285,12 @@ FermentationApplication::prepareStartProgram(
     }
     const auto& candidate = intent.candidate;
     const ProgramDocument* sourceProgram = nullptr;
-    for (const auto& item : snapshot.programCatalog().programs)
+    for (const auto& item : snapshot.programCatalog().programs) {
         if (item.program.id == candidate.programId) {
             sourceProgram = &item;
             break;
         }
+    }
     if (sourceProgram == nullptr || !sourceProgram->program.installed) {
         return requestFailure(
             FermentationApplicationRequestStatus::ProgramUnavailable);
@@ -636,10 +638,12 @@ FermentationApplication::confirmPreparedInPlace(
     FermentationApplicationRequestResult& prepared) {
     const auto guard = applicationCallSerializer_.enter();
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
-        !prepared.request)
+        !prepared.request) {
         return FermentationApplicationRequestStatus::Unavailable;
-    if (!revalidatePreparedRequest(*prepared.request))
+    }
+    if (!revalidatePreparedRequest(*prepared.request)) {
         return FermentationApplicationRequestStatus::Unavailable;
+    }
     prepared.request->confirm();
     return FermentationApplicationRequestStatus::Prepared;
 }
@@ -647,15 +651,22 @@ FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     const FermentationApplicationRequestResult& prepared) {
     const auto guard = applicationCallSerializer_.enter();
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
-        !prepared.request)
+        !prepared.request) {
         return requestFailure(
             FermentationApplicationRequestStatus::Unavailable);
+    }
     auto confirmed = prepared;
     if (confirmPreparedInPlace(confirmed) !=
-        FermentationApplicationRequestStatus::Prepared)
+        FermentationApplicationRequestStatus::Prepared) {
         return requestFailure(
             FermentationApplicationRequestStatus::Unavailable);
+    }
     return confirmed;
+}
+
+bool FermentationApplication::runCommandOperationActive() const {
+    return runPersistenceCoordinator_ != nullptr &&
+           runPersistenceCoordinator_->commandOperationActive();
 }
 
 FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
@@ -671,17 +682,23 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
         return unavailableRunDecision();
     }
 
-    if (runPersistenceCoordinator_->commandOperationActive())
+    if (runPersistenceCoordinator_->commandOperationActive()) {
         return unavailableRunDecision();
+    }
     if (std::holds_alternative<ApplyRecoveryTimeCorrectionRequest>(
             confirmed.storage_) ||
         std::holds_alternative<SensorSelectionCommandRequest>(
-            confirmed.storage_))
+            confirmed.storage_)) {
         return applyConfirmedPreparedValue(confirmed);
+    }
     auto operation = runPersistenceCoordinator_->beginCommandOperation();
-    if (!operation) return unavailableRunDecision();
+    if (!operation) {
+        return unavailableRunDecision();
+    }
     auto* candidate = runPersistenceCoordinator_->commandCandidate(*operation);
-    if (!candidate) return unavailableRunDecision();
+    if (candidate == nullptr) {
+        return unavailableRunDecision();
+    }
     CommandDecisionView decision(*runtimeRunState_, *candidate);
     auto decisionResult = FermentationUiCommandBridge::decidePreparedInto(
         *runtimeRunState_, confirmed, std::nullopt, decision);
@@ -821,9 +838,9 @@ FermentationUiCommandResult FermentationApplication::confirmProductInserted(
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
     const device_platform::IResetCauseSource* resetCauseSource) {
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return false;
+    }
     if (!platformServices.ready()) {
         return false;
     }
@@ -852,9 +869,9 @@ bool FermentationApplication::begin(
     device_platform::IStateStore& store,
     const device_platform::ITimeZoneResolver& timeZoneResolver,
     const device_platform::IResetCauseSource* resetCauseSource) {
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver, nullptr,
                            resetCauseSource);
 }
@@ -865,9 +882,9 @@ bool FermentationApplication::begin(
     const device_platform::ITimeZoneResolver& timeZoneResolver,
     const device_platform::ITimeSource& timeSource,
     const device_platform::IResetCauseSource* resetCauseSource) {
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, nullptr, nullptr);
 }
@@ -881,9 +898,9 @@ bool FermentationApplication::begin(
     device_platform::IHttpServerLifecycle& httpServerLifecycle,
     device_platform::ISecureRandomSource& randomSource,
     const device_platform::IResetCauseSource* resetCauseSource) {
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
                            &httpServerLifecycle, &randomSource, nullptr,
@@ -900,9 +917,9 @@ bool FermentationApplication::begin(
     device_platform::ISecureRandomSource& randomSource,
     IAuthenticationKdf& authenticationKdf,
     const device_platform::IResetCauseSource* resetCauseSource) {
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
                            &httpServerLifecycle, &randomSource,
@@ -920,9 +937,9 @@ bool FermentationApplication::begin(
     IAuthenticationKdf& authenticationKdf,
     device_platform::IReplayDigest& replayDigest,
     const device_platform::IResetCauseSource* resetCauseSource) {
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
                            &httpServerLifecycle, &randomSource,
@@ -2167,9 +2184,9 @@ bool FermentationApplication::beginPersistent(
     device_platform::ISecureRandomSource* randomSource,
     IAuthenticationKdf* authenticationKdf,
     device_platform::IReplayDigest* replayDigest) {
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return false;
+    }
     if (!platformServices.ready()) {
         return false;
     }
@@ -2681,9 +2698,9 @@ FermentationApplication::noRuntimeResetBootstrapEpochUnlocked() const {
 ConfigurationRecoveryResult
 FermentationApplication::beginAuthorizedFactoryReset() {
     const auto guard = applicationCallSerializer_.enter();
-    if (runPersistenceCoordinator_ &&
-        runPersistenceCoordinator_->commandOperationActive())
+    if (runCommandOperationActive()) {
         return {ConfigurationRecoveryStatus::ConfigurationMutationBusy, {}};
+    }
     ConfigurationRecoveryResult unavailable{
         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
     const auto knownEpoch = factoryResetPreviousEpochUnlocked();

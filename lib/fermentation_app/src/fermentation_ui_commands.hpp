@@ -231,7 +231,7 @@ class FermentationApplicationPreparedRequest {
     };
     template <typename Request>
     FermentationApplicationPreparedRequest(
-        ConstructionTag, Request&& request,
+        ConstructionTag /*unused*/, Request&& request,
         std::optional<CrossRolePlausibilityContext> evidence)
         : storage_(std::forward<Request>(request)),
           owningPlausibility_(evidence) {}

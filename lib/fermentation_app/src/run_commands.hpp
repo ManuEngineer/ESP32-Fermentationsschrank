@@ -447,11 +447,12 @@ struct CommandDecisionView : CommandDecisionMetadata {
                         RunCommandState& candidate)
         : before(current), after(candidate), guard(current) {}
 };
-CommandStatus validateRunCommand(const RunCommandState&,
-                                 const CommandDecision&);
-CommandStatus validateRunCommand(const RunCommandState&,
-                                 const CommandDecisionView&);
-CommandStatus applyRunCommand(RunCommandState&, const CommandDecisionView&);
+CommandStatus validateRunCommand(const RunCommandState& current,
+                                 const CommandDecision& d);
+CommandStatus validateRunCommand(const RunCommandState& current,
+                                 const CommandDecisionView& d);
+CommandStatus applyRunCommand(RunCommandState& current,
+                              const CommandDecisionView& d);
 
 void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
                 CommandKind kind, CommandStatus status,

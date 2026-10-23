@@ -183,12 +183,13 @@ class ActiveRun {
         StartConstructionTag() = default;
         friend class ActiveRun;
     };
-    ActiveRun(StartConstructionTag, const ProgramRunSource&,
-              std::optional<RunProgramSourceRevision>,
-              const EffectiveRunValues&);
-    static bool startInto(const ProgramRunSource&,
-                          std::optional<RunProgramSourceRevision>,
-                          std::optional<ActiveRun>&);
+    ActiveRun(StartConstructionTag /*unused*/, const ProgramRunSource& source,
+              std::optional<RunProgramSourceRevision> sourceProgramRevision,
+              const EffectiveRunValues& values);
+    static bool startInto(
+        const ProgramRunSource& source,
+        std::optional<RunProgramSourceRevision> sourceProgramRevision,
+        std::optional<ActiveRun>& out);
     [[nodiscard]] static std::optional<ActiveRun> start(
         const ProgramRunSource& source,
         std::optional<RunProgramSourceRevision> sourceProgramRevision);

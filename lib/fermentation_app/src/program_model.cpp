@@ -384,28 +384,34 @@ ValidationResult validateProgram(const ProgramDocument& document,
 }
 
 MigrationStatus migrateProgramToCurrentSchemaInto(ProgramDocument& current) {
-    if (current.schema.version == kCurrentProgramSchemaVersion)
+    if (current.schema.version == kCurrentProgramSchemaVersion) {
         return MigrationStatus::NotRequired;
+    }
     if (current.schema.version < kMinimumMigratableProgramSchemaVersion ||
-        current.schema.version > kCurrentProgramSchemaVersion)
+        current.schema.version > kCurrentProgramSchemaVersion) {
         return MigrationStatus::UnsupportedSourceVersion;
+    }
     while (current.schema.version < kCurrentProgramSchemaVersion) {
         const auto status = current.schema.version == 4U
                                 ? migrateProgramSchema4To5Into(current)
                                 : migrateProgramSchema5To6Into(current);
-        if (status != MigrationStatus::Migrated) return status;
+        if (status != MigrationStatus::Migrated) {
+            return status;
+        }
     }
     return MigrationStatus::Migrated;
 }
 MigrationResult migrateProgramToCurrentSchema(const ProgramDocument& source) {
     if (source.schema.version < kMinimumMigratableProgramSchemaVersion ||
-        source.schema.version > kCurrentProgramSchemaVersion)
+        source.schema.version > kCurrentProgramSchemaVersion) {
         return {MigrationStatus::UnsupportedSourceVersion, std::nullopt};
+    }
     ProgramDocument current = source;
     const auto status = migrateProgramToCurrentSchemaInto(current);
     if (status != MigrationStatus::Migrated &&
-        status != MigrationStatus::NotRequired)
+        status != MigrationStatus::NotRequired) {
         return {status, std::nullopt};
+    }
     return {status, std::move(current)};
 }
 
