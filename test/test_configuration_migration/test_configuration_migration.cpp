@@ -85,6 +85,11 @@ void test_current_catalog_copy_migration_is_not_required() {
 
 void test_catalog_program_migration_rejects_unknown_newer_schema_atomically() {
     auto source = fermentation::makeFactoryProgramCatalog();
+    for (std::size_t i = 0U; i < 2U; ++i) {
+        source.programs[i].schema.version = 4U;
+        source.programs[i].schema.presentFields =
+            fermentation::kSchema4RequiredProgramFields;
+    }
     source.programs[2].schema.version =
         fermentation::kCurrentProgramSchemaVersion + 1U;
     const auto result =
@@ -92,6 +97,8 @@ void test_catalog_program_migration_rejects_unknown_newer_schema_atomically() {
     TEST_ASSERT_TRUE(result.status ==
                      fermentation::CopyMigrationStatus::StepFailed);
     TEST_ASSERT_FALSE(result.document.has_value());
+    TEST_ASSERT_EQUAL_UINT32(4U, source.programs[0].schema.version);
+    TEST_ASSERT_EQUAL_UINT32(4U, source.programs[1].schema.version);
     TEST_ASSERT_EQUAL_UINT32(fermentation::kCurrentProgramSchemaVersion + 1U,
                              source.programs[2].schema.version);
 }

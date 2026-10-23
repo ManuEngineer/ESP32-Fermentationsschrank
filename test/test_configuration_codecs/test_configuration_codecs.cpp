@@ -897,6 +897,29 @@ void test_schema_four_programs_migrate_to_schema_five_deterministically() {
     TEST_ASSERT_EQUAL_MEMORY(current.data(), reencoded.data(), current.size());
 }
 
+void test_schema_four_late_decode_failure_publishes_no_partially_migrated_catalog() {
+    const auto source = fermentation::makeFactoryProgramCatalog();
+    std::string current;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramCatalogPayload(
+                         source, current) == ConfigurationCodecStatus::Success);
+    const auto legacy = schemaFourCatalogFixture(current);
+    // First documents have already passed 4 -> 5 -> 6 when the last one fails.
+    for (std::size_t missing = 1U; missing <= 16U; ++missing) {
+        const auto partial = legacy.substr(0U, legacy.size() - missing);
+        const auto result =
+            fermentation::decodeProgramCatalogPayload(1U, partial);
+        TEST_ASSERT_TRUE(result.status != ConfigurationCodecStatus::Success);
+        TEST_ASSERT_FALSE(result.document.has_value());
+        TEST_ASSERT_TRUE(
+            fermentation::validateProgramCatalogPayload(1U, partial, &source) !=
+            ConfigurationCodecStatus::Success);
+    }
+    std::string after;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramCatalogPayload(source, after) ==
+                     ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_STRING(current.c_str(), after.c_str());
+}
+
 void test_invalid_catalog_encode_leaves_output_unchanged() {
     auto invalid = fermentation::makeFactoryProgramCatalog();
     invalid.programs.pop_back();
@@ -1058,6 +1081,8 @@ void test_large_catalog_copy_migration_keeps_only_source_and_candidate() {
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_schema_four_late_decode_failure_publishes_no_partially_migrated_catalog);
     RUN_TEST(test_sensor_preference_wire_ids_are_explicit_in_both_directions);
     RUN_TEST(test_failure_policy_wire_ids_are_explicit_in_both_directions);
     RUN_TEST(test_completion_mode_wire_ids_are_explicit_in_both_directions);

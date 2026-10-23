@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 2.4 (gezieltes Run-Stack-Diagnose-/Plandelta §13, Ressourcen-Refactor/Head-Recycling ergaenzt) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 NICHT FREIGEGEBEN · PRODUKTARBEIT WEITER HOLD.**
+**2026-10-23 · PLAN-REVISION 2.4 mit Implementierungsnachtrag §13 · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -13,18 +13,20 @@ wurde nach Review erteilt und am 2026-10-22 vom Owner nochmals bestaetigt.
 
 **Freigegebene Implementierungsbaseline:** Revision 2.2 auf
 `b7d5e2dbc1f5281c764d4a75f2c37f1c4b6397c2` wurde am 2026-10-21 einschliesslich
-C0 → C1 → C2 → C3 → C5 vom Owner freigegeben. Der Softwarekandidat liegt auf
+C0 → C1 → C2 → C3 → C5 vom Owner freigegeben. Der damalige Softwarekandidat liegt auf
 `4f6f0c9abad9e1c354fc67e140302adcf62680e9`; funktionale Tests und beide Profilbuilds
-sind PASS, das neue Settings-HTTPD-Stackgate ist **FAIL / HOLD** (§12).
+waren PASS, das damalige Settings-HTTPD-Stackgate war **FAIL / HOLD** (§12).
 Die begrenzte Q3-Korrektur wurde auf `095f393f0eed4eb95944c164a8e967ce973c3fc9`
 umgesetzt; [Ergebnis und neuer Stackbefund](../audits/PR209_Q3_IMPLEMENTATION_20261022.md).
-Die Freigabe erlaubt keine Budgeterhoehung und keine weitere Produktkorrektur
-ausserhalb von §12. Der unveraenderte Run-Pfad verletzt das Stackgate; HOLD bleibt.
+Die damalige Q3-Freigabe erlaubte keine Budgeterhoehung oder weitere Produktkorrektur
+ausserhalb von §12. Der damalige Run-Pfad verletzte das Stackgate. Q4 Option A
+ist jetzt separat freigegeben und auf `e31e952def3264ca419187b86a2988bd20e3a487`
+umgesetzt; der Ressourcenabschluss bleibt HOLD (§13).
 
-**Neues Diagnose-/Plandelta:** §13 untersucht ausschliesslich den verbliebenen
-HTTPD-Run-Stack. Gepruefter HEAD `84fa6696559ef89f9e46afb0157f818c92365cf8`,
-Produkt `095f393f0eed4eb95944c164a8e967ce973c3fc9`; Q3 bleibt unveraendert.
-Revision 2.4 ist keine zusaetzliche Produktfreigabe und kein neuer Gesamtplan.
+**Q4-Implementierungsnachtrag:** §13 dokumentiert die freigegebene Option A
+und ihre tatsaechlichen Produkt-/Test-/Profil-/Ressourcenergebnisse.
+Die vorherigen Diagnose-/Prototypstaende sind historische Belege. Q3 bleibt
+unveraendert; keine Budget-, Hardware-, Ressourcen- oder Mergefreigabe.
 
 ## 0. Bestaetigte Ownerentscheide (Revision 2)
 
@@ -54,10 +56,16 @@ umgesetzt (§12).** Das Vollketten-Stackgate bleibt FAIL/HOLD; D9 bleibt separat
 **Kernaussagen.** (1) Ein PR (C0, C1, C2, C3, C5). (2) Abgetrennt bleiben Manueller Betrieb,
 Diagnose/Diagramme/Exporte (#28), Journale/Protokolle/Backup/Werksreset (#19),
 Service-Funktionen und -Route, Programmeditor, Favicon (#204). (3) Q1/Q2 sind entschieden
-(§0); die Ressourcenqualifikation des Settings-Schreibpfads ist FAIL/HOLD (§12). (4) Keine Hardware-, Flash-, Browser-, UART-, Reset- oder Aktorfreigabe;
+(§0); die aktuelle Vollketten-Ressourcenqualifikation ist FAIL/HOLD (§13). (4) Keine Hardware-, Flash-, Browser-, UART-, Reset- oder Aktorfreigabe;
 `ACTUATOR_RELEASE=NO`, `RAM_PASS=NOT_PROVEN`.
 
 ## 1. Live-Basis
+
+Aktuelles Produkt: `e31e952def3264ca419187b86a2988bd20e3a487` (Q4 Option A).
+696 gezielte native Tests, beide echten ESP32-Profile und Builder-Self-Check
+PASS; Vollkettenstack FAIL (Web-erreichbarer Value-Fallback), ESP32-Heap/OOM-Abschluss
+NOT_PROVEN, D9 NOT_RUN.
+Die nachfolgenden C0–C5-/Q3-Staende bleiben historische Baselines.
 
 Implementierungsstand 2026-10-21: C0 `d1170b2`, C1 `d2446ee`, C2 `27aa12c`,
 C3 `57fa250`, C5 `75970d7`, Integrationskorrektur `4f6f0c9`. Das ist ein
@@ -1124,7 +1132,7 @@ durch deren neue exakte Commit-SHA. Danach anhalten.
 
 ### Q4-Head-Recycling und RAM-Duplikatbilanz (2026-10-23)
 
-**Aktueller Entscheid: IMPLEMENTATION_READY=HOLD; FULL_CHAIN_RESERVE=NOT_PROVEN.**
+**Historischer Entscheid vor Option-A-Freigabe: IMPLEMENTATION_READY=HOLD; FULL_CHAIN_RESERVE=NOT_PROVEN.**
 Basis `a38ba893091350f1c325b0fc379f25883d87703c`, Produkt095f393 unveraendert.
 Der neue Ownerauftrag autorisiert genau die fortgesetzte gemeinsame Headprobe
 und gezielte Duplikatbilanz, **keine Produktumsetzung**. Vorige Q4-Abschluesse
@@ -1231,3 +1239,80 @@ allgemeinen Tests/Governanceablaeufe wiederholen. Jetzt Compile-/ABI-/Hash-/
 Patch-/Frameparitaets-/Arithmetik-/Linkpruefung, **keine** Semantik-/Golden-/
 Heap-/OOM-/HWM-/Hardwarequalifikation. **STOP; Produktimplementierung bleibt
 NICHT FREIGEGEBEN. Weitere Diagnoseiteration nur mit neuem Ownerentscheid.**
+
+
+### Q4 Option A: Produktimplementierung und Ressourcen-HOLD (2026-10-23)
+
+**Ownerfreigabe:** exakt `623bc4520bcf3601d3666e7c717ae00213047901`;
+Produkt `e31e952def3264ca419187b86a2988bd20e3a487`, ersetzt Produkt095f393
+fuer dieses begrenzte Delta. Die damaligen Q4-Implementierungs-HOLDs oben sind
+historisch; Option A ist umgesetzt. Kein neuer Plan, keine Scope-/Budgeterhoehung,
+keine Option B und keine Hardware-/Ressourcen-/Mergefreigabe.
+
+Die private Application leiht ausschliesslich den bestehenden Coordinator-
+Kandidaten, mit instanzlokalem Operationstoken bis Write/Readback, zweitem
+unveraenderlichem Stale-/Safety-Check, RAM-Move oder Abbruch. Gemeinsame
+Value/View-Kerne fuer die sieben umgestellten Web-Varianten, direkte ActiveRun-Konstruktion,
+ein Prepare/Confirm-Resultat mit derselben Identitaet, gemeinsame 4→5→6-Migration,
+getrennte Encoding-/Writephasen und ein recycelter Head sind produktiv.
+Nur die Borrow-Variante nutzt die vorhandenen 256 B Snapshot-IDs: Reset fasst
+dieses Array nicht an; IDs werden erst nach durablem Write und zweitem Check
+in den Coordinator uebernommen. Direkte Value-Aufrufer behalten ihr lokales
+IDfenster und ihre bisherigen Vertraege. Keine zweite State Machine/Persistenz,
+kein grosser Heapowner, keine globale Sperre oder neue OOM-Enum.
+
+**Verifikation:** 695/696 gezielte native Tests in 18 direkt betroffenen Suites,
+beide echten Xtensa-Firmwareprofile und kanonischer Builder-Self-Check PASS.
+Die [aktuelle Vergleichsevidence](../audits/PR209_Q4_RESOURCE_REFACTOR_20261023.md#q4-option-a-produktimplementierung-2026-10-23)
+nennt Quellen/Flags/ABI/Artefakte, Cut-Point-/Golden-/Value/View-/Borrow-/
+Post-Commit-/Replay-/Migrations-/OOM-Grenzen und native Heapfenster.
+Das ist Builder-Evidence; Independent Review ist offen.
+
+**Tatsaechliche Frames beider Profile:** Application1312 / Web1200 /
+Borrow48 / Internal(View)512 statt768 / Write160 statt208 / Core160 /
+RecordPrepare128 / Transaction672 B. Das Write-Ziel80 B wurde nicht erreicht.
+HTTPD-Prefix einschliesslich Adapter/Dispatcher/Mutation1856 B.
+Aktuelle bekannte phasenbezogene Summen: Prepare6016, Confirm4288,
+Run-Encode/Validierung6704, Run-Store/Unknown-Write-Readback**7216**, Settings**6960**,
+Post-Commit-Guard5088, RAM-Move5344, Borrowfreigabe4720 B. Alle sieben umgestellten
+Decision-Visitor samt Unterpfaden sind erfasst (6000/6112/6048/6048/6176/5744/5744 B).
+Keine Addition isolierter Compilergewinne; alle Summen bleiben **NOT_PROVEN**,
+mit konkreten offenen SDK-/ROM-/libc-/indirekten/Allocator-/Cleanup-/Zyklenkanten.
+8192−7216=976 B rechnerischer Rest, nach512 B Reserveboden nur **464 B fuer
+unbestimmte Anteile**; Settings720 B. Keine Vollketten-Obergrenze oder HWM. **Diese Projektion gilt nur fuer die
+sieben umgestellten Varianten, nicht fuer alle vom Web akzeptierten Intents.**
+
+**Neuer nachgewiesener Blocker:** Der bestehende Codec akzeptiert auch
+`recovery-time-correction` und `sensor-selection`; Prepare/Confirm reicht
+diese an `applyConfirmedPreparedValue` weiter. Bereits dessen Frame allein
+ist in beiden Profilen **10880 B**. Tatsaechlich gleichzeitig: HTTPD-Prefix1856
++ Web1200 + Application1312 + Value10880 = **mindestens15248 B >8192 B**
+(7056 B ueber Stackbudget, noch ohne Domain-/SDK-Unterpfade). Auch eine
+Standby-Ablehnung betritt diesen Frame; nativer Dispatcher-/Replaytest belegt
+die Erreichbarkeit. Das Vollketten-Stackgate ist damit **FAIL**, unabhaengig
+von offenen ROM-/SDK-Obergrenzen. Der bisherige Ausschluss dieser beiden
+Intents als angeblich nicht Web-erreichbar war falsch; die frueheren
+7-Varianten-Proben belegen keinen vollstaendigen Runpfad. Keine automatische
+Scopeerweiterung oder Produktkorrektur aus diesem Befund.
+
+**Heap:** gleiche native Maximalfixtures gegen095f393: Start samt Replay
+Peak47484→45094 B, Adjustment mit32 Run-Revisionen46088→43698 B,
+Settings69724→69724 B; groesster beobachteter Request jeweils unveraendert
+32769/32769/19890 B. Keine gemessene Regression oder neue grosse feste
+Ownerallokation. Host64, angeforderte Bytes ohne Allocator-/Fragmentierungs-
+beleg; unveraenderte aligned Q3-Scratchallokation nicht in diesem Zaehler.
+Absoluter ESP32-Peak, groesster freier zusammenhaengender Block, vollstaendige
+Fehler-/OOM-Obergrenze **NOT_PROVEN**. String-/Vektor-OOM unter `-fno-exceptions`
+bleibt ohne allgemeinen Statusreturn; native Exception-Cleanup ist kein
+Zielsystem-OOM-Vertrag. Historische F4-/H-RAM-Belege qualifizieren diesen Stand nicht.
+
+**STOP / eine Ownerentscheidung:** Ob die weiterhin Web-erreichbaren
+Recovery-/Sensorrequests mit ihrer bestehenden Value-Grenze in denselben
+zusammenhaengenden Ressourcenrefactor aufgenommen werden sollen. Dieser
+zusaetzliche Produktumfang ist nicht freigegeben; hier keine weitere
+Optimierungsschleife. Der aktuelle Implementierungsdiff wird mit dem konkreten
+Blocker unabhaengig reviewbar uebergeben. Bis dahin `C5_RESOURCE_GATE=HOLD`,
+`HTTPD_FULL_CHAIN_STACK=FAIL`, `FULL_CHAIN_RESERVE=NOT_PROVEN`,
+`RAM_PASS=NOT_PROVEN`, `OPEN_BLOCKERS=1`, `ACTUATOR_RELEASE=NO`;
+D9/Flash/Hardware gesondert **NOT_RUN**. Ein Hardwarelauf kann den bereits
+statisch nachgewiesenen 10880-B-Frame nicht freigeben.

@@ -1,0 +1,62 @@
+from pathlib import Path
+import json,shlex,subprocess,hashlib
+root=Path.cwd();out=Path('/tmp/pr209-q4-implementation'); commands=[]
+for profile in ['esp32_bringup','esp32_release']:
+ db=json.loads((root/'build'/profile/'compile_commands.json').read_text())
+ byfile={x['file']:x for x in db}
+ import csv
+ wanted={r['source']:Path(r['source']).stem for r in csv.DictReader((root/'docs/audits/PR209_Q4_IMPLEMENTATION_20261023_COMPILE.tsv').open(),delimiter='\t') if r['profile']==profile and r['kind'].startswith('original SDK')}
+ target=out/profile;target.mkdir(exist_ok=True)
+ for src,name in sorted(wanted.items()):
+  entry=byfile[src];a=shlex.split(entry['command']);clean=[];i=0
+  while i<len(a):
+   if a[i] in ['-o','-MT','-MF']:
+    i+=2;continue
+   if a[i] in ['-MD','-MMD']:
+    i+=1;continue
+   clean.append(a[i]);i+=1
+  obj=target/(name+'.o');clean+=['-o',str(obj),'-fstack-usage','-fcallgraph-info=su']
+  record={'profile':profile,'kind':'original SDK/adapter; instrumentation only','source':src,'source_sha256':hashlib.sha256(Path(src).read_bytes()).hexdigest(),'directory':entry['directory'],'argv':clean}
+  r=subprocess.run(clean,cwd=entry['directory'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+  (target/(name+'.log')).write_text(r.stdout)
+  record['exit_code']=r.returncode;commands.append(record)
+  if r.returncode:raise RuntimeError((src,r.stdout[-2000:]))
+ print(profile,'original SDK/adapter instrumented TUs',len(wanted),flush=True)
+# Target ABI via real Application TU flags, constants in object data only.
+abi=out/'abi.cpp';abi.write_text('''#include "run_commands.hpp"
+#include "run_persistence_coordinator.hpp"
+#include "configuration_service.hpp"
+#include <optional>
+using namespace fermentation;
+extern "C" {
+__attribute__((used)) const unsigned q4_abi[] = {
+ sizeof(RunCommandState), alignof(RunCommandState), sizeof(CommandDecision), alignof(CommandDecision),
+ sizeof(CommandApplyGuard), alignof(CommandApplyGuard), sizeof(CommandDecisionView), alignof(CommandDecisionView),
+ sizeof(RunPersistenceCoordinator), alignof(RunPersistenceCoordinator), sizeof(RunPersistenceCoordinator::CommandOperation), alignof(RunPersistenceCoordinator::CommandOperation),
+ sizeof(std::optional<RunPersistenceCoordinator::CommandOperation>), alignof(std::optional<RunPersistenceCoordinator::CommandOperation>),
+ sizeof(ActiveRun), alignof(ActiveRun), sizeof(RunPersistenceSnapshot), alignof(RunPersistenceSnapshot),
+ sizeof(FermentationApplicationRequestResult), alignof(FermentationApplicationRequestResult)
+};
+}
+'''.replace('#include "configuration_service.hpp"','#include "fermentation_application.hpp"'))
+for profile in ['esp32_bringup','esp32_release']:
+ db=json.loads((root/'build'/profile/'compile_commands.json').read_text());entry=next(x for x in db if x['file'].endswith('/fermentation_application.cpp'))
+ a=shlex.split(entry['command']);clean=[];i=0
+ while i<len(a):
+  if a[i] in ['-o','-MT','-MF']:
+   i+=2;continue
+  if a[i] in ['-MD','-MMD']:
+   i+=1;continue
+  clean.append(str(abi) if a[i]==entry['file'] else a[i]);i+=1
+ clean+=['-o',str(out/profile/'abi.o')]
+ r=subprocess.run(clean,cwd=entry['directory'],capture_output=True,text=True)
+ if r.returncode:raise RuntimeError(r.stderr)
+ commands.append({'profile':profile,'kind':'ABI constants, no alternate product code','source':str(abi),'directory':entry['directory'],'argv':clean,'exit_code':0})
+ objcopy=Path(clean[0]).with_name('xtensa-esp32-elf-objcopy')
+ subprocess.run([str(objcopy),'-O','binary','--only-section=.rodata._ZL6q4_abi',str(out/profile/'abi.o'),str(out/profile/'abi.bin')],check=True)
+ import struct
+ data=(out/profile/'abi.bin').read_bytes()
+ if not data:
+  dump=subprocess.check_output([str(objcopy.with_name('xtensa-esp32-elf-objdump')),'-h',str(out/profile/'abi.o')],text=True);raise RuntimeError(dump)
+ print(profile,'ABI',struct.unpack('<'+'I'*(len(data)//4),data),flush=True)
+(out/'commands.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in commands))

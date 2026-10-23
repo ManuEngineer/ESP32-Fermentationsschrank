@@ -5829,8 +5829,48 @@ void test_q4_borrow_candidate_construction_allocation_failure_unwinds_without_ap
     // not turn std::string/vector allocation failure into a returned status.
 }
 
+void test_q4_codec_recovery_and_sensor_requests_reach_existing_value_application_path() {
+    ComposedFixture fixture;
+    const auto session = composedRunSession(fixture);
+    std::uint64_t sequence = 1U;
+    for (const char* intent :
+         {"{\"t\":\"recovery-time-correction\",\"d\":20}",
+          "{\"t\":\"sensor-selection\",\"a\":\"recheck-product\"}"}) {
+        const auto body = runBody(fixture.application, intent);
+        WebRunMutationDto dto;
+        TEST_ASSERT_TRUE(decodeWebRunMutation(body, dto) ==
+                         WebRunMutationDecodeStatus::Success);
+        FermentationUiCommandContext context;
+        context.surface = device_platform::UiSurface::WebInterface;
+        context.monotonicMillis = fixture.timeSource.monotonicMillis();
+        context.expected = dto.expected;
+        auto prepared =
+            fixture.application.prepareEnvelope(context, dto.intent);
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+        TEST_ASSERT_TRUE(fixture.application.confirmPreparedInPlace(prepared) ==
+                         FermentationApplicationRequestStatus::Prepared);
+        // These two prepared payloads select the existing Value fallback in
+        // applyConfirmedPrepared, even when the domain rejects them in Standby.
+        const auto result =
+            fixture.application.applyConfirmedPrepared(*prepared.request);
+        TEST_ASSERT_TRUE(result.phase ==
+                         FermentationUiCommandPhase::DecisionOnly);
+        const auto response = postRun(fixture, session, sequence, body);
+        TEST_ASSERT_EQUAL_UINT16(422U, response.statusCode);
+        const auto replay = postRun(fixture, session, sequence, body);
+        TEST_ASSERT_EQUAL_STRING(completeBody(response).c_str(),
+                                 completeBody(replay).c_str());
+        ++sequence;
+    }
+    // Native reachability evidence only: the measured Xtensa Value frame alone
+    // exceeds HTTPD's 8192 B. Do not run this path on hardware under this
+    // order.
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_q4_codec_recovery_and_sensor_requests_reach_existing_value_application_path);
     RUN_TEST(
         test_q4_borrow_candidate_construction_allocation_failure_unwinds_without_apply);
     RUN_TEST(test_q4_maximum_catalog_mutation_allocation_and_cleanup_windows);

@@ -1,6 +1,6 @@
 # PR #209 – Q4-Ressourcen-Refactor: begrenzte Entscheidungsevidence
 
-Aktueller Stand: [Head-Recycling und RAM-Duplikatbilanz unten](#head-recycling-und-priorisierte-ram-bilanz-2026-10-23).
+Aktueller Stand: [Q4 Option A, Produktimplementierung mit nachgewiesenem Value-Fallback-Stackblocker](#q4-option-a-produktimplementierung-2026-10-23).
 Die folgende urspruengliche Refactor-Bilanz bleibt historische Ausgangsevidence.
 
 **IMPLEMENTATION_READY=HOLD; FULL_CHAIN_RESERVE=NOT_PROVEN.** Planungsbasis
@@ -409,3 +409,238 @@ OOM-/Golden-/HWM-Pruefungen jetzt ausgefuehrt. Compile-/Target-ABI-/Hash-/
 Patch-/Frameparitaets-/Arithmetik-/Linkpruefung PASS ist davon getrennt.
 **STOP; keine zusaetzliche Produktimplementierungsfreigabe und keine weitere
 rein diagnostische Iteration ohne neuen Ownerentscheid.**
+
+## Q4 Option A: Produktimplementierung (2026-10-23)
+
+**Ergebnis: implementiert; HTTPD_FULL_CHAIN_STACK=FAIL, C5_RESOURCE_GATE=HOLD.**
+Ownerfreigabe exakt `623bc4520bcf3601d3666e7c717ae00213047901`.
+Produktcommits `832075fcc22b2ed4d98e907ef197e3a6e358ecf8` und
+`e31e952def3264ca419187b86a2988bd20e3a487`; letzterer ist die tatsaechlich
+gebaute Produktbasis. Vergleichsprodukt `095f393f0eed4eb95944c164a8e967ce973c3fc9`.
+Die spaeteren Test-/Markdown-Nachtraege aendern diesen Produktcode nicht.
+
+**Wesentlicher Reachability-Befund:** Die bisherige Annahme, der Webpfad
+koenne nur die sieben umgestellten Decision-Varianten erreichen, ist falsch.
+`web_json_codec.cpp::readIntent` akzeptiert auch `recovery-time-correction`
+und `sensor-selection`; der bestehende Test
+`test_mutation_codec_decodes_every_closed_application_intent` bestaetigt dies.
+`prepareAdditionalEnvelope` erzeugt diese beiden Requesttypen,
+`confirmPreparedInPlace` bestaetigt sie; `applyConfirmedPrepared` verzweigt
+**vor dem Borrow** in `applyConfirmedPreparedValue`. Der neue native
+Dispatcher-/Prepare-/Confirm-/Replaytest weist genau diese Kette nach,
+einschliesslich normaler Ablehnung in Standby. Ein negativer Domainausgang
+verhindert den Eintritt in den grossen Frame nicht.
+
+In **beiden echten Profilen** misst der Value-Fallback **10880 B statischen
+Xtensa-Frame**, allein bereits groesser als8192 B. Nachgewiesene gleichzeitig
+aktive Eintrittskette: HTTPD/Adapter/Dispatcher/Mutation1856 + Web1200 +
+Application1312 + Value10880 = **mindestens15248 B**, noch ohne dessen Domain-,
+Persistenz- oder SDK-Unterpfade. **7056 B ueber Budget; 7568 B ueber dem7680-B-
+Planungsziel.** Deshalb ein statisch nachgewiesenes FAIL, unabhaengig von den
+weiteren unbekannten SDK-/ROM-Anteilen. Der Ausschluss der Value-Kante ist
+nur fuer die explizit eingeschraenkte Sieben-Varianten-Projektion zulaessig,
+nie fuer den gesamten Web-Runpfad. Die historischen Proben oben erbringen
+keinen Vollkettennachweis. Hier keine Produktkorrektur an diesen weiteren
+Requesttypen, kein Abschalten bestehender Routen und keine Scopeausweitung.
+
+### Tatsächlich umgesetzter Besitz- und Datenfluss
+
+- Ein instanzlokaler, nicht kopierbarer `CommandOperation` leiht ausschliesslich
+  `workingSet_.candidate` des privaten Application-Coordinators. Zweiter Borrow,
+  fremdes Token, weitere mutierende Coordinator-Eingaenge und rekursives
+  Application-Begin/Factory-Reset werden vor Kandidatenzugriff abgewiesen;
+  dieselbe Operation darf den privaten Persistenzkern fortsetzen. Andere
+  Coordinator-Instanzen bleiben unabhaengig. Das ist ein operationeller
+  Reentranzschutz unter dem bestehenden Application-Serializer, keine neue
+  globale Sperre oder allgemeine Thread-Safety-Garantie fuer direkte Aufrufer.
+- `CommandApplyGuard` friert die tatsaechlichen Apply-Praedikate ein:
+  ProcessRuntimeState, Command-/Run-/Message-/Faultrevision, Critical-Safety,
+  bounded Run-ID, aktiver Sensormodus, SensorRuntime-/persistierter Auswahlzustand
+  und Recoveryrevision. Kein `before=current`-Selbstvergleich. Vor Write nur
+  validieren; den aufgebauten Kandidaten nicht erneut auf sich anwenden.
+  Nach durablem Write den unveraenderlichen Guard erneut pruefen; bei Safety/
+  Stale bleibt `PersistenceCommittedApplyFailed` samt Changed-Durability.
+  Erst danach RAM-Move und IDuebernahme.
+- Die sieben Into-Entscheidungen teilen Fachkerne mit den Value-APIs.
+  Ablehnung/Unconfirmed restauriert die owning `after`-Projektion ohne Verlust
+  von Summary/Notice/Effects. `ActiveRun::startInto` konstruiert direkt am
+  Ziel; bestehende Start-Value-APIs bleiben erhalten. Ack/Mute bleibt RAM-only.
+  Kein neuer Persistenzkern und keine zweite State Machine.
+- Nur der private Borrow-Pfad benutzt das vorhandene 256-B-IDarray in
+  `workingSet_.snapshot`. `resetRunPersistenceSnapshotForMake` leert es nicht;
+  `makeRunPersistenceSnapshotInto` darf es deshalb auf sich kopieren.
+  Kandidaten-IDs werden nicht vorzeitig zu processed/persisted IDs im
+  autoritativen Zustand. Das Array ueberlebt Write/Readback und Post-Check;
+  andere Snapshot-schreibende Eingaenge sind im Borrowfenster gesperrt.
+  Direkte Value-Konsumenten behalten die lokale Liste und ihren bisherigen
+  Synchronisationsvertrag. Fehler/Indeterminate uebernehmen keine IDs;
+  Operation-Cleanup gibt dynamische Kandidatenkinder und Run-ID frei.
+- Ein identitaetsgebundenes Web-Requestresult mit In-place-Confirm;
+  kein neuer CommandId/RunId beim Confirm. Value-Confirm bleibt verfuegbar.
+  Record-Payload/Envelope-Encoding endet vor Storewrites; vorhandene Strings
+  werden bewegt. Ein optionaler Head wird Prepared→reset/emplace→Committed
+  wiederverwendet;8 B eingefrorene erste Revision und beide unabhaengigen
+  kodierten Headbytes stehen vor dem ersten Write bereit. Exaktes OLD/NEW/
+  Unknown-Readback, Prepared→Slot→Committed, fruehe Slot-Adoption fuer Recovery,
+  Golden-Bytes, UTC/Fallback/Origin/Replay bleiben im bestehenden Kern.
+- 4→5→6-Migration mutiert nur unveroeffentlichte Kandidaten; die Value-API
+  kopiert einmal und benutzt dieselben Schritte. Kein konsumierender
+  Settings-Envelope/Record-Decode (Option B) und keine Katalog-/UI-Reorganisation.
+- Borrow-unverfuegbar bleibt DecisionOnly/Unavailable mit vorhandenem
+  `CommandStatus::ContextMissing`-Detail; keine neue OOM-Enum und kein
+  faelschliches OwningOutcome. Die generische ContextMissing-Domainabbildung
+  fuer direkte Value-Konsumenten wird nicht umgedeutet.
+
+### Reale Profile, Target-ABI und phasenbezogene Stackbilanz
+
+[Provenienz/BIN-/ELF-/DB-/Response-/Sourcehashes](PR209_Q4_IMPLEMENTATION_20261023_PROVENANCE.json),
+[Target-ABI](PR209_Q4_IMPLEMENTATION_20261023_ABI.tsv),
+[Compiler-/Objekt-/SU-/Callgraphnachweise](PR209_Q4_IMPLEMENTATION_20261023_COMPILE.tsv),
+[Reproduktionsbefehle als Evidence-Text](PR209_Q4_IMPLEMENTATION_20261023_COMPILE.py.txt).
+Kanonischer realer Build beider Profile auf sauberem Produktcommit e31e952:
+
+```bash
+source /var/lib/docker/data/ESP32-Projekte/start.sh
+export IDF_TOOLS_PATH=/var/lib/docker/data/engineering/home/manuel/.espressif
+export IDF_PYTHON_ENV_PATH="$IDF_TOOLS_PATH/python_env/idf6.1_py3.13_env"
+export PATH="$IDF_PYTHON_ENV_PATH/bin:$PATH"
+python3 scripts/build_esp_idf_profiles.py all --require-clean-source-tree
+```
+
+**PASS:** beide Firmwarelinks, kanonische Profil-/Herkunftspruefung,
+SOURCE_TREE_CLEAN=YES. IDF6.1 Commit
+`fff9895c82d744c7237be8847347bdd1b07c6643`, GCC15.2.0
+`esp-15.2.0_20251204`, Xtensa windowed ELF32 little endian, reale `-Og`/
+C++17/`-fno-exceptions`-Flags und jeweilige Response-Dateien.
+`project_description.json` und `APP_SOURCE_GIT_SHA` in beiden echten
+App-Compilebefehlen binden an e31e952. Zusätzliche SDK-Analyse kompiliert
+je Profil54 **unveraenderte originale** SDK-/Adapter-TUs mit ihren tatsächlichen
+Build-DB-Argumenten plus ausschliesslich `-fstack-usage -fcallgraph-info=su`;
+keine temporaere Produktvariante. ABI-Konstanten kommen aus Targetobjekten.
+
+Targetwerte in beiden Profilen: State4896/8, owning Decision10104/8,
+Guard216/8, View536/8, Coordinator21352/8, Token4/4 (optional8/4),
+ActiveRun2816/8, Snapshot3904/8, Requestresult856/8 B.
+**Zusaetzlicher grosser fester Heapowner/allokierter Block:0 B**;
+Coordinatorgroesse unveraendert, IDfenster256 B in bestehender Snapshotflaeche.
+Q3-Scratch1856 B/Alignment8, konservativ1936 B bleibt unveraendert und wird
+hier nicht erneut als vermeintliche neue Heapreserve vermessen.
+
+[Gemessene Frames](PR209_Q4_IMPLEMENTATION_20261023_FRAMES.tsv),
+[Phasen/Summen](PR209_Q4_IMPLEMENTATION_20261023_SUMMARY.tsv),
+[geordnete bekannte Unterpfade](PR209_Q4_IMPLEMENTATION_20261023_PATHS.tsv),
+[konkrete SDK-/NVS-Ziele](PR209_Q4_IMPLEMENTATION_20261023_EDGES.tsv),
+[unaufgeloeste Ziele](PR209_Q4_IMPLEMENTATION_20261023_UNKNOWN.tsv),
+[Callgraphhashes](PR209_Q4_IMPLEMENTATION_20261023_SOURCES.tsv),
+[Auswertungsrezept mit ausdruecklich begrenzter Sieben-Varianten-Projektion](PR209_Q4_IMPLEMENTATION_20261023_PATHS.py.txt).
+
+| Gleichzeitig aktive Phase | bekannte Bytes, beide Profile | Einordnung |
+|---|---:|---|
+| Prepare / Confirm | 6016 /4288 | NOT_PROVEN |
+| Sieben Into-Decision-Varianten: Program/Manual/Stop/Completion/Adjustment/Ack/Mute | 6000 /6112 /6048 /6048 /6176 /5744 /5744 | NOT_PROVEN, Unterpfade eingeschlossen |
+| Borrow-Run Record-Encode/Validierung | 6704 | NOT_PROVEN |
+| Borrow-Run Store einschliesslich Unknown-Write-Readback | 7216 | NOT_PROVEN |
+| Settings-Namenscommit, Q3 unveraendert | 6960 | NOT_PROVEN |
+| Post-Commit-Guard / RAM-Move / Borrowfreigabe | 5088 /5344 /4720 | eigene Phasen; NOT_PROVEN |
+| **Web-Recovery/Sensor: Eintritt in Value-Fallback** | **mindestens15248** | **FAIL schon vor Unterpfaden** |
+
+Prefix1856 B: Taskwrapper32 + httpd_thread32 + httpd_server80 + sess_enum32
++ process_session32 + sess_process32 + req_new32 + parse_req144 + uri64
++ Adapter704 + Dispatcher96 + handleRun32 + Mutation544. Der Callback ist
+sourcegebunden, kein unpassender sess_get-/accept-Kontext. Application1312,
+Web1200, Borrow48, Internal(View)512, Write160, Core160,
+RecordPrepare128, Transaction672 B. Direkte Value-Internalvariante768 B.
+Untersuchungsziel Internal512 erreicht, Write80 nicht erreicht (real160 B).
+NVS Write1168 /Read1200 B bekannte Unterpfade; die bisher ausgelassene virtuelle
+Readbackkante aus `writeExact` ist enthalten und bestimmt jetzt den7216-B-Pfad.
+Kein Addieren isolierter A/B/C-Gewinne. 8192−7216=976, nach512-B-Reserveboden
+464 B; Settings720 B. Diese Rechnungen sind **keine Reserveobergrenzen**.
+
+Die Auswertung addiert ausschliesslich gemessene Teile einer Pfadprojektion.
+Unbekannte Frames bleiben explizit unbekannt; die numerische Summe laesst
+sie offen und ist kein Nullbedarfsansatz/PASS. SDK/NVS Flash-Defaulttabellen,
+Chip-/ROM-/libc-Ziele, `__indirect_call`, Constructor-/Destructor-/Allocator-
+Aliase, New-Handler/Abort, Mutex-/Critical-/Cleanup-/Fehlerzweige und vier
+Callgraphzyklen haben keine vollstaendige Obergrenze. Instrumentierung liefert
+keine Task-HWM oder Interrupt-/Registerspill-/Parallelitaetsqualifikation.
+Das bewiesene Value-Frame-FAIL benoetigt keine Annahme ueber diese offenen Anteile.
+
+### Dynamische Heapfenster gegen095f393 und Fehlergrenzen
+
+[Identische native Fixtures und rohe Werte](PR209_Q4_IMPLEMENTATION_20261023_HEAP.tsv):
+bestehender Allocation-Window-Helfer, zusaetzlich Messgeneration und kontrollierte
+Fehlinjektion/Exception-Cleanup; keine parallele Testarchitektur. Vergleich auf
+isoliertem095f393-Worktree mit denselben portablen Testzusaetzen, keine dortige
+Produktquellenaenderung. Beide Produkte:16 Programme (4 Factory/12 User),
+User-ID48 B, Name96 B/48 UTF-8-Scalars, Notes1024 B/512 Scalars. Adjustment-
+Fixture mit Run-ID48 B und31 vorhandenen Revisionen plus32. Revision.
+Je Messung Response/Fixturecleanup geprueft, anschliessend0 gemessene Livebytes.
+
+| Fixture | Requests alt→neu | angeforderte Bytes alt→neu | Livepeak alt→neu | groesster Request alt→neu |
+|---|---:|---:|---:|---:|
+| Start + exaktes Replay |196→174|68811→60854|47484→45094|32769→32769|
+| Identity-Writefehler vor Decision |109→94|58570→52099|47484→45094|32769→32769|
+| Identity Unknown/Readbackfehler |112→97|58877→52406|47484→45094|32769→32769|
+| Settings-Namenscommit |1159→1159|516410→516410|69724→69724|19890→19890|
+| Adjustment/Replay mit32 Revisionen |581→556|230331→217808|46088→43698|32769→32769|
+
+Diese Werte zaehlen host64 angeforderte Plain-New-/cJSON-Bytes und deren
+Ueberlappungen, nicht Allocatorheader/Fragmentierung oder unveraenderte aligned
+Q3-Scratchallokation. Live-after-Operation ist absichtlich positiv fuer
+persistente Store-/Runtime-/Replayobjekte; erst nach Fixtureabbau0.
+Keine gemessene Heapregression oder groessere neue Blockanforderung in diesen
+Fixtures. **Kein absoluter ESP32-Peak-/Allokations-/Largest-Free-Block-Nachweis.**
+Der bestehende volle Program-Catalog-Writer reserviert bis32768 Nutzbytes
+(Request mindestens32769 inkl NUL), unabhaengig von einer einzelnen neuen
+Decisionstruktur. Settings Read/Decode/2R-Kollision und UI-Katalogkopien aus
+der historischen RAM-Bilanz bleiben ausserhalb Option A; kein Verschweigen
+dieser Spitzen durch Betrachtung nur eines Owners.
+
+Historische H-RAM-1-Daten (Minimum19896 B, anderszeitige Largest-Free-Werte
+26624/22528 B) und F4 PROVISIONAL Skip13312/Resume16640 B sind keine
+Reservierung fuer diese Requests und kein Stand des neuen Produkts. Ein
+32-kB-Request passt nicht allein aufgrund des freien Gesamtheaps; zeitgleicher
+interner groesster Block, bestehende Allokationen/NVS-Puffer/Allocatoraufwand,
+Heap-Regionen und reale Fehler-/Langzeitspitzen bleiben **NOT_PROVEN/NOT_RUN**.
+
+OOM: native erste Plain-New-Fehlinjektion wirft `std::bad_alloc`; erstes
+cJSON-Null liefert den bestehenden400-Ausgang. Sechs gezielte Allokations-
+Fehlerpunkte im privaten Kandidaten-/ActiveRun-Aufbau geben Borrow und Kinder
+frei, ohne Apply oder neue processed IDs. Das beweist Host-Unwinding, **keinen**
+ESP32-OOM-Return bei `-fno-exceptions`. Insbesondere String-/Vektor-Kopien bei
+Encoding, Slot-Adoption, Readback oder nach durablem Write sind weiterhin
+keine allgemein rueckgebbare OOM-Situation. Keine neue Enum, Budgeterhoehung,
+vermeintlicher Persistenz-Busy-/Capacity-Erfolg oder Replay-Neustart daraus.
+
+### Gezielte Regression und Uebergabe
+
+[696/696 native Faelle in18 direkt betroffenen Suites; Builder-Nachweis](PR209_Q4_IMPLEMENTATION_20261023_TESTS.txt).
+Erweiterungen in bestehenden Tests: sieben Value/View-Kerne mit je acht
+Normal-/Rejected-/Unconfirmed-/Stale-/Safety-/Overflow-/Idempotenzsituationen
+und Metadaten/Apply-Paritaet; elf Guardfelder und Alias-/Fremdzielschutz;
+54 Value/Borrow-Transaktionsszenarien (leer/vorhandener Root, drei Writes,
+neun Fehlerkonstellationen) mit exakten rh0/rc0/rc1-Bytes, Return/Durability/IDs;
+rekursive/fremde/andere Coordinator und postdurable Safety/Sensorlock mit
+CommittedApplyFailed; In-place-ActiveRun und unveraenderte Invalid-Destination;
+Confirm-Identitaet, Web Origin/Replay/Ack/Mute; alter/neuer Recovery-/Sensor-
+Wirepfad;4→5→6-Erfolg und spaeter Katalog-Teilabbruch ohne publiziertes Resultat;
+bestehende Codec-/OLD/NEW-/Unknown-/UTC-/Recovery-/Fallback-/Goldenmatrizen;
+oben begrenzte native Allocation-/Cleanup-Faelle. Keine allgemeine C0–C5-
+Neubewertung, keine JS-/Hardware-/Pre-Ready-/schwere-CI-Wiederholung.
+
+Kanonischer Builder-Self-Check auf Produkt-e31e952:
+`PRE_READY_EXPECTED_HEAD=e31e952def3264ca419187b86a2988bd20e3a487 bash scripts/run_pre_ready_gates.sh self-check`:
+clang-format21/clang-tidy21 **PASS**. Die ersten Stil-/Parameter-/RAIIbefunde
+sind behoben; keine Warnunterdrueckung oder Runneraenderung. Builder-PASS ist
+kein Independent Review. D9, reales HWM/Largest-Free-/Heap und Flash **NOT_RUN**;
+keine Ready-/Merge-/Aktorfreigabe.
+
+**STOP; genau eine Ownerentscheidung:** Ob die ebenfalls Web-erreichbaren
+Recovery-/Sensorrequests mit ihrer vorhandenen Value-Grenze in denselben
+zusammenhaengenden Ressourcenrefactor aufgenommen werden sollen. Dieser
+zusatzliche Produktumfang ist nicht freigegeben; keine weitere Mikrooptimierung
+oder Scopeentscheidung automatisch. Aktueller Diff ist unabhaengig reviewbar,
+aber `HTTPD_FULL_CHAIN_STACK=FAIL`, `C5_RESOURCE_GATE=HOLD`,
+`FULL_CHAIN_RESERVE=NOT_PROVEN`, `RAM_PASS=NOT_PROVEN`, `OPEN_BLOCKERS=1`,
+`ACTUATOR_RELEASE=NO`. Hardware kann den bereits statisch bewiesenen
+10880-B-Frame nicht als8192-B-PASS qualifizieren.
