@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-22 · PLAN-REVISION 2.4 (gezieltes Run-Stack-Diagnose-/Plandelta §13) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 NICHT FREIGEGEBEN · PRODUKTARBEIT WEITER HOLD.**
+**2026-10-23 · PLAN-REVISION 2.4 (gezieltes Run-Stack-Diagnose-/Plandelta §13, Ressourcen-Refactor ergaenzt) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 NICHT FREIGEGEBEN · PRODUKTARBEIT WEITER HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -971,3 +971,143 @@ Regressionen fuer Value/View, Borrow/Reentranz, Post-Write-Safety/Stale,
 ID/Replay/Origin, Ack/Mute, OOM/Writefehler/Indeterminate/Recovery/Golden-Bytes
 stehen in der Evidence; jetzt keine davon ausgefuehrt. OOM-Detail/Replay nur
 Vorschlag, keine Produkt-Enum. **Weitere Produktimplementierung NICHT FREIGEGEBEN.**
+
+### Q4-Ressourcen-Refactor: Planungsdelta (2026-10-23)
+
+**IMPLEMENTATION_READY=HOLD; FULL_CHAIN_RESERVE=NOT_PROVEN.** Ausgangs-HEAD
+`c41a8076e9bafd5ab9040ba16b58200150dddf7b`, Produkt/Firmware095f393 unveraendert.
+Der Owner hat die Planung dieses Deltas autorisiert, **keine Produktumsetzung**.
+[Kurze Ressourcenevidence samt einer gemeinsamen temporaeren Variante](../audits/PR209_Q4_RESOURCE_REFACTOR_20261023.md)
+konkretisiert den vorigen Refactor-Ansatz. Fruehere Q4-Holds bleiben historische
+Entscheidstaende; die aktuelle Entscheidung steht hier. Q3/C0–C5, Q1/Q2,
+Budgets und der bestehende Write-/Recovery-/Golden-Byte-Vertrag bleiben.
+
+**Eine Variante / kleinster zusammenhaengender Umsetzungsscope, derzeit gesperrt:**
+
+1. **Kandidat und Entscheidung:** die im gemeinsamen Prototyp abgegrenzte
+   private Application-/Coordinator-Borrow-Grenze uebernehmen, nicht auf
+   unabhaengige Instanzen/Value-Konsumenten ausweiten. Application-Serializer
+   plus nicht kopierbares instanzgebundenes Token vor erstem Candidate-Touch,
+   bis Decision→Persistenz/Readback→zweitem Apply-Check→Uebernahme/Abbruch.
+   Alle in der Ausgangsevidence benannten mutierenden Coordinator-Eingaenge
+   und Application-Lifecycle-Eingaenge weisen fremden/zweiten Zugriff vorher
+   ab; eigene private Fortsetzung akzeptiert dasselbe Token. Flag ist kein
+   Mutex und erweitert bestehende Thread-/Lifecycle-Garantien nicht.
+   `run_commands.*`, `fermentation_ui_commands.*`,
+   `fermentation_application.*`, `run_persistence_coordinator.*` verwenden
+   denselben Value-/View-Domain-/Apply-Kern. Guard216 B friert die **exakten**
+   bisherigen Vergleichsfelder ein: Prozess/Transition, Command-/Run-/Message-/
+   Faultrevision, kritisches Safety-Pending, Run-ID, Sensormodus, Sensorruntime/
+   persistierte Auswahl und Recoveryepisode; Persistenzaltrevisionen separat8 B.
+   Kein before=current-Selbstvergleich, kein zweiter Apply des Kandidaten auf
+   sich selbst. Private validierte ID-Grenze48 B nicht auf ungepruefte externe
+   Valuewerte uebertragen. Bestehende Value-API und Konsumenten bleiben erhalten.
+2. **Factory/Web-Temporaries:** `run_snapshot.*` konstruiert ActiveRun direkt
+   in candidate.activeProgramRun; Value-Factory delegiert denselben Kern.
+   `web_application_routes.cpp` und Application-Prepare/Confirm halten einen
+   identitaetsgebundenen RequestResult856 B und bestaetigen diesen in place;
+   bestehende const Value-Bestaetigung kopiert weiter unter dem Serializer.
+   Keine zweite Requestidentitaet oder bestaetigungsfreie Abkuerzung.
+   Summary/Notice/Effects, Ablehnungen/Unconfirmed, Returnwerte, Timing aus dem
+   bestaetigten Envelope, CommandID/Origin und Replay bleiben aequivalent.
+3. **Bestehenden Persistenz-/Codec-Kern nach Lebensdauer trennen:** in
+   `run_persistence_coordinator.*` unveraenderter Preflight, dann
+   Recordvalidierung/Encoding, dann **derselbe** vollstaendige
+   PreparedHead→Slot→CommittedHead-/Readback-Kern, danach Post-Commit-Check
+   und Uebernahme. Payload in vorhandenen Envelope verschieben, Recordbytes
+   direkt ins vorhandene WS-record encodieren; physisches OLD nach oldSlot
+   verschieben, Prepared-Bytes als OLD der finalen Headphase behalten,
+   Committed-Bytes erst nach Written uebernehmen. Fruehe Slotadoption fuer
+   bestehende Fehlerzustaende erhalten; nur die zweite identische erfolgreiche
+   Slotkopie entfaellt. Kein Snapshot-/Record-/OLD-Puffer vorzeitig freigeben
+   oder zum Kandidatenspeicher erklaeren. Slots behalten ihre benoetigten
+   Snapshot-/Recordkopien. Kein weiterer grosser Scratchowner.
+   `program_model.*` extrahiert die **bestehenden**4→5→6-Migrationsschritte
+   in einen gemeinsamen Into-Kern; `configuration_document_codec.cpp` nutzt
+   ihn ausschliesslich am noch unveroeffentlichten Programmkandidaten und
+   verwirft diesen bei Fehler. Die Value-Migration erhaelt Status und
+   unveraenderten Eingabewert; Unsupported-Version vor Kopie abweisen.
+   Keine zweite Validierung/Migrationsregel, Schemaaenderung oder Q3-Korrektur.
+4. **Verifikation und Stop vor Abschluss:** erst nach spaeterer Freigabe
+   dieses dann konkret geschlossenen Scopes gemeinsame Quellen mit beiden
+   echten Xtensa-Profilen bauen. Semantik und Ressourcen getrennt pruefen;
+   keine isolierten Framegewinne addieren und keine weitere Optimierungsserie
+   bei Nichterreichen der unten genannten Grenze beginnen.
+
+**Messstand / Ressourcenziel:** die eine Compile-only-Variante enthaelt1–3
+zusammen. Internal bleibt768 B, Write208 B; Core1168→224 B, separater
+Record-Prepare128 B, Transaction976 B. Im Storezweig bleiben damit224+976 B
+statt1168 B gleichzeitig aktiv. Migration-Into/Schritte je32 B, ReadProgram
+448→240 B; CatalogValidator1088 B und Factory-/Allocatorzweige bleiben.
+Mit echtem HTTPD-Prefix1856 B: bekannte Run-Validierung7040 B (ausgerichteter
+Allocatorzweig7072 B), Store/NVS/Flashzweig**7760 B**, Settings**6960 B**.
+Prepare6016 / Confirm4288 / Decision6144 / Ack-Mute4816 B unveraendert zum
+Ownership-Prototyp. Gemessene Frames plus berechnete **Teilketten**, keine
+Vollkettenobergrenzen/HWM; SDK-/NVS-/ROM-/libc-/Alias-/OOM-/Cleanup-Ziele
+weiter explizit NOT_PROVEN, einschliesslich Envelope-Unterpfaden.
+
+Akzeptanzboden fuer **vollstaendig** begrenzte Run- und Settings-Ketten:
+S_Run≤7680 B **und** S_Settings≤7680 B, entsprechend mindestens512 B Reserve
+(6,25% des8192-B-Stacks). Planungspuffer zweimal so gross wie der jetzt
+nach Aufloesen bekannter NVS-Read-Ziele sichtbare Zuwachs256 B (848→1104 B),
+fuer Frame-/Callsite-Sensitivitaet nach Pfadabschluss, **keine**
+Pauschalbuchung unbekannter Targets. Indirekte Ziele, Allocator-/Write-/Readback-/Fehler-/Destruktorpfade
+und begrenzte Zyklen muessen in S enthalten sein; Review bestaetigt die
+Begruendung, reale D9/HWM bleibt separat. **7760 B ergeben nur432 B Rest:
+80 B unter dem Planungsboden schon vor offenen Targets. STOP.** Die
+Phasentrennung allein traegt keine Implementierungsreife.
+
+**RAM-/OOM-Grenze:** Coordinator21352 B einschliesslich WorkingSet12752 B,
+separater Current4896 B und Q3-CommitScratch1856 B bleiben; kein neuer grosser
+fester Heaprequest oder Block. View536 B inkl. Guard/Token bleiben Stackwerte.
+Die Evidence bilanziert Request-/String-/Vektor-/Snapshot-/Record-/Head-/
+Store-/Readback-/Cleanup-Ueberlappungen gegen095f393: entfernbare logische
+Bytekopien sind keine gemessene Heapgutschrift. Gesamtheappeak, Allocator-
+Overhead und groesster erforderlicher Block bleiben NOT_PROVEN, einschliesslich
+bestehender bis32813-B-Settings-Readstrings plus NUL und Envelope-Payloadkopie.
+Spaetere Differentialtraces muessen fuer dieselben Eingaben/Fehlerstellen
+maximale Live-Allokatorbelegung, zusaetzliche Requests und groessten Request
+belegen; kein hoeherer Gesamtpeak oder neuer groesserer Block ohne erneuten
+Ownerentscheid, keine Kapazitaet aus F4/H-RAM-1 annehmen.
+
+OOM-/Borrowablehnungsvorschlag: intern ResourceUnavailable,
+DecisionOnly/Unavailable, bestehendes Web-unavailable samt identischem Replay;
+getrennt von Persistence-Busy, CapacityReached und OwningOutcome. Sobald der
+Owning-Persistenzpfad tatsaechlich betreten ist, dessen echte Durability/
+Indeterminate-/CommittedApplyFailed-Ergebnisse behalten. Keine neue Enum jetzt.
+Standardcontainer/ByteWriter unter -fno-exceptions sind nicht allgemein
+OOM-fallibel; ein Enum ersetzt keinen Fehlerpfad. Vor weiterer Freigabe muss
+jede betroffene Allokationsgrenze ehrlich behandelt oder als Stop ausgewiesen
+werden. Kein Persistenzerfolg, Retry oder Identitaetsreset aus OOM ableiten.
+
+**Spaetere gezielte Regressionen:** `test_run_commands`,
+`test_fermentation_ui_commands`, `test_run_snapshots`,
+`test_run_persistence_coordinator`, `test_web_application_routes` vergleichen
+Value/View und direkte Web-/Touch-Konsumenten fuer alle sieben Webvarianten,
+Unconfirmed/Rejected/NoChange/Stale/Safety/Overflow, Summary/Notices/Effects,
+IDs/Origin/Replay; Ack/Mute bleiben RAM-only. Rekursive/zweite Mutation vor
+Candidate-Touch abweisen, eigene Fortsetzung zulassen, fremdes Token sperren,
+unabhaengige Instanz unbeeinflusst, Cleanup auf allen Rueckwegen. Sensor-/
+Safety-/Stale-Aenderung vor und **nach durablem Write** injizieren:
+Originalzustand vorher unveraendert, danach weiterhin
+PersistenceCommittedApplyFailed bei ungueltiger Basis; keine Aktorfreigabe.
+OLD/NEW/fehlendes/abweichendes Readback, jeder Head-/Slot-Writefehler,
+Indeterminate/Recovery, Trusted-UTC und Golden-Bytes behalten.
+`test_program_models`, `test_configuration_documents`,
+`test_configuration_graph_codecs` pruefen Value/Into4→5→6 einschliesslich
+ungueltiger Eingaben/Teilfehler; direkt betroffene Settings-/Graph-Store-
+Regressionen nur fuer dieses Delta. Allokations-/OOM-Injektionen an Candidate,
+Request, Codec, Store und Cleanup samt ehrlichem Outcome/Replay planen.
+Statische Vollketten, Native-/Golden-Tests, dynamische Heaptraces und spaetere
+reale HWM-/Hardwareevidence sind verschiedene Gates; jetzt keine Tests davon
+als bestanden buchen, keine allgemeinen C0–C5-/Q3-Laeufe wiederholen.
+
+**Eine Ownerentscheidung / Halt:** Als einzige naechste technische Option den
+Scope um eine phasenweise Nutzung **eines** Head-Valueobjekts statt gleichzeitig
+Prepared und Committed begrenzen. Beide kodierten Headbytes muessen vor dem
+ersten Write bereitstehen; OLD/NEW/Readback und Recovery bleiben derselbe
+Kern. Der dominante Transactionframe976 B ist der gemessene Ansatzpunkt,
+keine zugesagte Einsparung. Ohne diese explizite Scopeentscheidung bleibt
+HOLD; hier keine weitere Probe automatisch beginnen. **Zusaetzliche
+Produktimplementierung NICHT FREIGEGEBEN**, weder durch die Planung noch
+durch deren neue exakte Commit-SHA. Danach anhalten.
