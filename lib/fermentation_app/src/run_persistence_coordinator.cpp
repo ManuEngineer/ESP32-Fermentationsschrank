@@ -2697,6 +2697,12 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
     // bleiben in diesem Ergebnis bewusst leer: 6.11 macht sie erst nach
     // einem erfolgreichen Commit sichtbar, den dieser Pfad nie durchfuehrt,
     // und AppliedRamOnly fuellt sie ohnehin nie.
+    if constexpr (std::is_same_v<Decision, CommandDecisionView>) {
+        // The RAM-only apply below moves `after` into the live state, so the
+        // borrowed candidate identity must hold before it, not only later.
+        if (&decision.after != &workingSet_.candidate || !commandBorrowed_)
+            return result(RunPersistenceResultStatus::InvalidDecision);
+    }
     if (decision.kind == CommandKind::ApplySensorSelectionAction &&
         decision.sensorSelectionApplyStatus.has_value() &&
         *decision.sensorSelectionApplyStatus ==

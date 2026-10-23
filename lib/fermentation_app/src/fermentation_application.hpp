@@ -535,8 +535,6 @@ class FermentationApplication {
 
    private:
     [[nodiscard]] bool runCommandOperationActive() const;
-    FermentationUiCommandResult applyConfirmedPreparedValue(
-        const FermentationApplicationPreparedRequest& confirmed);
 
 #ifdef APP_PROFILE_NATIVE
     std::size_t webConfigurationCallsForTest_{0U};

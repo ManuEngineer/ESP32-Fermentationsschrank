@@ -494,13 +494,8 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedIntoCore(
             } else if constexpr (std::is_same_v<
                                      Request,
                                      ApplyRecoveryTimeCorrectionRequest>) {
-                if constexpr (std::is_same_v<Decision, CommandDecision>) {
-                    decision =
-                        ::fermentation::decideApplyRecoveryTimeCorrection(
-                            current, prepared);
-                } else {
-                    return FermentationUiCommandBridge::unsupportedAppDetail();
-                }
+                ::fermentation::decideApplyRecoveryTimeCorrectionInto(
+                    current, prepared, decision);
             } else if constexpr (std::is_same_v<
                                      Request,
                                      FermentationApplicationPreparedRequest::
@@ -516,12 +511,8 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePreparedIntoCore(
             } else {
                 if (!request.owningPlausibility().has_value())
                     return FermentationUiCommandBridge::unsupportedAppDetail();
-                if constexpr (std::is_same_v<Decision, CommandDecision>) {
-                    decision = decideApplySensorSelectionAction(
-                        current, prepared, *request.owningPlausibility());
-                } else {
-                    return FermentationUiCommandBridge::unsupportedAppDetail();
-                }
+                ::fermentation::decideApplySensorSelectionActionInto(
+                    current, prepared, *request.owningPlausibility(), decision);
             }
 
             return FermentationUiCommandBridge::fromCommandStatus(

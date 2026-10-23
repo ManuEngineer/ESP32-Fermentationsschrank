@@ -685,12 +685,6 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
     if (runPersistenceCoordinator_->commandOperationActive()) {
         return unavailableRunDecision();
     }
-    if (std::holds_alternative<ApplyRecoveryTimeCorrectionRequest>(
-            confirmed.storage_) ||
-        std::holds_alternative<SensorSelectionCommandRequest>(
-            confirmed.storage_)) {
-        return applyConfirmedPreparedValue(confirmed);
-    }
     auto operation = runPersistenceCoordinator_->beginCommandOperation();
     if (!operation) {
         return unavailableRunDecision();
@@ -741,67 +735,6 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
         persisted = runPersistenceCoordinator_->persistBorrowedCommand(
             *operation, *runtimeRunState_, decision, checkpointTime,
             liveEvidence, nullptr);
-    }
-    return FermentationUiCommandBridge::fromRunPersistenceResult(
-        persisted.status);
-}
-
-FermentationUiCommandResult
-FermentationApplication::applyConfirmedPreparedValue(
-    const FermentationApplicationPreparedRequest& confirmed) {
-    const auto guard = applicationCallSerializer_.enter();
-    if (!confirmed.commandEnvelope().confirmed) {
-        return FermentationUiCommandBridge::fromCommandStatus(
-            CommandStatus::NotConfirmed);
-    }
-    if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr) {
-        // No owning path was entered. Keep this a decision-only result instead
-        // of mislabelling an unavailable application as a persisted outcome.
-        return FermentationUiCommandBridge::fromCommandStatus(
-            CommandStatus::ContextMissing);
-    }
-
-    CommandDecision decision;
-    auto decisionResult = FermentationUiCommandBridge::decidePrepared(
-        *runtimeRunState_, confirmed, std::nullopt, &decision);
-    if (!std::holds_alternative<CommandStatus>(decisionResult.detail) ||
-        std::get<CommandStatus>(decisionResult.detail) !=
-            CommandStatus::Proposed) {
-        return decisionResult;
-    }
-
-    // Message acknowledgement/muting is an existing RAM-owned command path;
-    // messages are deliberately outside the run-persistence wire projection.
-    if (decision.kind == CommandKind::AcknowledgeMessage ||
-        decision.kind == CommandKind::MuteMessage) {
-        const auto applied = applyRunCommand(*runtimeRunState_, decision);
-        return FermentationUiCommandBridge::fromOwningCommandApplyStatus(
-            applied);
-    }
-
-    auto checkpointTime = currentCheckpointTime();
-    checkpointTime.monotonicMillis =
-        confirmed.commandEnvelope().monotonicMillis;
-    RunPersistenceResult persisted;
-    const auto* liveEvidence = &owningRuntimeEvidence_;
-    if (decision.kind == CommandKind::StartProgram ||
-        decision.kind == CommandKind::StartManualHolding) {
-        FreshStartSnapshotProvenance provenance =
-            FreshStartSnapshotProvenance::absent();
-        if (configurationService_ != nullptr) {
-            const auto runtime = configurationService_->acquireRuntime();
-            if (runtime.status ==
-                RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
-                provenance = FreshStartSnapshotProvenance::fromRuntimeLease(
-                    runtime.lease);
-            }
-        }
-        persisted = runPersistenceCoordinator_->persistFreshStartCommand(
-            *runtimeRunState_, decision, provenance, checkpointTime,
-            liveEvidence);
-    } else {
-        persisted = runPersistenceCoordinator_->persistCommand(
-            *runtimeRunState_, decision, checkpointTime, liveEvidence);
     }
     return FermentationUiCommandBridge::fromRunPersistenceResult(
         persisted.status);

@@ -8578,6 +8578,289 @@ void test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempo
         static_cast<int>(restoredState->sensorSelectionRuntime.permission));
 }
 
+SensorSelectionCommandRequest borrowedSensorRequest(
+    const RunCommandState& state, CommandId id,
+    SensorSelectionUserAction action, std::uint64_t monotonicMillis) {
+    SensorSelectionCommandRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        monotonicMillis,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
+    request.action = action;
+    return request;
+}
+
+CrossRolePlausibilityContext borrowedProductFailedPlausibility(
+    std::uint64_t monotonicMillis) {
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorFailedSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = monotonicMillis;
+    return plausibility;
+}
+
+// Value (persistCommand) and borrowed View (persistBorrowedCommand) must give
+// the same result, durability, run state and persisted-id bookkeeping for the
+// persistent manual sensor-selection command under every write outcome.
+void test_borrowed_view_persistent_sensor_selection_matches_value_path() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    using Fault = SequencedWriteStore::WriteFault;
+    for (unsigned failure = 0; failure < 4; ++failure) {
+        SequencedWriteStore a, b;
+        RunPersistenceCoordinator ca(a, device_platform::StorageEpoch(1U),
+                                     RunCheckpointSchedule{});
+        RunPersistenceCoordinator cb(b, device_platform::StorageEpoch(1U),
+                                     RunCheckpointSchedule{});
+        static_cast<void>(ca.loadAndInitialize());
+        static_cast<void>(cb.loadAndInitialize());
+        auto x = readyActiveRunWithSensorSelection(ca, 940U);
+        auto y = readyActiveRunWithSensorSelection(cb, 940U);
+        for (auto* state : {&x, &y}) {
+            state->sensorSelectionRuntime.phase =
+                SensorSelectionPhase::UserDecisionRequired;
+            state->sensorSelectionRuntime.permission =
+                SensorPeltierPermission::Blocked;
+        }
+        const auto next = a.writeCount() + 1U;
+        for (auto* store : {&a, &b}) {
+            if (failure == 1) store->faultAt(next, Fault::FailBeforeBegin);
+            if (failure == 2)
+                store->faultAt(next, Fault::PowerCutAfterCommitBeforeReturn);
+            if (failure == 3) store->unknownWithoutCommitAt(next);
+        }
+        const auto plausibility = borrowedProductFailedPlausibility(600U);
+        const auto request = borrowedSensorRequest(
+            x, 941U, SensorSelectionUserAction::ContinueWithAir, 600U);
+        const auto value =
+            decideApplySensorSelectionAction(x, request, plausibility);
+        TEST_ASSERT_TRUE(value.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                SensorSelectionApplyStatus::AppliedPersistentCandidate),
+            static_cast<int>(*value.sensorSelectionApplyStatus));
+        auto op = Access::borrow(cb);
+        TEST_ASSERT_TRUE(op.has_value());
+        auto* candidate = Access::candidate(cb, *op);
+        TEST_ASSERT_NOT_NULL(candidate);
+        CommandDecisionView view(y, *candidate);
+        decideApplySensorSelectionActionInto(y, request, plausibility, view);
+        TEST_ASSERT_TRUE(view.proposed());
+        const auto ra =
+            ca.persistCommand(x, value, trustedCheckpointTime(600U));
+        const auto rb = Access::persistBorrowed(cb, *op, y, view,
+                                                trustedCheckpointTime(600U));
+        TEST_ASSERT_TRUE(ra.status == rb.status && ra.step == rb.step &&
+                         ra.technicalReason == rb.technicalReason &&
+                         ra.durability == rb.durability &&
+                         ra.coordinatorState == rb.coordinatorState);
+        TEST_ASSERT_EQUAL_UINT32(ra.effectCount, rb.effectCount);
+        for (std::size_t i = 0; i < ra.effectCount; ++i)
+            TEST_ASSERT_TRUE(ra.effects[i] == rb.effects[i]);
+        TEST_ASSERT_TRUE(ra.sensorSelectionEvent.has_value() ==
+                         rb.sensorSelectionEvent.has_value());
+        TEST_ASSERT_EQUAL_UINT32(x.commandSequence, y.commandSequence);
+        TEST_ASSERT_EQUAL_UINT32(x.runRevision, y.runRevision);
+        TEST_ASSERT_TRUE(x.sensorSelectionRuntime.phase ==
+                         y.sensorSelectionRuntime.phase);
+        TEST_ASSERT_TRUE(x.activeRunSensorMode == y.activeRunSensorMode);
+        TEST_ASSERT_TRUE(x.sensorSelection == y.sensorSelection);
+        TEST_ASSERT_EQUAL(Access::persistedIdCount(ca),
+                          Access::persistedIdCount(cb));
+        TEST_ASSERT_EQUAL_UINT(a.writeCount(), b.writeCount());
+    }
+}
+
+// AppliedRamOnly through the borrowed View: applied once in RAM, no store
+// write, no persisted command id, unchanged run revision.
+void test_borrowed_view_sensor_selection_ram_only_has_no_write_or_persisted_id() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 920U);
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::AirFallbackActive;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.activeRunSensorMode = RunSensorMode::Air;
+    if (state.activeManualRun.has_value())
+        state.activeManualRun->values.sensorMode = RunSensorMode::Air;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 700U;
+    plausibility.thermalCompatibility.status = ThermalCompatibility::Stale;
+    plausibility.thermalCompatibility.profileRevision = 9U;
+    const auto request = borrowedSensorRequest(
+        state, 921U, SensorSelectionUserAction::RecheckProduct, 700U);
+    const auto sensorSelectionBefore = state.sensorSelection;
+    const auto runRevisionBefore = state.runRevision;
+    const auto writesBefore = store.writeCount();
+    const auto idsBefore = Access::persistedIdCount(coordinator);
+    {
+        auto op = Access::borrow(coordinator);
+        TEST_ASSERT_TRUE(op.has_value());
+        auto* candidate = Access::candidate(coordinator, *op);
+        TEST_ASSERT_NOT_NULL(candidate);
+        CommandDecisionView view(state, *candidate);
+        decideApplySensorSelectionActionInto(state, request, plausibility,
+                                             view);
+        TEST_ASSERT_TRUE(view.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionApplyStatus::AppliedRamOnly),
+            static_cast<int>(*view.sensorSelectionApplyStatus));
+        const auto result = Access::persistBorrowed(
+            coordinator, *op, state, view, trustedCheckpointTime(700U));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceDurability::Unchanged),
+            static_cast<int>(result.durability));
+    }
+    TEST_ASSERT_EQUAL_UINT(writesBefore, store.writeCount());
+    TEST_ASSERT_EQUAL_UINT(idsBefore, Access::persistedIdCount(coordinator));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::ReturnValidationPending),
+        static_cast<int>(state.sensorSelectionRuntime.phase));
+    TEST_ASSERT_TRUE(state.sensorSelection == sensorSelectionBefore);
+    TEST_ASSERT_EQUAL_UINT32(runRevisionBefore, state.runRevision);
+    // The same id decides AlreadyProcessed on the next borrowed attempt.
+    auto op = Access::borrow(coordinator);
+    TEST_ASSERT_TRUE(op.has_value());
+    CommandDecisionView again(state, *Access::candidate(coordinator, *op));
+    decideApplySensorSelectionActionInto(state, request, plausibility, again);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::AlreadyProcessed),
+                          static_cast<int>(again.status));
+}
+
+// A View whose `after` is not the borrowed candidate must be rejected before
+// the RAM-only apply could move foreign state into the live run state.
+void test_borrowed_view_with_foreign_after_is_rejected_before_ram_only_apply() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 930U);
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::AirFallbackActive;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.activeRunSensorMode = RunSensorMode::Air;
+    if (state.activeManualRun.has_value())
+        state.activeManualRun->values.sensorMode = RunSensorMode::Air;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 700U;
+    plausibility.thermalCompatibility.status = ThermalCompatibility::Stale;
+    plausibility.thermalCompatibility.profileRevision = 9U;
+    const auto request = borrowedSensorRequest(
+        state, 931U, SensorSelectionUserAction::RecheckProduct, 700U);
+    auto op = Access::borrow(coordinator);
+    TEST_ASSERT_TRUE(op.has_value());
+    RunCommandState foreign;
+    CommandDecisionView view(state, foreign);
+    decideApplySensorSelectionActionInto(state, request, plausibility, view);
+    TEST_ASSERT_TRUE(view.proposed());
+    const auto writesBefore = store.writeCount();
+    const auto result = Access::persistBorrowed(coordinator, *op, state, view,
+                                                trustedCheckpointTime(700U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::AirFallbackActive),
+        static_cast<int>(state.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_UINT(writesBefore, store.writeCount());
+}
+
+// Recovery-time correction through the borrowed View: same persisted result
+// as the Value path, including a failed write before apply.
+void test_borrowed_view_recovery_time_correction_matches_value_path() {
+    using Access = RunPersistenceCoordinatorTestAccess;
+    using Fault = SequencedWriteStore::WriteFault;
+    for (unsigned failure = 0; failure < 3; ++failure) {
+        SequencedWriteStore a, b;
+        RunPersistenceCoordinator ca(a, device_platform::StorageEpoch(1U),
+                                     RunCheckpointSchedule{});
+        RunPersistenceCoordinator cb(b, device_platform::StorageEpoch(1U),
+                                     RunCheckpointSchedule{});
+        static_cast<void>(ca.loadAndInitialize());
+        static_cast<void>(cb.loadAndInitialize());
+        RunCommandState x, y;
+        x.processState.state = y.processState.state = ProcessState::Standby;
+        const auto setup = [](RunPersistenceCoordinator& coordinator,
+                              RunCommandState& state) {
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(RunPersistenceResultStatus::Applied),
+                static_cast<int>(
+                    coordinator
+                        .persistCommand(state, startDecision(state, 43U),
+                                        trustedCheckpointTime(100U))
+                        .status));
+            state.processState.state = ProcessState::Fermenting;
+            state.processState.stateEnteredAtMillis = 100U;
+            state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+                ProcessState::Fermenting, PriorBootPhaseElapsed{100U, 300U}};
+            state.recoveryEpisodeRevision = 2U;
+        };
+        setup(ca, x);
+        setup(cb, y);
+        const auto next = a.writeCount() + 1U;
+        for (auto* store : {&a, &b}) {
+            if (failure == 1) store->faultAt(next, Fault::FailBeforeBegin);
+            if (failure == 2) store->unknownWithoutCommitAt(next);
+        }
+        ApplyRecoveryTimeCorrectionRequest request;
+        request.envelope.id = 44U;
+        request.envelope.source = CommandSource::LocalDisplay;
+        request.envelope.monotonicMillis = 200U;
+        request.envelope.expectedStateSequence =
+            x.processState.transitionSequence;
+        request.envelope.expectedRunRevision = x.runRevision;
+        request.envelope.expectedRecoveryEpisodeRevision =
+            x.recoveryEpisodeRevision;
+        request.envelope.confirmed = true;
+        request.secondsDelta = 50U;
+        const auto value = decideApplyRecoveryTimeCorrection(x, request);
+        TEST_ASSERT_TRUE(value.proposed());
+        auto op = Access::borrow(cb);
+        TEST_ASSERT_TRUE(op.has_value());
+        auto* candidate = Access::candidate(cb, *op);
+        TEST_ASSERT_NOT_NULL(candidate);
+        CommandDecisionView view(y, *candidate);
+        decideApplyRecoveryTimeCorrectionInto(y, request, view);
+        TEST_ASSERT_TRUE(view.proposed());
+        const auto ra =
+            ca.persistCommand(x, value, trustedCheckpointTime(200U));
+        const auto rb = Access::persistBorrowed(cb, *op, y, view,
+                                                trustedCheckpointTime(200U));
+        TEST_ASSERT_TRUE(ra.status == rb.status && ra.step == rb.step &&
+                         ra.technicalReason == rb.technicalReason &&
+                         ra.durability == rb.durability);
+        TEST_ASSERT_EQUAL_UINT32(x.commandSequence, y.commandSequence);
+        TEST_ASSERT_TRUE(x.nominalRecoveryAdjustment.has_value() ==
+                         y.nominalRecoveryAdjustment.has_value());
+        if (x.nominalRecoveryAdjustment.has_value()) {
+            TEST_ASSERT_EQUAL_UINT32(
+                x.nominalRecoveryAdjustment->cumulativeAppliedSeconds,
+                y.nominalRecoveryAdjustment->cumulativeAppliedSeconds);
+        }
+        TEST_ASSERT_EQUAL(Access::persistedIdCount(ca),
+                          Access::persistedIdCount(cb));
+        TEST_ASSERT_EQUAL_UINT(a.writeCount(), b.writeCount());
+    }
+}
+
 // PR-#99-letzter-Abschlussblocker: "stale-geprueft" ist ein eigenstaendiger
 // Teil des Auftrags, nicht nur eine Folge des once-only-Verhaltens oben -
 // dieser Test belegt ihn direkt. Zwischen Entscheidung und Anwendung
@@ -11043,6 +11326,12 @@ int main(int, char**) {
     RUN_TEST(test_persist_command_applies_and_writes_manual_continue_with_air);
     RUN_TEST(
         test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempotent);
+    RUN_TEST(test_borrowed_view_persistent_sensor_selection_matches_value_path);
+    RUN_TEST(
+        test_borrowed_view_sensor_selection_ram_only_has_no_write_or_persisted_id);
+    RUN_TEST(
+        test_borrowed_view_with_foreign_after_is_rejected_before_ram_only_apply);
+    RUN_TEST(test_borrowed_view_recovery_time_correction_matches_value_path);
     RUN_TEST(
         test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision);
     RUN_TEST(
