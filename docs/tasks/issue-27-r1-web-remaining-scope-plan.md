@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 2.4 mit Implementierungsnachtrag §13 · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
+**2026-10-23 · PLAN-REVISION 2.5 mit Implementierungsnachtrag §13 und Korrekturdelta-Vorschlag §14 (WARTET AUF OWNERFREIGABE) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -520,6 +520,10 @@ dieses Gate nicht und es gilt kein implizites Gate-PASS.
 **Q3:** Freigabe dieser exakten Planrevision fuer die begrenzte Stackkorrektur
 nach §12. D1–D9 und Q1/Q2 bleiben unveraendert; D9 benoetigt weiterhin eine
 getrennte Hardware-/Flash-/Browserfreigabe. Kein Ready-/Merge-/Release-GO.
+
+**Q4-Delta (§14):** Freigabe des Korrekturdeltas fuer die zwei Web-erreichbaren
+Value-Intents `recovery-time-correction` und `sensor-selection` auf der exakten
+Plan-SHA dieser Revision. Bis dahin keine Produktaenderung, PR Draft/HOLD.
 
 ## 11. Risiken
 
@@ -1307,12 +1311,129 @@ bleibt ohne allgemeinen Statusreturn; native Exception-Cleanup ist kein
 Zielsystem-OOM-Vertrag. Historische F4-/H-RAM-Belege qualifizieren diesen Stand nicht.
 
 **STOP / eine Ownerentscheidung:** Ob die weiterhin Web-erreichbaren
-Recovery-/Sensorrequests mit ihrer bestehenden Value-Grenze in denselben
-zusammenhaengenden Ressourcenrefactor aufgenommen werden sollen. Dieser
-zusaetzliche Produktumfang ist nicht freigegeben; hier keine weitere
-Optimierungsschleife. Der aktuelle Implementierungsdiff wird mit dem konkreten
+Recovery-/Sensorrequests in den Ressourcenrefactor aufgenommen werden. Dieser
+zusaetzliche Produktumfang ist nicht freigegeben; §14 enthaelt den konkreten
+Umsetzungsvorschlag und wartet auf Ownerfreigabe der exakten Plan-SHA. Der aktuelle Implementierungsdiff wird mit dem konkreten
 Blocker unabhaengig reviewbar uebergeben. Bis dahin `C5_RESOURCE_GATE=HOLD`,
 `HTTPD_FULL_CHAIN_STACK=FAIL`, `FULL_CHAIN_RESERVE=NOT_PROVEN`,
 `RAM_PASS=NOT_PROVEN`, `OPEN_BLOCKERS=1`, `ACTUATOR_RELEASE=NO`;
 D9/Flash/Hardware gesondert **NOT_RUN**. Ein Hardwarelauf kann den bereits
 statisch nachgewiesenen 10880-B-Frame nicht freigeben.
+
+## 14. Q4-Korrekturdelta: Web-erreichbare Value-Stackpfade (Recovery-Zeit, Sensorselektion)
+
+**Status: PLAN – KEINE Produktumsetzung ohne ausdrueckliche Ownerfreigabe der exakten
+Plan-SHA.** Auftrag: `PR209_Q4_Fixauftrag_Web_Value_Stackpfade.md` (Review-Basis
+PR-HEAD `2d0fde5`, Produkt-HEAD `e31e952`). Loest die STOP-Frage am Ende von §13 **vorschlagend**:
+die zwei Intents bleiben Web-erreichbar und sollen mit der bestehenden Option-A-Mechanik
+(Borrow/Guard/Candidate, `CommandDecisionView`) gefuehrt, nicht deaktiviert werden. Das
+8192-B-Budget, Q3 und C0–C5 bleiben unveraendert; Option B ist nicht Teil davon.
+
+### 14.1 Befund (am Code verifiziert)
+
+- `FermentationApplication::applyConfirmedPrepared` leitet `ApplyRecoveryTimeCorrectionRequest`
+  und `SensorSelectionCommandRequest` an `applyConfirmedPreparedValue` (lokale
+  `CommandDecision`, 10 880 B Frame).
+- `FermentationUiCommandBridge::decidePreparedIntoCore` liefert fuer beide Typen bei
+  `Decision = CommandDecisionView` `unsupportedAppDetail()`; nur der Value-Zweig ruft
+  `decideApplyRecoveryTimeCorrection` bzw. `decideApplySensorSelectionAction`.
+- Beide Domainfunktionen (`run_commands.cpp`) liefern `CommandDecision` per Wert; die
+  Sensorselektion baut zusaetzlich einen lokalen `candidate = decision.before`
+  (weiteres `RunCommandState`, 4896 B) und verschiebt ihn nach `decision.after`.
+- Die sieben bereits umgestellten Varianten nutzen das Muster
+  `decideXInto<Decision>` + `RestoreRejectedAfter<Decision>` + `beginDecisionInto`.
+
+### 14.2 Delta (genau diese Aenderungen)
+
+1. **Domain (`run_commands.cpp/.hpp`):** `decideApplyRecoveryTimeCorrection` und
+   `decideApplySensorSelectionAction` werden zu Kernen `...IntoCore<Decision>` nach dem
+   Muster der sieben Varianten; zwei neue oeffentliche Overloads je Funktion
+   (`decideApplyRecoveryTimeCorrectionInto` / `decideApplySensorSelectionActionInto`, je
+   fuer `CommandDecision&` und `CommandDecisionView&`). Die bestehenden Value-Funktionen
+   bleiben als duenne Huellen (identische Signatur und Rueckgabe) – eine einzige
+   Fachimplementierung, keine zweite Regel.
+   - Recovery: `beginMutation` und das Setzen von `after.nominalRecoveryAdjustment`
+     wirken direkt auf `decision.after`; Ablehnungen setzen nur `status`
+     (`RestoreRejectedAfter` stellt `after = before` her).
+   - Sensorselektion: kein lokales `candidate`-`RunCommandState`; die Mutation
+     (`applySensorSelectionMutation`, `applySensorRoleChangeQualificationReset`) laeuft
+     direkt auf `decision.after`. Fehlpfade (`InvalidInput` nach Reset-Fehlschlag,
+     `NotConfirmed`) hinterlassen `after` ueber `RestoreRejectedAfter` unveraendert.
+     Reihenfolge der Pruefungen bleibt exakt wie heute (Status-/Confirm-Semantik
+     unveraendert: `NotConfirmed` erst nach Mutations- und Reset-Pruefung).
+     `SensorSelectionStateView`/`SensorSelectionDecision`/`SensorSelectionMutation`
+     bleiben lokal; ihre Frame-Groesse wird gemessen (14.4), nicht vermutet.
+2. **Bridge (`fermentation_ui_commands.cpp`):** In `decidePreparedIntoCore` entfallen die
+   beiden `unsupportedAppDetail()`-Zweige fuer `CommandDecisionView`; beide Typen rufen
+   die neuen `...Into`-Funktionen (Plausibility-Pruefung `owningPlausibility()` bleibt
+   vorgeschaltet und fail-closed).
+3. **Application (`fermentation_application.cpp/.hpp`):** Der Sonderabzweig in
+   `applyConfirmedPrepared` entfaellt, beide Typen laufen durch den bestehenden
+   `beginCommandOperation`/`commandCandidate`/`persistBorrowedCommand`-Pfad.
+   `applyConfirmedPreparedValue` hat nach Suche in `lib/`, `src/` und `test/` genau einen
+   Aufrufer (der entfallende Abzweig) und wird samt Deklaration entfernt.
+4. **Persistenz-Koordinator (`persistCommandInternal`, am Code geprueft):**
+   `isPersistedRunCommand` ist fuer beide Kinds `true`; `applyRunCommand(..., const
+   CommandDecisionView&)` existiert; `requireRecoveryEpisodeRevision` und `addEffect`
+   sind bereits ueber `Decision` templatisiert; die Operation gibt Borrow/Candidate ueber
+   `~CommandOperation` frei, auch nach RAM-only-Rueckgabe. **Einzige Luecke:** der
+   `AppliedRamOnly`-Zweig (vor dem View-Identitaetscheck `&decision.after ==
+   &workingSet_.candidate && commandBorrowed_`) verschiebt bei einer View
+   `decision.after` per `applyRunCommand` in den Live-Zustand. Der gleiche
+   Identitaetscheck wird fuer die View vor diesen Zweig gezogen (kleine, ausschliesslich
+   defensive Koordinatoraenderung; Verhalten fuer die Application-Aufrufe unveraendert).
+   Sonst bleiben Persistenz-Sonderfaelle unveraendert (`AppliedRamOnly` ohne
+   Store-Write/persistierte CommandId; persistent: Write-before-Apply,
+   `PersistenceCommittedApplyFailed`, `persistedIds_`-Vorrang `AlreadyPersisted`).
+5. **Keine** neuen Buffermanager, Tasks, Heapowner, Routen-Abschaltungen oder
+   `Unavailable`-Ersatzantworten. **STOP-Bedingung:** scheitert die Wiederverwendung an
+   einem konkreten Vertrag (z. B. `persistBorrowedCommand` verlangt ein Feld, das die View
+   nicht traegt), wird mit praezisem Gegenbeispiel angehalten, keine Teilunterstuetzung.
+
+### 14.3 Unveraenderte Vertraege (Paritaetsbedingung)
+
+Rueckgabewerte aller bisherigen Value-Konsumenten (Feld fuer Feld: `status`, `kind`,
+`envelope`, `effects`, `sensorSelectionApplyStatus/-Event/-Notice`,
+`committedControlContextTransition`, `before`/`after`); bestaetigte Identitaet, Origin,
+CSRF/Session, Sequenz-/Digest-Replay, Ablehnung und `NoChange`.
+
+### 14.4 Stackbilanz (Pflichtnachweis)
+
+Gemeinsame Bilanz fuer **alle tatsaechlich Web-erreichbaren Intents** (nicht nur sieben):
+Prepare, Confirm, Apply je Intent einschliesslich Applied/Rejected/NoChange/RAM-only/
+Persistenz-/Readback-Phasen, auf dem Produktcommit, beide echten Xtensa-Profile, mit
+`.ci`-Frames, SDK-/NVS-/Allocator-/Fehler-/Cleanup-Unterpfaden. Nicht belegte
+Aufrufziele bleiben ausdruecklich `NOT_PROVEN`. Grenze 8192 B und begruendeter
+Reserveboden gelten unveraendert; die frueheren Sieben-Varianten-Werte werden nicht als
+Vollketten-PASS ausgegeben. Erwartung (Hypothese, nicht Nachweis): Wegfall von
+10 880 B Value-Frame; Rest hangt vom Frame der Sensorselektions-Domainfunktion ab.
+
+### 14.5 Tests (gezielt, in bestehenden Suiten)
+
+- `test_run_commands`: Value-vs-View-Paritaet beider Funktionen inkl. vollstaendiger
+  Ergebnisfelder; erlaubte/abgelehnte Zustaende; Rollback von `after` bei jeder
+  Ablehnung (inkl. Reset-Fehlschlag und `NotConfirmed`).
+- `test_run_persistence_coordinator`: Borrowed-View-Pfad fuer beide Kinds; RAM-only ohne
+  Write und ohne `persistedIds_`-Eintrag; `AlreadyPersisted`-Vorrang; View mit fremdem
+  `after` (nicht der geliehene Kandidat) wird vor RAM-only-Apply abgelehnt;
+  Writefehler/Indeterminate.
+- Bridge-/Application-Tests: beide Intents ueber den Borrow-Pfad; Recovery-/UTC-/ID-/
+  Origin-/Replay-Paritaet; SensorSelection `AppliedRamOnly` ohne Write und ohne
+  persistierte CommandId; persistente Mutation mit Writefehler/Indeterminate;
+  Post-Commit-Safety/Stale (`PersistenceCommittedApplyFailed`).
+- Web-Dispatcher: beide Intents vom echten Dispatcher bis zum Replay, auch bei
+  fachlicher Ablehnung.
+- Bereits umgestellte sieben Varianten nur bei tatsaechlicher Regression anfassen.
+- Heap-/OOM-Semantik und groesster zusammenhaengender Block bleiben im bestehenden
+  Ressourcengate; kein stilles PASS.
+
+### 14.6 Abschlussgrenze und Reihenfolge
+
+Eine Freigabe dieser Plan-SHA deckt eine Folge von vier Commits ab, die ohne weiteren
+Zwischenhalt verkettet werden: (1) Domain-Kerne + Domain-Tests, (2) Bridge/Application/
+Koordinator-Guard + zugehoerige Tests, (3) Web-Dispatcher-/Replay-Tests, (4)
+Messnachweis (Audit-Dateien) + Doku/Roadmap. Danach Fix Verification statt neuem Full Review, solange Scope/Architektur/Vertraege nicht
+materiell abweichen. Auch bei PASS dieses Deltas bleiben offen: vollstaendiger 8-kB-
+Stacknachweis, dynamisches ESP32-RAM/Largest-Free/OOM, getrennte D9-/HWM-Qualifikation
+(Hardware-/Flash-Freigabe separat). `ACTUATOR_RELEASE=NO`; PR bleibt Draft/HOLD;
+kein Ready, Merge oder Hardwarelauf ohne Owner.
