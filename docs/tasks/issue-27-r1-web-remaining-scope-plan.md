@@ -1529,8 +1529,10 @@ fuer jeden Laufsnapshot mit gespeicherter Programmquelle verwendet.
 
 **Maximale Einzelprogrammlaenge (gemessen, nicht extrapoliert):** am Referenzstand `76cb4ce`
 liefert das vorhandene Maximalfixture `maximizeProgramPayload` (in `maximumValidCatalog()`,
-Katalog gesamt 19 932 B fuer 16 Programme) fuer ein einzelnes Dokument **1 256 B** (Maximum) bzw.
-**217 B** (kleinstes Fabrikprogramm). Die Umsetzung weist die Obergrenze zusaetzlich aus den
+Katalog gesamt 19 932 B fuer 16 Programme) fuer ein einzelnes Dokument **1 255 B** (Maximum,
+Programme mit 48-B-Id) bzw. 1 217–1 218 B (maximierte Fabrikprogramme). [Korrektur nach Messung
+in der Umsetzung: die im Plan-Commit `6a311d6` genannten 1 256 B/217 B waren ein Rechenfehler der
+Zwischenprobe; das kleinste *gueltige* Programm im Test hat 89 B.] Die Umsetzung weist die Obergrenze zusaetzlich aus den
 Modellgrenzen aus (Id 48 B, Name 96 B, Notizen 1 024 B, Stagezahl, Optionalfelder) und prueft im
 Test, dass kein gueltiges Programm darueber liegt; die Grenze 32 768 bleibt unveraendert wirksam.
 
@@ -1626,3 +1628,13 @@ bleibt, bis der Owner nach Gesamt-RAM-Pruefung entscheidet; `C5_RESOURCE_GATE=HO
 **Eine Ownerentscheidung jetzt:** Freigabe der exakten Plan-SHA dieser Revision fuer die
 **M-H1-Produktkorrektur** (§15.3). Hardwaregate und Stackgroesse folgen separat und sind
 hier nicht freigegeben.
+
+### 15.8 M-H1 Umsetzungsergebnis
+
+Auf Plan-SHA `6a311d6174999e864c652e63a71f05271a49f5b3` umgesetzt (Produkt `80bfb28`): Bytes,
+Statuswerte und `out`-Semantik gegen die Referenz `76cb4ce` identisch; groesste Einzelanforderung
+der Einzelprogrammkodierung 32 769 B → Dokumentgroesse + 1; Web-Mutationsfixtures (Host) groesste
+Anforderung 32 769 → 8 193 B (8-KiB-Run-Writer bleibt), Peak live 45 094 → 14 937 B. Stackbilanz
+unveraendert (Maximum 7 440 B, Rest 432 B). Heap-Gates `NOT_PROVEN`, `C5_RESOURCE_GATE=HOLD`.
+Details und Korrektur der Plan-Zahlen (Maximum 1 255 B): [Evidence](../audits/PR209_Q4_MH1_20261024.md).
+Hardwaregate und Stackgroesse bleiben offen (§15.5/§15.6).
