@@ -515,6 +515,12 @@ benennen), ein Client:
 Bis zur Freigabe und Durchfuehrung bleibt das Ergebnis `NOT_PROVEN`; ein Offline-PASS ersetzt
 dieses Gate nicht und es gilt kein implizites Gate-PASS.
 
+**Stand 2026-10-24:** Teile von D9 (Desktop, Login/Navigation/Programme/Einstellungen/DE-EN-ES, Heap/HWM) liegen auf dem
+8 704-B-Diagnoseimage vor (§15.10, `PARTIAL`). Der abschliessende kompakte D9-Lauf (Mobil-Emulation, Cache-Treffer, alte
+Asset-Version, Asset blockiert/503, B-1/B-2 sichtbar) ist auf dem finalen Stand vorbereitet
+([Vorbereitung](../audits/PR209_Q4_D9_PREPARATION_20261024.md)), aber `NOT_RUN`; er wartet auf die gesonderte Ownerfreigabe
+`G-F`/`G-S`/`G-U`/`G-R`/`G-B` fuer das exakte Image.
+
 ## 10. Offene Ownerfragen
 
 **Q3:** Freigabe dieser exakten Planrevision fuer die begrenzte Stackkorrektur
@@ -1581,8 +1587,9 @@ H_RAM_2=EXECUTED_PARTIAL    (K0+K1, Stack- und Heap-Profil ausgefuehrt auf HEAD 
                              Evidence PR209_Q4_HRAM2_RESULTS_20261024.md; unabhaengiger Review OFFEN)
 H_RAM_2_RESTORE=HASH_PASS   (state_store/Boot/App byteidentisch zu P0; Kontrollboot der Original-Firmware NOT_RUN)
 HTTPD_STACK_BYTES=8704      (Option B′ im Produkt, Commit 2c25c3b; HW-Verifikation 2026-10-24 durchgefuehrt, §15.10)
-C5_RESOURCE_GATE=HOLD
-PR209_MERGE=HOLD            (M-H1-GO ist kein Merge-GO)
+C5_RESOURCE_GATE=ACCEPTED_PARTIAL_FOR_PR209  (Ownerentscheid, §15.12: begrenzte Teilabnahme der vorhandenen Evidence fuer den
+                             Software-Scope PR #209; NICHT PASS, NICHT RAM_PASS, keine R1-/Aktorfreigabe)
+PR209_MERGE=HOLD            (M-H1-GO ist kein Merge-GO; bis Review-GO, D9, Pre-Ready)
 ACTUATOR_RELEASE=NO
 ```
 
@@ -2028,3 +2035,20 @@ durch zwei lokale Byteeinsparungen ohne Grenzaenderung. Asset-JS-/DOM-Regression
 Profile PASS; **keine** Geraete-/Browserlauf mit dem neuen Asset (`NOT_RUN`). Evidence und Rest-Gate-Uebersicht:
 [PR209_Q4_BROWSER_FOLLOWUPS_20261024](../audits/PR209_Q4_BROWSER_FOLLOWUPS_20261024.md). Keine Umdeklaration von `NOT_PROVEN`;
 `C5_RESOURCE_GATE=HOLD`, `PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`.
+
+### 15.12 Ownerentscheid C5: begrenzte Teilabnahme fuer den Software-Scope von PR #209
+
+Der Owner nimmt die **vorhandene** Ressourcen-Evidence fuer den Software-Integrationsscope von PR #209 begrenzt ab:
+Status **`C5_RESOURCE_GATE=ACCEPTED_PARTIAL_FOR_PR209`** (weder `PASS` noch `RAM_PASS`; keine R1-/Aktorfreigabe;
+`PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`). Akzeptiert: erreichte Webpfade, HTTPD-Stack 8 704 B, gemessener Reststack
+2 236 B auf den erreichten Pfaden, kein beobachteter Panic/Reset/`heap_alloc_failed` im bisherigen Hardware-/Browserlauf,
+B-1/B-2 nach Fix Verification geschlossen (Angabe des Owners). **Unveraendert nicht nachgewiesen:**
+`HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=NOT_PROVEN`, `ESP32_HEAP_PEAK=PARTIAL`,
+`ESP32_LARGEST_FREE_BLOCK=PARTIAL`, Run-/Run-Store-/Checkpoint-/Maximalkatalogpfad `NOT_RUN`, `TARGET_OOM_BEHAVIOR=FAIL`
+(vorbestehend, laut §15.2 kein eigenstaendiger C5-Blocker). Browser-Heap-Tiefststand (17 104 B / groesster Block 18 432 B) und
+Settings-Host-Einzelrequest (19 890 B) sind unterschiedliche Messkontexte und bleiben als Risikoindikation dokumentiert. Die
+vollstaendige Ressourcen-, Run-/Persistenz-, Sensor-/Regelungs- und Aktorqualifikation bleibt vor der spaeteren Inbetriebnahme
+bzw. Aktorfreigabe verbindlich (Zuordnung zu #30/#190, #32/#33, #34/#35, #36/#37 und dem Harness #90 in der
+[Vorbereitungs-Evidence](../audits/PR209_Q4_D9_PREPARATION_20261024.md) §1). Historische `FAIL`-/`NOT_RUN`-Nachweise werden nicht
+ueberschrieben. Eine Pre-Ready-/Ready-/Merge-Freigabe folgt nur nach unabhaengigem Review-GO und `OPEN_BLOCKERS=0` auf separate
+Ownerfreigabe.

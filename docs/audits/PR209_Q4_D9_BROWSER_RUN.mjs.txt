@@ -1,0 +1,131 @@
+// PR #209 D9: one compact, actuator-free browser run against a real device (plan section 9).
+// Usage: DEVICE=<ip> PWFILE=<600-file> OUT=<private dir> PLAYWRIGHT=<playwright-core path> node d9_browser_run.mjs
+// Each check is labelled REAL (real device reaction) or SIMULATED (browser-side interception/rewrite) or EMULATION
+// (mobile viewport/UA emulation, not a physical phone). No run/program/intent is ever started, no name is saved.
+// The password is read from the private file and is never printed or logged. Sessions are always logged out.
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+const { DEVICE, PWFILE, OUT, PLAYWRIGHT } = process.env;
+if (!DEVICE || !PWFILE || !OUT || !PLAYWRIGHT) { console.error('missing env'); process.exit(2); }
+const { chromium, devices } = createRequire(import.meta.url)(PLAYWRIGHT);
+const pw = readFileSync(PWFILE, 'utf8').replace(/\n$/, '');
+const BASE = `http://${DEVICE}`;
+mkdirSync(OUT, { recursive: true });
+const LOG = `${OUT}/d9_events.jsonl`; writeFileSync(LOG, '');
+const wall = () => new Date().toISOString();
+const ev = (phase, kind, result, detail = '') => { const r = { wall: wall(), phase, kind, result, detail: String(detail).slice(0, 300) }; appendFileSync(LOG, JSON.stringify(r) + '\n'); console.log(`${result.padEnd(5)} ${kind.padEnd(10)} ${phase} ${r.detail}`); };
+const check = async (phase, kind, fn) => { try { const d = await fn(); ev(phase, kind, d === false ? 'FAIL' : 'PASS', typeof d === 'string' ? d : ''); } catch (e) { ev(phase, kind, 'FAIL', e.message.split('\n')[0]); } };
+const T = { // expected texts, taken from the asset text table (pl, rejected, name, ...)
+  de: { b1: 'Passwort · Abgelehnt', b2: 'Geraetename · Abgelehnt', views: ['Uebersicht', 'Meldungen', 'Programme', 'Einstellungen'], sure: 'Sicher?' },
+  en: { b1: 'Password · Rejected', b2: 'Device name · Rejected', views: ['Overview', 'Alerts', 'Programs', 'Settings'], sure: 'Sure?' },
+  es: { b1: 'Contrasena · Rechazado', b2: 'Nombre · Rechazado', views: ['Resumen', 'Alertas', 'Programas', 'Ajustes'], sure: 'Seguro?' },
+};
+const settle = ms => new Promise(r => setTimeout(r, ms));
+const until = async (fn, ms = 10000) => { const t = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t > ms) throw new Error('timeout'); await settle(250); } };
+const note = p => p.locator('#note').innerText();
+
+async function openPage(browser, opts, tag) {
+  const ctx = await browser.newContext(opts); const page = await ctx.newPage();
+  const net = []; const cdp = await ctx.newCDPSession(page); await cdp.send('Network.enable');
+  const ids = new Map(), cached = new Set();
+  cdp.on('Network.requestWillBeSent', e => ids.set(e.requestId, e.request.url));
+  cdp.on('Network.requestServedFromCache', e => cached.add(e.requestId));
+  cdp.on('Network.responseReceived', e => net.push({ url: e.response.url.replace(BASE, ''), status: e.response.status, cc: e.response.headers['cache-control'] || e.response.headers['Cache-Control'] || '', id: e.requestId, fromDisk: e.response.fromDiskCache }));
+  page.net = net; page.cached = cached; page.ids = ids; page.posts = [];
+  page.errors = []; page.on('pageerror', e => page.errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') page.errors.push(m.text()); });
+  page.on('request', r => { if (r.method() === 'POST' && r.url().includes('/internal/ui/run')) page.posts.push(r.url()); });
+  page.tag = tag; page.ctx = ctx; return page;
+}
+const lang = async (p, l) => { await p.selectOption('#lang', l); await settle(300); };
+async function login(p, good) {
+  await p.fill('#password', good ? pw : 'wrong-' + Math.random().toString(36).slice(2));
+  await p.click('#login button'); 
+}
+async function logout(p) { try { if (await p.locator('#logout').isVisible()) { await p.click('#logout'); await settle(1500); } } catch {} }
+
+async function flow(browser, opts, tag, languages) {
+  const p = await openPage(browser, opts, tag);
+  try {
+    await check(`${tag} first load: shell + versioned asset`, 'REAL', async () => {
+      const t0 = p.net.length; await p.goto(BASE + '/'); await p.waitForLoadState('networkidle');
+      const n = p.net.slice(t0).filter(x => x.url === '/' || x.url.startsWith('/assets/'));
+      const asset = n.find(x => /^\/assets\/app\.[0-9a-f]{8}\.js$/.test(x.url));
+      if (!n.find(x => x.url === '/' && x.status === 200) || !asset || asset.status !== 200) return false;
+      p.assetUrl = asset.url; return `requests=${n.length} asset=${asset.url} cache-control=${asset.cc}`;
+    });
+    // B-1: wrong password visible, per language (max 3 consecutive wrong attempts; lockout is 5, reset by success)
+    for (const l of languages) await check(`${tag} B-1 wrong password visible ${l}`, 'REAL', async () => {
+      await lang(p, l); await login(p, false);
+      await until(async () => (await note(p)).trim() !== '', 12000);
+      const text = (await note(p)).trim(); await p.screenshot({ path: `${OUT}/${tag}_b1_${l}.png` });
+      const visible = await p.locator('#note').isVisible();
+      if (!visible) throw new Error('note not visible'); if (text !== T[l].b1) throw new Error('unexpected text: ' + text); return text;
+    });
+    await check(`${tag} login success`, 'REAL', async () => { await login(p, true); await until(async () => await p.locator('#logout').isVisible(), 15000); return 'logout button visible'; });
+    for (const l of languages) {
+      await lang(p, l);
+      for (let i = 0; i < 4; i++) await check(`${tag} view ${T[l].views[i]} (${l})`, 'REAL', async () => {
+        await p.locator('nav button').nth(i).click(); await settle(1200);
+        const body = await p.evaluate(() => document.body.innerText);
+        if (!body.includes(T[l].views[i].replace(/ \(.*/, ''))) throw new Error('view label missing');
+        if (i === 2 && (await p.locator('#pg option').count()) < 1) throw new Error('no programs listed');
+        if (i === 3 && !(await p.locator('input:visible').count())) throw new Error('no name input');
+        await p.screenshot({ path: `${OUT}/${tag}_${l}_view${i}.png` }); return '';
+      });
+    }
+    for (const l of languages) await check(`${tag} B-2 empty name rejected ${l}`, 'REAL', async () => {
+      await lang(p, l); await p.locator('nav button').nth(3).click(); await settle(1000);
+      const before = p.posts.length; const inp = p.locator('input:visible').first();
+      await inp.fill(''); await p.locator('section:has(input:visible) button').filter({ hasText: /Speichern|Save|Guardar/ }).first().click(); await settle(700);
+      const text = (await note(p)).trim(); await p.screenshot({ path: `${OUT}/${tag}_b2_${l}.png` });
+      if (text !== T[l].b2) throw new Error('unexpected text: ' + text);
+      if (p.posts.length !== before) throw new Error('POST observed'); if (await p.locator('button', { hasText: T[l].sure }).count()) throw new Error('confirm step shown'); return text;
+    });
+    return p;
+  } catch (e) { ev(`${tag} flow`, 'REAL', 'FAIL', e.message); return p; }
+}
+
+const browser = await chromium.launch({ headless: true });
+let desktop, mobile;
+try {
+  ev('start', 'INFO', 'INFO', `device=${DEVICE} chromium=${browser.version()}`);
+  // 1) desktop, empty cache
+  desktop = await flow(browser, { viewport: { width: 1280, height: 900 }, locale: 'de-CH' }, 'desktop', ['de', 'en', 'es']);
+  await check('desktop cache-hit on second shell load (asset not refetched)', 'REAL', async () => {
+    await desktop.reload(); await desktop.waitForLoadState('networkidle');
+    const last = desktop.net.slice(-6); const asset = [...desktop.ids.entries()].filter(([, u]) => /\/assets\/app\./.test(u)).pop();
+    const servedFromCache = asset && desktop.cached.has(asset[0]);
+    const shell = last.some(x => x.url === '/' && x.status === 200);
+    if (!shell) throw new Error('no shell response'); if (!servedFromCache) throw new Error('asset not served from cache'); return 'shell fetched, asset served from browser cache';
+  });
+  await logout(desktop);
+  // 2) mobile emulation (EMULATION, not a physical phone)
+  mobile = await flow(browser, { ...devices['iPhone 13'], locale: 'de-CH' }, 'mobile-emulated', ['de']);
+  await logout(mobile);
+  // 3) stale asset version: real 404 from the device; shell rewrite is simulated
+  const page = await openPage(browser, { viewport: { width: 1000, height: 800 }, locale: 'de-CH' }, 'stale');
+  await check('stale asset URL returns 404 from the device', 'REAL', async () => { const r = await page.ctx.request.get(BASE + '/assets/app.00000000.js'); if (r.status() !== 404) throw new Error('status ' + r.status()); return 'status 404'; });
+  await check('stale asset: visible hint, then reload recovers', 'SIMULATED', async () => {
+    await page.route(BASE + '/', async route => { const r = await route.fetch(); const body = (await r.text()).replace(/\/assets\/app\.[0-9a-f]{8}\.js/, '/assets/app.00000000.js'); await route.fulfill({ response: r, body }); });
+    await page.goto(BASE + '/'); await until(async () => await page.locator('#asset-error').isVisible(), 8000);
+    const hint = (await page.locator('#asset-error').innerText()).trim(); await page.screenshot({ path: `${OUT}/stale_hint.png` });
+    await page.unroute(BASE + '/'); await page.reload(); await page.waitForLoadState('networkidle');
+    if (await page.locator('#asset-error').isVisible()) throw new Error('hint still visible after reload');
+    if (!(await page.locator('#login button').innerText()).trim()) throw new Error('shell script did not run after reload');
+    if (page.posts.length) throw new Error('mutation observed'); return `hint="${hint.slice(0, 60)}" recovered=yes (rewrite simulated, 404 real)`;
+  });
+  // 4) asset blocked / 503 (SIMULATED interception)
+  for (const mode of ['abort', '503']) await check(`asset ${mode}: visible failure hint, no mutation`, 'SIMULATED', async () => {
+    const p2 = await openPage(browser, { viewport: { width: 1000, height: 800 }, locale: 'de-CH' }, 'asset-' + mode);
+    await p2.route(/\/assets\/app\./, route => mode === 'abort' ? route.abort() : route.fulfill({ status: 503, body: 'unavailable' }));
+    await p2.goto(BASE + '/'); await until(async () => await p2.locator('#asset-error').isVisible(), 8000);
+    const hint = (await p2.locator('#asset-error').innerText()).trim(); await p2.screenshot({ path: `${OUT}/asset_${mode}.png` });
+    if (p2.posts.length) throw new Error('mutation observed'); await p2.ctx.close(); return `hint="${hint.slice(0, 60)}"`;
+  });
+  await page.ctx.close();
+} finally {
+  for (const p of [desktop, mobile]) if (p) await logout(p);
+  const errs = [...(desktop?.errors || []), ...(mobile?.errors || [])].filter(m => !/401|400|422|Failed to load resource/.test(m));
+  ev('end', 'INFO', errs.length ? 'FAIL' : 'PASS', `unexpected console/page errors: ${errs.length} ${errs.slice(0, 2).join(' | ')}`);
+  await browser.close();
+}
