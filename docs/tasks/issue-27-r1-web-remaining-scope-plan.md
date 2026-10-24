@@ -1561,14 +1561,14 @@ Test, dass kein gueltiges Programm darueber liegt; die Grenze 32 768 bleibt unve
 
 | Option | Rest (aufgeloest, inkl. 320 B) | RAM-Wirkung |
 |---|---|---|
-| A: 8 192 B behalten | 432 B (Worst-Case-Schaetzung ≈ 140 B) | 0 |
-| B′: 8 704 B (+512 B) | 944 B (Worst-Case ≈ 650 B) | −512 B internes RAM |
-| C: 10 240 B (+2 048 B) | ≈ 2 480 B | −2 048 B |
-| D: 10 240 B, Main-Task 24 576 → 22 528 B | ≈ 2 480 B | netto 0 B, Buildkonfigurationsaenderung |
+| A: 8 192 B behalten | 208 B (korrigiertes Modell 7 664 + 320 B, §15.9; urspruenglich 432 B) | 0 |
+| B′: 8 704 B (+512 B) — **vom Owner gewaehlt, im Produkt umgesetzt (§15.10)** | 720 B (korrigiertes Modell; urspruenglich 944 B) | −512 B internes RAM (erwartet, nicht gemessen) |
+| C: 10 240 B (+2 048 B) | ≈ 2 256 B (Modell neu) | −2 048 B |
+| D: 10 240 B, Main-Task 24 576 → 22 528 B | ≈ 2 256 B (Modell neu) | netto 0 B, Buildkonfigurationsaenderung |
 
-**Der Stackentscheid (8 192/8 704 B) wird erst nach Pruefung der Gesamt-RAM-Auswirkung
-getroffen** (freier Heap, groesster Block, Main-Task-Slack, F-H1-Wirkung nach M-H1), nicht allein
-aus der Stackbilanz. Der Settings-Decode-/UI-Katalogumbau (Option B aus §13) bleibt nur bei auf
+**Ownerentscheid: Option B′ (8 704 B), umgesetzt (§15.10).** Die Wirkung auf freien Heap und groessten Block
+(Gesamt-RAM-Auswirkung, Main-Task-Slack, F-H1-Wirkung nach M-H1) ist erst nach der Hardware-Verifikation bewertet,
+nicht allein aus der Stackbilanz. Der Settings-Decode-/UI-Katalogumbau (Option B aus §13) bleibt nur bei auf
 Hardware nachgewiesenem Heap-Engpass die priorisierte naechste Option. Nicht Teil von §15: Option B,
 UI-Katalogumbau, weitere Run-Kopieroptimierungen, Pre-Ready/Merge, Aktor-/Hardware-Inbetriebnahme.
 
@@ -1580,6 +1580,7 @@ M_H1=CLOSED_GO              (Independent Review PASS/GO, M_H1_FIX_VERIFICATION=P
 H_RAM_2=EXECUTED_PARTIAL    (K0+K1, Stack- und Heap-Profil ausgefuehrt auf HEAD 4afc626; Ergebnisse §15.9,
                              Evidence PR209_Q4_HRAM2_RESULTS_20261024.md; unabhaengiger Review OFFEN)
 H_RAM_2_RESTORE=HASH_PASS   (state_store/Boot/App byteidentisch zu P0; Kontrollboot der Original-Firmware NOT_RUN)
+HTTPD_STACK_BYTES=8704      (Option B′ im Produkt, Commit 2c25c3b; Hardware-Verifikation NOT_RUN, §15.10)
 C5_RESOURCE_GATE=HOLD
 PR209_MERGE=HOLD            (M-H1-GO ist kein Merge-GO)
 ACTUATOR_RELEASE=NO
@@ -1991,3 +1992,21 @@ Gates: `HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=NOT_PROVEN`, `E
 `ESP32_LARGEST_FREE_BLOCK=PARTIAL`, `C5_RESOURCE_GATE=HOLD`, `PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`.
 Eine Stackgroessen- oder Partitionsaenderung ist **nicht** vorgeschlagen und bleibt Ownerentscheid nach dem
 unabhaengigen Review.
+
+### 15.10 HTTPD-Stack 8 704 B (Option B′): Produktdelta und Verifikationsplan
+
+Ownerentscheid: Option B′ (8 192 → 8 704 B, +512 B) fuer die gezielte Produktkorrektur. Umgesetzt in
+`esp_idf_http_server_lifecycle.cpp` (nur `kHttpServerTaskStackBytes`, Produktcommit `2c25c3b`); Evidence
+[PR209_Q4_HTTPD_8704_STACK_20261024](../audits/PR209_Q4_HTTPD_8704_STACK_20261024.md): Adapter-/Lifecycle-Tests PASS,
+beide ESP-IDF-Profile PASS, `sdkconfig.h` identisch, statisch `.flash.text` +4 B, DRAM unveraendert; Literal `0x2200`
+im Objekt.
+
+Modellstand: 7 664 + 320 = **7 984 B**; Rest **208 B** bei 8 192 B, **720 B** bei 8 704 B → der 512-B-Planungsboden ist
+**rechnerisch** erfuellt. `HTTPD_FULL_CHAIN_STACK` und `HTTPD_STACK_RESERVE` bleiben `NOT_PROVEN` (offene indirekte
+Aufrufe, erfolgreicher Run-Pfad nicht erreicht). Die H-RAM-2-Messwerte (8 192-B-Basis) bleiben unveraendert.
+
+Erwartete Heap-Kosten **−512 B** frei intern (und bis zu −512 B groesster Block) sind eine Rechnung, **keine Messung**.
+Vorgesehen (nicht ausgefuehrt, ohne neue ausdrueckliche Ausfuehrungsfreigabe fuer das neue Image und `G-F`/`G-S`
+nicht zulaessig): kurze Hardware-Verifikation des 8 704-B-Kandidaten mit Stack-HWM-/Heap-/Largest-Free-Messpunkten
+gegen die 8 192-B-Basis (Evidence §5); keine erneute 12-KiB-Serie.
+`C5_RESOURCE_GATE=HOLD`, `PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`; keine vollstaendige RAM-Freigabe.
