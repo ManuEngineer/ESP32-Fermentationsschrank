@@ -3691,8 +3691,10 @@ void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
         TEST_ASSERT_TRUE(contains(authenticatedShell(fixture, session.cookie),
                                   "const U=true;let Q=1;"));
         TEST_ASSERT_TRUE(contains(shellBody(fixture), "lg.addEventListener"));
-        TEST_ASSERT_TRUE(
-            contains(shellBody(fixture), "if(r.ok)location.reload();"));
+        // B-1: success still reloads; a failed attempt is shown, not ignored.
+        TEST_ASSERT_TRUE(contains(shellBody(fixture),
+                                  "if(r&&r.ok)location.reload();else nt[X]="));
+        TEST_ASSERT_TRUE(contains(shellBody(fixture), "catch{}if(r&&r.ok)"));
     }
     {
         ComposedFixture fixture;

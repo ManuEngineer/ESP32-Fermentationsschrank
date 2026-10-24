@@ -23,7 +23,7 @@ function deferred() {
 class Element {
   constructor() { this.children = []; this.dataset = {}; this.value = ''; }
   checkValidity() { if(this.disabled)return true;const n=Number(this.value);return (!this.required||this.value!=='')&&(this.min===undefined||n>=this.min)&&(this.max===undefined||n<=this.max); }
-  addEventListener() {}
+  addEventListener(type, callback) { (this.listeners ||= {})[type] = callback; }
   append(...children) { this.children.push(...children); }
   after(...children) { this.afterNodes = children; }
   setAttribute(name, value) { (this.attributes ||= {})[name] = value; }
@@ -42,7 +42,7 @@ function snapshot(mode = 'active-run', run = '1') {
 }
 
 async function fixture(language = 'en', storage, scriptCode = script) {
-  const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0 };
+  const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0, logins: [], loginReply: () => Promise.resolve({ ok: false, status: 401 }) };
   let timerId = 0;
   const elements = new Map();
   const element = selector => {
@@ -72,6 +72,7 @@ async function fixture(language = 'en', storage, scriptCode = script) {
     clearTimeout: id => h.timers.delete(id),
     setInterval: (callback, delay) => setTimer(callback, delay, true),
     fetch: (url, options) => {
+      if (url === '/api/v1/login') { h.logins.push(options); return h.loginReply(); }
       if (url === '/api/v1/settings') return Promise.resolve({ok:true,json:async()=>h.settings || {revision:'1',deviceName:'Fixture',timeZone:'Europe/Zurich',nameEditable:true}});
       if (url.startsWith('/api/v1/programs/')) {
         const id=decodeURIComponent(url.split('/').at(-1));
@@ -771,10 +772,50 @@ test('C5 rendered input constraints block invalid overrides',async()=>{
  assert.equal(intent.c.c,'cool-and-hold-for-duration');assert.equal(intent.c.k,5);assert.equal(intent.c.l,90);
 });
 
+
+// B-1/B-2 (PR #209 browser follow-ups): visible, language-correct feedback instead of silent failure.
+const submitLogin = async h => { h.el('#password').value = 'fixture-secret'; await h.el('#login').listeners.submit({ preventDefault() {} }); await drain(); };
+for (const language of ['de', 'en', 'es']) test('B-1 login failures are visible, never fake success, never leak secrets ' + language, async () => {
+  const unhandled = []; const watch = reason => unhandled.push(reason); process.on('unhandledRejection', watch);
+  try {
+    const h = await fixture(language); const T = key => h.run('T.' + key);
+    const note = () => h.run('nt.textContent');
+    h.loginReply = () => Promise.resolve({ ok: false, status: 401 });
+    await submitLogin(h);
+    assert.equal(note(), T('pl') + ' · ' + T('rejected')); assert.equal(h.reloads, 0);
+    assert.equal(h.logins.length, 1); assert.equal(JSON.parse(h.logins[0].body).password, 'fixture-secret');
+    h.loginReply = () => Promise.resolve({ ok: false, status: 503 });
+    await submitLogin(h); assert.equal(note(), T('busy')); assert.equal(h.reloads, 0);
+    h.loginReply = () => Promise.reject(new TypeError('fixture network failure'));
+    await submitLogin(h); assert.equal(note(), T('failed')); assert.equal(h.reloads, 0);
+    for (const text of [note(), h.run('document.body?.textContent||""')]) assert.ok(!String(text).includes('fixture-secret'));
+    // language switch: the next failure is rendered in the newly selected language
+    const other = language === 'de' ? 'es' : 'de'; h.run(`sw.value='${other}';sw.onchange()`);
+    h.loginReply = () => Promise.resolve({ ok: false, status: 401 });
+    await submitLogin(h); assert.equal(note(), T('pl') + ' · ' + T('rejected')); assert.equal(h.run('lc'), other);
+    assert.equal(h.posts.length, 0);
+    h.loginReply = () => Promise.resolve({ ok: true, status: 200 });
+    const before = note(); await submitLogin(h); assert.equal(h.reloads, 1); assert.equal(note(), before);
+    await drain(); assert.deepEqual(unhandled, []);
+  } finally { process.off('unhandledRejection', watch); }
+});
+for (const language of ['de', 'en', 'es']) test('B-2 empty device name is rejected visibly before any POST ' + language, async () => {
+  const h = await fixture(language); await h.finish(snapshot('standby')); h.run('nb[3].onclick()'); await drain();
+  const note = () => h.run('nt.textContent'), T = key => h.run('T.' + key);
+  h.run("sn.value='';sn.oninput();sb.onclick()");
+  assert.equal(note(), T('name') + ' · ' + T('rejected')); assert.equal(h.posts.length, 0); assert.equal(h.reloads, 0);
+  assert.equal(h.run('K'), ''); assert.notEqual(h.run('sb.textContent'), T('sure'));
+  h.run("sn.value='Valid';sn.oninput();sb.onclick()"); assert.equal(h.posts.length, 0); assert.equal(h.run('sb.textContent'), T('sure'));
+  h.run('sb.onclick()'); assert.equal(h.posts.length, 1);
+  assert.deepEqual(JSON.parse(h.posts[0].options.body), { v: 1, r: { u: '1' }, i: { t: 'set-device-name', n: 'Valid' } });
+  h.posts[0].reply('applied'); await drain(); await h.finish(snapshot('standby'));
+  assert.ok(note().startsWith(T('ok'))); assert.ok(note().includes(T('hint')));
+  h.run("sn.value='';sn.oninput();sb.onclick()"); assert.equal(note(), T('name') + ' · ' + T('rejected')); assert.equal(h.posts.length, 1);
+});
 test('C5 closed Application dispatch architecture', async()=>{
  const handler=source.slice(source.indexOf('bool WebRunMutationHandler::handle('),source.indexOf('bool WebReadOnlyApiHandler::handle('));
  const calls=[...new Set([...handler.matchAll(/application_\s*\.\s*(\w+)\s*\(/g)].map(x=>x[1]))].sort();
- assert.deepEqual(calls,['applyConfirmedPrepared','applyWebConfigurationChange','confirmPrepared','prepareEnvelope']);
+ assert.deepEqual(calls,['applyConfirmedPrepared','applyWebConfigurationChange','confirmPreparedInPlace','prepareEnvelope']);
  assert.ok(!handler.includes('configurationService_'));
  assert.ok(source.includes('nav[hidden]{display:none}'));
  assert.ok(!script.includes("nv.style='display:flex"));
