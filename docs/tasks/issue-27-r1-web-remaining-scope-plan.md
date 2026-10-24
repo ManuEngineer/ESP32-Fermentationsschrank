@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 3.1 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLAN NACHGEBESSERT, FIX VERIFICATION OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
+**2026-10-23 · PLAN-REVISION 3.2 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLAN NACHGEBESSERT, FIX VERIFICATION OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -528,7 +528,7 @@ Plan-SHA dieser Revision. Bis dahin keine Produktaenderung, PR Draft/HOLD.
 **Q4-Ressourcen (§15):** Ownerrichtung zu `H-RAM-2` und `G-S` bestaetigt, **ausfuehrbare Freigaben
 stehen aus** (nach Fix Verification, auf der dann aktuellen Plan-SHA). Quellenbefund Boot-Schreibpfad:
 `P1_BOOT_WRITES_STATE_STORE=CONDITIONAL`, `K0_WITHOUT_G_S=NOT_ELIGIBLE` → `G-S` ist Voraussetzung
-bereits fuer den ersten Diagnoseflash/Boot (K0 **und** K1); ohne `G-S` `HOLD` vor dem Flash.
+bereits fuer den ersten Diagnoseflash/Boot (K0 **und** K1); ohne `G-S` `HOLD` vor dem Flash. Zusaetzlich `SYSTEM_NVS_WRITE_AT_P1=NOT_PROVEN`: `G-S` deckt `nvs` nicht ab, P1 ist `HOLD`, bis der Vor-P1-Bericht `EXCLUDED` ergibt oder der Owner den System-NVS-Effekt ausdruecklich entschieden hat.
 `G-R7`/`G-RUN` nicht freigegeben. Bis dahin `C5_RESOURCE_GATE=HOLD`, keine Hardwareaktion.
 
 ## 11. Risiken
@@ -1726,7 +1726,7 @@ Umgang:
 |---|---|---|
 | App `factory` `0x10000`–`0x2FFFFF` | Flash des Diagnoseimages | wie H-RAM-1: zweifach lesen, SHA-256, App-only-Flash, Readback-Hash, Rueckflash und Hash-Vergleich |
 | `state_store` `0x300000`–`0x3FFFFF` | **jeder erfolgreiche Passwort-Login** (Credential-Record, `recordSequence + 1`), Geraetenamen-Commit (Konfigurationsgraph, Revisionen), bedingt der Diagnoseboot selbst (§15.6.5a) | getrennt gesichert und identifiziert (siehe unten); **nur ueber den hier definierten Rueckfall** wiederhergestellt |
-| `nvs` `0x9000`–`0xEFFF`, `phy_init` `0xF000` | ESP-IDF-System-NVS/PHY-Kalibrierung, moeglicherweise bei Boots | nur lesen und Hash vergleichen; **nicht** schreiben (Abweichung wird berichtet) |
+| `nvs` `0x9000`–`0xEFFF`, `phy_init` `0xF000` | **Host:** nur lesende Zugriffe (`esptool read_flash`). **Firmware beim Boot:** moegliche eigene Schreibvorgaenge (`nvs_flash_init`-Bereinigung von Resten, PHY-Kalibrierung in `nvs`, §15.6.5a) | Host-Zugriffe nur lesend, Hash vorher/nachher; die firmwareinternen Schreibvorgaenge sind **nicht** ausgeschlossen, solange §15.6.5a nicht `EXCLUDED` ergibt; **kein** Rueckfall fuer `nvs` geplant, **`G-S` deckt `nvs` nicht ab** |
 | Bootloader/Partitionstabelle `0x0`–`0x8FFF` | nicht beruehrt (Produktpartitionstabelle bleibt) | Hash-Vergleich vorher/nachher |
 
 ##### 15.6.5a Boot-Schreibpfad und Vor-Flash-Gate (Quellenbefund)
@@ -1746,13 +1746,43 @@ K0_WITHOUT_G_S=NOT_ELIGIBLE               (-> HOLD vor dem ersten Diagnoseflash 
 ```
 
 - **Vor dem ersten Flash:** nur lesendes `P0` (doppelt, byteidentisch, SHA-256) und der
-  quellengestuetzte Preflight. Zusaetzlich wird das `P0`-Abbild von `state_store` und `nvs` **offline**
-  mit den vorhandenen lesenden IDF-Werkzeugen (`components/nvs_flash/nvs_partition_tool/nvs_tool.py`,
-  `nvs_check.py`) klassifiziert (Bootstrap-/Handoff-Zustand, Credential-Schema, NVS-Reste,
-  `phy`-Namespace inkl. `cal_mac`/`cal_version`); die Klassifikation ist Evidenz, kein Freibrief:
-  sie macht K0 **nicht** zu `ELIGIBLE`. Der Diagnoseflash mit anschliessendem Boot P1/B0 wird nur
-  zusammen mit vorbereitetem und freigegebenem `G-S` ausgefuehrt; es gibt keine Freigabe, die erst
-  **nach** P1 festgestellte Schreibzugriffe nachtraeglich genehmigt.
+  quellengestuetzte Preflight. Zusaetzlich werden die `P0`-Abbilder von `state_store` und `nvs`
+  **offline** mit den vorhandenen lesenden IDF-Werkzeugen
+  (`components/nvs_flash/nvs_partition_tool/nvs_tool.py`, `nvs_check.py`) klassifiziert
+  (Bootstrap-/Handoff-Zustand, Credential-Schema, NVS-Reste, `phy`-Namespace inkl.
+  `cal_mac`/`cal_version`); die Klassifikation ist Evidenz, kein Freibrief und macht K0 **nicht** zu
+  `ELIGIBLE`. Der Diagnoseflash mit anschliessendem Boot P1/B0 wird nur ausgefuehrt, wenn (a) `G-S`
+  vorbereitet und freigegeben ist **und** (b) die folgende Vor-P1-Entscheidungsbedingung fuer `nvs`
+  nicht auf `HOLD` steht. Es gibt keine Freigabe, die erst **nach** P1 festgestellte
+  Schreibzugriffe nachtraeglich genehmigt.
+
+**Vor-P1-Entscheidungsbedingung fuer die System-NVS (`nvs`).** `G-S` deckt ausschliesslich
+`state_store` ab. Es gilt **weder** als Freigabe fuer Aenderungen an `nvs`/`phy_init` **noch** als
+Rueckfall dafuer. Ob der Diagnoseboot die System-NVS beschreiben kann, wird deshalb **vor** dem
+ersten Flash aus dem lesenden `P0` und der tatsaechlich geplanten Diagnoseimage-/PHY-Konfiguration
+entschieden und im Vor-P1-Bericht (`PRE_P1_REPORT`) festgehalten:
+
+| Bedingung (alle muessen belegt sein) | Nachweis |
+|---|---|
+| `nvs`-Abbild integer, keine NVS-Reste (keine Duplikate, keine `FREEING`-Seite, keine verwaisten/inkonsistenten Blobs), Standardpartition nicht leer | `nvs_tool.py`/`nvs_check.py` auf dem `P0`-Abbild |
+| Namespace `phy` mit gueltigen Kaldaten vorhanden; Laenge passend; `cal_mac` gleich der Chip-MAC | `nvs_tool.py`-Auszug gegen die lesend ermittelte MAC |
+| PHY-Kalibrierformat des Diagnoseimages gleich dem der installierten Firmware (`cal_version`-Pruefung in `esp_phy_load_cal_and_init`) | dokumentierter Build des installierten Images (Quell-SHA, IDF-Commit) gleich dem Diagnoseimage, und gleiche PHY-Bibliothek (Hash von `libphy.a` bzw. `phy_version`-Bootzeile aus vorhandenen Logs); sonst nicht belegt |
+| PHY-Konfiguration des Diagnoseimages unveraendert (`CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=1`, `RF_CAL_PARTIAL`) | `sdkconfig` des Diagnoseimages gegen die bekannte Produktkonfiguration |
+
+```text
+SYSTEM_NVS_WRITE_AT_P1 = EXCLUDED | NOT_EXCLUDED | NOT_PROVEN        (derzeit: NOT_PROVEN)
+EXCLUDED   -> P1 darf unter G-F + G-S laufen (Restunsicherheit nicht untersuchter IDF-Interna im Bericht benannt)
+sonst      -> P1=HOLD vor Flash/Boot, bis der Owner den moeglichen System-NVS-Effekt und dessen
+              Umgang ausdruecklich entschieden hat (z. B. Akzeptanz einer moeglichen PHY-Kalibrier-
+              speicherung ohne Restore, oder eine eigens zu erbittende Freigabe fuer einen
+              `nvs`-Rueckfall). Diese Entscheidung ist in `G-S` nicht enthalten.
+```
+
+**Sprachliche Trennung (verbindlich):** **geplante Host-Zugriffe** auf `nvs`/`phy_init` sind nur
+lesend; **moegliche firmwareinterne Schreibvorgaenge** beim Boot sind davon unabhaengig. Weder
+Schreibfreiheit noch ein Rueckfall fuer die System-NVS wird behauptet, solange sie nicht belegt bzw.
+genehmigt sind.
+
 - **Nach P1 (und nach jedem weiteren Boot):** `state_store`-Hash gegen den jeweiligen Vorgaenger
   vergleichen, `nvs`/`phy_init` getrennt. Bei veraendertem `state_store`: keine weiteren K0-/K1-
   Boots, bevor Abweichung (Entry-Diff per `nvs_tool.py`), byte-exakter Rueckfall (RB-2) und
@@ -1764,26 +1794,31 @@ K0_WITHOUT_G_S=NOT_ELIGIBLE               (-> HOLD vor dem ersten Diagnoseflash 
   Restore auf `P0` (RB-2) ist erforderlich: bei unerwarteter Abweichung, vor einer Messung, die
   `P0` als Ausgangsbasis braucht, und am Ende der K1-Serie. Keine stillschweigende Uebernahme
   eines durch P1, Login oder Commit veraenderten Zustands als neue Baseline.
-- **`nvs`/`phy_init`:** bleiben **nur lesend**. Wird `nvs` (PHY-Kalibrierung) durch den Boot
-  veraendert, wird das berichtet und es folgt **kein** Restore/Erase dieser Partition ohne neue,
-  ausdrueckliche Ownerentscheidung; ein Rueckfall dafuer ist **ungeklaert** (keine neue
-  Freigabekategorie, kein ungepruefter Schreibumfang). Weitere Boots laufen dann nur nach
-  dokumentierter Entscheidung.
+- **`nvs`/`phy_init` nach P1:** Das `nvs`-/`phy_init`-Hashdelta wird getrennt gegen `P0` ausgewertet.
+  Bei einem Delta gilt **Stopp**: kein stillschweigender Baselinewechsel, keine weiteren Boots, kein
+  nicht autorisierter Restore oder Erase dieser Partitionen; die Abweichung wird berichtet (Entry-Diff),
+  und der Owner entscheidet ausdruecklich ueber Umgang und Fortsetzung. Ein Rueckfall fuer die
+  System-NVS ist nicht geplant und nicht durch `G-S` gedeckt.
 
 **Vor der ersten Messung (nur lesen, `P0`):** Geraeteidentifikation (Chip/MAC/Flash-ID,
 Boot-Quell-SHA); `0x0`–`0xFFFF`, App und `state_store` je **zweimal** auslesen, beide Lesungen
-identisch, SHA-256 je Bereich; **logischer Zustand** ueber die lesenden APIs: Geraetename,
-Konfigurationsrevisionen, Netzwerkmodus, Touchkalibrierung vorhanden. Die Sicherungsabbilder
+identisch, SHA-256 je Bereich. Der **logische Zustand** (Geraetename, Konfigurationsrevisionen,
+Netzwerkmodus, Touchkalibrierung vorhanden) wird **ausschliesslich offline aus den
+Sicherungsabbildern** gewonnen (vorhandene lesende NVS-Werkzeuge). **Kein Web-/API-Zugriff und
+kein Login** fuer `P0`: jeder erfolgreiche Login schreibt `state_store` und ist damit kein lesender
+Zugriff; ebenso kein Boot der Firmware. Felder, die sich ohne persistenten Schreibzugriff nicht
+aus den Abbildern ermitteln lassen, werden als `NICHT_ERMITTELT` gekennzeichnet; es wird keine
+zusaetzliche Instrumentierung nur hierfuer gebaut. Die Sicherungsabbilder
 bleiben **privat lokal** (sie enthalten WLAN-/Zugangsdaten) und werden nie committet;
 committet werden nur Hashes und bereinigte Protokolle.
 
-**Referenzboot (`P1`):** nach dem Flash des Diagnoseimages ein Boot mit 5 min Idle ohne Anfrage
+**Referenzboot (`P1`, nur nach erfuellter Vor-P1-Bedingung fuer die System-NVS und freigegebenem `G-S`):** nach dem Flash des Diagnoseimages ein Boot mit 5 min Idle ohne Anfrage
 (= B0); danach `state_store`, `nvs`/`phy_init`, Bootbereich lesen und mit `P0` vergleichen.
 Das ergibt, ob schon der Boot persistent schreibt, bevor Szenarien laufen.
 
 **Rueckfallweg (verifizierbar, zweistufig):**
 - **RB-1 (logisch, ohne Zugriff auf `state_store`):** erlaubt nur fuer Szenarien, die den
-  Namen aendern, und nur wenn (i) Originalname und Revisionen aus `P0` dokumentiert sind,
+  Namen aendern, und nur wenn (i) Originalname und Revisionen aus dem `P0`-Abbild (offline) ermittelt und dokumentiert sind (sonst ist RB-1 nicht verwendbar und nur RB-2 gilt),
   (ii) jeder Commit durch GET und Revision bestaetigt wird, (iii) der Rueckcommit des
   Originalnamens bestaetigt ist. Rohbytes von `state_store` weichen dabei erwartbar ab
   (Revisions-/Slotrotation); die Abweichung wird per Vorher/Nachher-Hash **sichtbar
@@ -1803,7 +1838,7 @@ Das ergibt, ob schon der Boot persistent schreibt, bevor Szenarien laufen.
   (`G-S`) mit Readback-Hash gleich `P0` – dieser Weg braucht weder Weboberflaeche noch laufende
   Firmware (esptool im Bootloader-Modus) und ist deshalb auch im Bootloop gangbar.
 - Keine unnoetigen Zugriffe auf fremde Partitionen: nur App (und mit `G-S` `state_store`) werden
-  geschrieben; `nvs`, `phy_init`, Bootloader und Partitionstabelle nur gelesen.
+  geschrieben; `nvs`, `phy_init`, Bootloader und Partitionstabelle werden **vom Host nur gelesen** (moegliche firmwareinterne `nvs`-Schreibvorgaenge beim Boot: siehe Vor-P1-Bedingung in §15.6.5a).
 
 #### 15.6.6 Reserve fuer das noch unfertige R1 (keine Bytewerte)
 
@@ -1868,7 +1903,7 @@ erteilt):**
   `G-B` HTTP; Lesezugriffe auf `0x0`–`0xFFFF`, App und `state_store` (`P0`, offline-
   Klassifikation, Hashkette). Die Szenarien selbst schreiben nicht, aber **der Diagnoseboot
   (P1/B0) kann `state_store`/`nvs` schreiben** (§15.6.5a, `K0_WITHOUT_G_S=NOT_ELIGIBLE`); deshalb
-  wird `G-S` bereits **vor dem ersten Diagnoseflash** vorbereitet und freigegeben. Ergebnis: stark
+  wird `G-S` bereits **vor dem ersten Diagnoseflash** vorbereitet und freigegeben; zusaetzlich muss die Vor-P1-Bedingung fuer die System-NVS (§15.6.5a) `EXCLUDED` ergeben oder vom Owner ausdruecklich entschieden sein (`G-S` deckt `nvs` nicht ab). Ergebnis: stark
   reduzierte Coverage (unauthentifizierter Shell/Asset, Boot-/Heap-/Main-Basislinie, 401-Probe).
 - **Teil K1 – authentifizierter Kern (B2–B6, authentifizierter Heap-Lauf):** ebenfalls `G-S`
   (physischer Erase-/Schreibzugriff auf `state_store`, `0x300000`, 1 MiB, byte-exakter Rueckfall
@@ -1881,8 +1916,8 @@ erteilt):**
 
 | Szenario | ohne `G-S` | mit `G-S` | Abdeckung |
 |---|---|---|---|
-| P0 lesende Sicherung + offline-Klassifikation | ja (nur Lesen, kein Boot der Firmware) | ja | Ausgangszustand |
-| Diagnoseflash + P1/B0 Boot-/Heap-/Main-Basislinie | **HOLD (nicht zulaessig)** | ja | Boot, Heap, Main-HWM (HTTPD-HWM nur mit genehmigter Task-HWM-Probe) |
+| P0 lesende Sicherung + offline-Klassifikation + `PRE_P1_REPORT` | ja (nur Host-Lesen, kein Boot der Firmware, kein Login) | ja | Ausgangszustand, Entscheidung zur System-NVS |
+| Diagnoseflash + P1/B0 Boot-/Heap-/Main-Basislinie | **HOLD (nicht zulaessig)** | ja, **nur** bei `SYSTEM_NVS_WRITE_AT_P1=EXCLUDED` oder ausdruecklicher Ownerentscheidung zur System-NVS; sonst `HOLD` | Boot, Heap, Main-HWM (HTTPD-HWM nur mit genehmigter Task-HWM-Probe) |
 | B1 / B1a unauthentifizierter Shell / Asset | HOLD | ja | Einzelpfade, isoliert |
 | B1u 401-Probe Status | HOLD | ja | nur Fehlerpfad, kein Encoder |
 | B3 Login | HOLD | ja | Einzelpfad + persistenter Schreibpfad |
@@ -1894,7 +1929,7 @@ erteilt):**
 
 **Ausfuehrbarer Umfang auf einer neuen Plan-SHA (nach Fix Verification dieses Deltas):**
 `H-RAM-2` (K0 und K1, Stack-Diagnoseprofil zuerst, danach Heap-Profil) zusammen mit `G-F` und `G-S`
-als **gemeinsam** zur ausdruecklichen Freigabe vorzulegender Umfang; `G-U`/`G-R`/`G-B` wie
+als **gemeinsam** zur ausdruecklichen Freigabe vorzulegender Umfang; der erste Diagnoseflash/Boot bleibt zusaetzlich an den `PRE_P1_REPORT` zur System-NVS gebunden; `G-U`/`G-R`/`G-B` wie
 beschrieben. Ein Teilumfang „nur K0 ohne `G-S`“ wird nicht angeboten.
 
 **Nicht erbeten:** `G-R7` (Slice-7-Harness, destruktiv), `G-RUN` (erfolgreicher Run-Pfad,
