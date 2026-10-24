@@ -83,6 +83,17 @@ sonst bis zu 30 min weitere Logins).
 
 **Erwartete Schreibzugriffe im `state_store`:** nur Auth-Record (jeder Login und jeder Fehlversuch) – kein Namens-Speichern, kein Run-Intent.
 
+### 2.4a Preflight-Korrekturen am Runner (Fix-Delta auf `ae54c1a`, kein Produktcode)
+| ID | Befund | Korrektur | Offline-Nachweis |
+|---|---|---|---|
+| B-D9-1 | `end` wertete nur Browserfehler; fehlgeschlagene `check()`-Prüfungen konnten zu `end=PASS`/Exit 0 führen | `ev()` zählt jedes `FAIL` (Einzelprüfungen und Flow-Fehler); `finish()` meldet `PASS` nur bei 0 Fehlern **und** 0 unerwarteten Browserfehlern, sonst `end=FAIL` und `process.exitCode=1`; `REAL`/`SIMULATED`/`EMULATION`-Kennzeichnung und Einzelereignisse unverändert | absichtlich fehlschlagende Prüfung → Einzelprüfung `FAIL`, `end=FAIL`, Exit ≠ 0; werfende Prüfung und Browserfehler ebenso; sauberer Lauf → `end=PASS`, Exit 0 (je eigener Prozess) |
+| B-D9-2 | B-1 wartete auf „irgendeinen nichtleeren `#note`“; nach Sprachwechsel steht dort noch die **vorherige** Meldung, die neue Antwort kann ausstehen | `b1Attempt()`: wartet auf die zu **diesem** Versuch gehörende Login-Antwort (`401`), danach auf die **erwartete Meldung der aktuellen Sprache**; kein pauschaler Sleep, kein zusätzlicher Loginversuch; Sichtbarkeit und Text danach wie bisher | lokaler Mock mit 1,5 s verzögerter Antwort: alte DE-Meldung sichtbar, Wechsel auf EN, erst das neue EN-Ergebnis zählt (Wartezeit ≈ 1,9 s) |
+
+Der Runner ist jetzt importierbar (er führt `main()` nur bei direktem Aufruf aus); Skripte:
+[Runner](PR209_Q4_D9_BROWSER_RUN.mjs.txt), [Preflight-Selbsttest](PR209_Q4_D9_PREFLIGHT_SELFTEST.mjs.txt) (nur lokaler Mock, kein Gerät,
+keine echten Zugangsdaten), [Ausgabe](PR209_Q4_D9_PREFLIGHT_SELFTEST_OUTPUT.txt) (`PREFLIGHT_SELFTEST=PASS`). Image-Identität, C5-Entscheid und
+Laufumfang unverändert; **D9 bleibt `NOT_RUN`** (kein Flash, kein Gerät, kein Browserlauf gegen das Gerät).
+
 ### 2.5 Offene Ownerfreigabe (nicht erteilt)
 `G-F` (App-only-Flash `0x10000` des Messimages und anschließender Rück-Flash), `G-S` (byte-exakter `state_store`-Restore), `G-U` (UART),
 `G-R` (EN/BOOT-Reset), `G-B` (HTTP/Browser). Ebenfalls benötigt: das Web-Passwort (die frühere private Datei wurde vernichtet).

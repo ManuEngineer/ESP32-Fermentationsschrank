@@ -1,0 +1,56 @@
+// Offline preflight for the D9 runner (no device, no real credentials, local mock server only).
+// Usage: RUNNER=<copy of PR209_Q4_D9_BROWSER_RUN.mjs.txt as .mjs> PLAYWRIGHT=<playwright-core> node selftest.mjs
+import http from 'node:http';
+import { spawnSync } from 'node:child_process';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import assert from 'node:assert/strict';
+const { RUNNER, PLAYWRIGHT } = process.env;
+const OUT = '/tmp/d9_selftest_out'; mkdirSync(OUT, { recursive: true }); writeFileSync(OUT + '/dummy.pw', 'dummy-not-a-credential\n', { mode: 0o600 });
+const env = { ...process.env, DEVICE: '127.0.0.1', PWFILE: OUT + '/dummy.pw', OUT, PLAYWRIGHT };
+const url = pathToFileURL(RUNNER).href;
+
+// ---- B-D9-1: aggregation, tested in child processes so the real process exit status is observed
+const child = body => spawnSync(process.execPath, ['--input-type=module', '-e',
+  `const m = await import(${JSON.stringify(url)}); ${body}`], { env, encoding: 'utf8' });
+const bad = child(`await m.check('synthetic failing check', 'REAL', async () => false); await m.check('synthetic passing check', 'REAL', async () => 'ok'); m.finish([]);`);
+assert.match(bad.stdout, /FAIL\s+REAL\s+synthetic failing check/); assert.match(bad.stdout, /PASS\s+REAL\s+synthetic passing check/);
+assert.match(bad.stdout, /FAIL\s+INFO\s+end failed checks=1/); assert.notEqual(bad.status, 0);
+const thrown = child(`await m.check('synthetic throwing check', 'REAL', async () => { throw new Error('boom'); }); m.finish([]);`);
+assert.match(thrown.stdout, /FAIL\s+INFO\s+end failed checks=1/); assert.notEqual(thrown.status, 0);
+const browserErr = child(`await m.check('synthetic passing check', 'REAL', async () => 'ok'); m.finish(['unexpected page error']);`);
+assert.match(browserErr.stdout, /FAIL\s+INFO\s+end failed checks=0 unexpected console\/page errors=1/); assert.notEqual(browserErr.status, 0);
+const good = child(`await m.check('synthetic passing check', 'REAL', async () => 'ok'); m.finish([]);`);
+assert.match(good.stdout, /PASS\s+INFO\s+end failed checks=0 unexpected console\/page errors=0/); assert.equal(good.status, 0);
+console.log('B-D9-1 PASS: failing check -> check FAIL, end FAIL, exit != 0; throwing check and browser error likewise; clean run -> PASS, exit 0');
+
+// ---- B-D9-2: stale message from the previous attempt vs. delayed response for the new language
+const TEXT = { de: 'Passwort · Abgelehnt', en: 'Password · Rejected' };
+const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/api/v1/login') {
+    let b = ''; req.on('data', c => b += c); req.on('end', () => setTimeout(() => { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"invalid-credentials"}'); }, 1500));
+    return;
+  }
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(`<!doctype html><select id=lang><option value=de>de<option value=en>en</select><form id=login><input id=password type=password><button>go</button></form><span id=note></span>
+<script>const TX=${JSON.stringify(TEXT)};const lg=document.querySelector('#login'),nt=document.querySelector('#note'),sw=document.querySelector('#lang');
+lg.addEventListener('submit',async e=>{e.preventDefault();await fetch('/api/v1/login',{method:'POST',body:'{}'});nt.textContent=TX[sw.value]});</script>`);
+});
+await new Promise(r => server.listen(0, '127.0.0.1', r)); const port = server.address().port;
+Object.assign(process.env, env); const mod = await import(url); const { chromium } = (await import('node:module')).createRequire(import.meta.url)(PLAYWRIGHT);
+const browser = await chromium.launch({ headless: true });
+try {
+  const page = await (await browser.newContext()).newPage(); await page.goto(`http://127.0.0.1:${port}/`);
+  // first attempt (DE) leaves its message on the page
+  assert.equal(await mod.b1Attempt(page, 'de', 'selftest'), TEXT.de);
+  // the OLD wait ("any non-empty note") would read the stale DE text right after switching to EN and clicking:
+  await mod.lang(page, 'en'); await mod.login(page, false);
+  const stale = (await mod.note(page)).trim(); assert.equal(stale, TEXT.de, 'precondition: stale DE message is still visible while the EN response is pending');
+  await mod.until(async () => (await mod.note(page)).trim() === TEXT.en, 6000);          // let that pending request finish
+  // the NEW wait must only accept the new EN result of its own, delayed response
+  const t0 = Date.now(); assert.equal(await mod.b1Attempt(page, 'de', 'selftest'), TEXT.de);
+  const t1 = Date.now(); assert.equal(await mod.b1Attempt(page, 'en', 'selftest'), TEXT.en);
+  assert.ok(Date.now() - t1 >= 1400, 'result was accepted only after the delayed response (not from the stale message)');
+  console.log('B-D9-2 PASS: stale DE message visible during the pending EN request; only the new EN result counts (waited ' + (Date.now() - t1) + ' ms)');
+} finally { await browser.close(); server.close(); }
+console.log('PREFLIGHT_SELFTEST=PASS');
