@@ -20,6 +20,7 @@
 
 #include "device_platform.hpp"
 #include "configuration_limits.hpp"
+#include "configuration_graph_store.hpp"
 #include "configuration_storage_contract.hpp"
 #include "connectivity_credentials.hpp"
 #include "fermentation_application.hpp"
@@ -36,6 +37,16 @@
 #include "../common/allocation_window.hpp"
 
 namespace fermentation {
+class RunPersistenceCoordinatorTestAccess {
+   public:
+    static bool released(RunPersistenceCoordinator& c) {
+        auto operation = c.beginCommandOperation();
+        if (!operation) return false;
+        const auto* candidate = c.commandCandidate(*operation);
+        return candidate && !candidate->activeProgramRun &&
+               !candidate->activeManualRun && candidate->activeRunId.empty();
+    }
+};
 
 struct WebSessionManagerTestAccess {
     static bool hasActive(const WebSessionManager& manager) {
@@ -48,6 +59,58 @@ struct WebSessionManagerTestAccess {
 
 class FermentationApplicationTestAccess {
    public:
+    static std::size_t webCalls(const FermentationApplication& app) {
+        return app.webConfigurationCallsForTest_;
+    }
+    static ConfigurationManifestReference manifest(
+        const FermentationApplication& app) {
+        const auto read = app.configurationService_->acquireRuntime();
+        TEST_ASSERT_TRUE(read.lease.valid());
+        return read.lease.get().manifestReference();
+    }
+    static bool borrowReleased(FermentationApplication& app) {
+        return RunPersistenceCoordinatorTestAccess::released(
+            *app.runPersistenceCoordinator_);
+    }
+    static void commissionMaximumCatalog(FermentationApplication& app) {
+        auto build = app.configurationService_->beginPreview();
+        TEST_ASSERT_TRUE(build.lease.valid());
+        auto& catalog = build.lease.programCatalog();
+        for (auto& document : catalog.programs) {
+            auto& p = document.program;
+            p.name.clear();
+            for (unsigned n = 0; n < 48U; ++n) p.name += "\xC3\xA4";
+            p.notes.clear();
+            for (unsigned n = 0; n < 512U; ++n) p.notes += "\xC3\xA4";
+            p.productSensorFailure.fallbackDelaySeconds = 30U;
+            p.fermentationStages.front().targetTemperatureCelsius = 38.0;
+            p.fermentationStages.front().durationMinutes = 120U;
+            p.targetQualification.bandCelsius = 0.5;
+            p.targetQualification.durationMinutes = 10U;
+            p.maximumTargetReachMinutes = 180U;
+            if (p.preheat) p.maximumProductWaitMinutes = 30U;
+            if (p.completion.mode != CompletionMode::FinishWithoutCooling)
+                p.completion.coolingTargetCelsius = 8.0;
+        }
+        for (unsigned n = 0; n < 12U; ++n) {
+            auto user = catalog.programs.front();
+            user.program.id = std::string(46U, 'u') + (n < 10 ? "0" : "1") +
+                              std::to_string(n % 10U);
+            user.program.builtIn = false;
+            user.program.factoryCatalogEntry = false;
+            user.program.resettable = false;
+            user.program.userDeletable = true;
+            catalog.programs.push_back(std::move(user));
+        }
+        const auto installed = app.configurationService_->installPreview(
+            std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
+            {ChangeOperationKind::NormalEdit, 1U});
+        TEST_ASSERT_TRUE(installed.preview.has_value());
+        const auto committed = app.configurationService_->confirmPreview(
+            installed.preview->handle);
+        TEST_ASSERT_TRUE(committed.status ==
+                         ConfigurationCommitStatus::Activated);
+    }
     static RunCommandState& runtimeState(FermentationApplication& application) {
         return *application.runtimeRunState_;
     }
@@ -199,6 +262,10 @@ class FermentationApplicationTestAccess {
 };
 
 struct WebRunMutationHandlerTestAccess {
+    static ReplayOutcomeCode projectConfig(
+        const ApplicationConfigurationChangeResult& result) {
+        return WebRunMutationHandler::projectConfigurationResult(result);
+    }
     static ReplayOutcomeCode project(
         const FermentationUiCommandResult& result) {
         return WebRunMutationHandler::projectCommandResult(result);
@@ -214,6 +281,9 @@ struct WebRunMutationHandlerTestAccess {
 
 namespace fermentation {
 struct WebRouteDispatcherTestAccess {
+    static void extraAssetBytes(std::size_t bytes) {
+        WebRouteDispatcher::extraAssetBytesForTest_ = bytes;
+    }
     static void extraShellBytes(std::size_t bytes) {
         WebRouteDispatcher::extraShellBytesForTest_ = bytes;
     }
@@ -221,10 +291,28 @@ struct WebRouteDispatcherTestAccess {
 }  // namespace fermentation
 
 #include "shell_golden.hpp"
+#include "web_application_asset.hpp"
+#include "crc32.hpp"
 
 namespace {
 std::string completeBody(const device_platform::HttpResponse& response) {
     return response.body + std::string(response.staticBodySuffix);
+}
+
+// Reassemble the actual two-script document only for existing semantic
+// string/golden contracts. HTTP byte budgets are tested on the raw response.
+std::string shellDocument(const device_platform::HttpResponse& response) {
+    auto raw = completeBody(response);
+    // The new navigation CSS is verified on the raw HTTP response below;
+    // strip only that additive style when comparing the original frozen head.
+    const std::string navCss =
+        "nav{display:flex;flex-wrap:wrap;gap:.5rem}nav[hidden]{display:none}";
+    if (const auto at = raw.find(navCss); at != std::string::npos)
+        raw.erase(at, navCss.size());
+    const auto split = raw.find(";</script><p id=asset-error");
+    if (split == std::string::npos) return raw;
+    return raw.substr(0U, split) + ";" + fermentation::kWebApplicationAsset +
+           "</script></body></html>";
 }
 
 using namespace fermentation;
@@ -1710,6 +1798,12 @@ void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
 
     request = makeWebRequest("GET", "/api/v1/status");
     TEST_ASSERT_FALSE(routes->handle(request, response));
+    char asset[24]{};
+    std::snprintf(asset, sizeof(asset), "/assets/app.%08x.js",
+                  static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(
+                      kWebApplicationAsset)));
+    request = makeWebRequest("GET", asset);
+    TEST_ASSERT_FALSE(routes->handle(request, response));
     request = makeWebRequest("GET", "/api/network/status");
     TEST_ASSERT_TRUE(routes->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
@@ -1863,7 +1957,7 @@ void test_composed_dispatcher_anonymous_and_recovery_states_fail_closed() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
     TEST_ASSERT_TRUE(
-        completeBody(response).find("Password protection is disabled") !=
+        shellDocument(response).find("Password protection is disabled") !=
         std::string::npos);
     TEST_ASSERT_TRUE(completeBody(response).find("password-label") !=
                      std::string::npos);
@@ -1921,7 +2015,7 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(completeBody(response).find("const U=true") !=
                      std::string::npos);
-    TEST_ASSERT_TRUE(completeBody(response).find(
+    TEST_ASSERT_TRUE(shellDocument(response).find(
                          "document.documentElement.lang=sw.value=lc") !=
                      std::string::npos);
     // The raw JSON placeholder is gone; the board replaces it.
@@ -3326,13 +3420,22 @@ void test_dispatcher_run_mutation_sequence_contract() {
 
 // ---- S6: first-time setup form in the web shell -----------------------------
 
+std::string rawShell(ComposedFixture& fixture, const std::string& cookie = {}) {
+    auto request = makeWebRequest("GET", "/");
+    if (!cookie.empty()) request.metadata.cookie = "FSSESSION=" + cookie;
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    return completeBody(response);
+}
+
 std::string shellBody(ComposedFixture& fixture) {
     auto request = makeWebRequest("GET", "/");
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
-    return completeBody(response);
+    return shellDocument(response);
 }
 
 bool contains(const std::string& text, const char* needle) {
@@ -3351,7 +3454,7 @@ size_t occurrences(const std::string& text, const std::string& needle) {
 // Owner limit of the web shell (Issue #27 language-selection slice, D1 = A:
 // at most 11456 bytes, one time) and the required reserve below it, including
 // the 19 byte reserve for the widest mutation sequence.
-constexpr size_t kShellLimit = 11456U;
+constexpr size_t kShellLimit = 4096U;
 constexpr size_t kShellMinimumReserve = 128U;
 
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
@@ -3460,7 +3563,7 @@ std::string authenticatedShell(ComposedFixture& fixture,
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    return completeBody(response);
+    return shellDocument(response);
 }
 
 size_t labelCount(const std::string& body, const std::string& token);
@@ -3489,19 +3592,21 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_TRUE(contains(body, "X-CSRF-Token"));
     // Ack/Mute are sent directly; Stop, Done and Start are armed first (D1).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
-    TEST_ASSERT_TRUE(contains(body, "if(K!==a){K=a;KC='';"));
+    TEST_ASSERT_TRUE(contains(body, "if(!cf(a))return;"));
     TEST_ASSERT_TRUE(contains(body, "T.sure"));
     // Intents match the fixed wire contract.
     TEST_ASSERT_TRUE(contains(body, "t:a+'-message'"));
     TEST_ASSERT_TRUE(contains(body, "{t:'stop-run',o:'abort-and-turn-off'}"));
     TEST_ASSERT_TRUE(contains(body, "{t:'complete-run',c:false}"));
-    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:{p:pg.value}}"));
-    // Only a clearly completed outcome advances the sequence; otherwise reload.
-    TEST_ASSERT_TRUE(contains(body,
-                              "applied|stale|busy|confirmation-required|"
-                              "rejected|too-large|write-failed"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:sc()}"));
+    // Closed outcomes; an unavailable/indeterminate result locks the
+    // sequence and refreshes state, never implies a successful commit.
+    for (const auto* token : {"applied:", "stale:", "busy:", "rejected:",
+                              "'confirmation-required':", "'too-large':",
+                              "'write-failed':", "unavailable:"})
+        TEST_ASSERT_TRUE(contains(body, token));
     TEST_ASSERT_TRUE(contains(body, "location.reload()"));
-    TEST_ASSERT_TRUE(contains(body, "r.status!==503"));
+    TEST_ASSERT_TRUE(contains(body, "Q=j.outcome==='unavailable'?0:n+1"));
     TEST_ASSERT_TRUE(contains(body, "t<2&&!r"));
     // All locales carry the confirmation and result texts.
     TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "sure"));
@@ -3521,16 +3626,16 @@ void test_shell_action_availability_and_confirmation_binding_contract() {
     TEST_ASSERT_TRUE(contains(body, "r=h==='active-run'||h==='waiting'"));
     TEST_ASSERT_TRUE(contains(body,
                               "stop:!r,done:h!=='completed',"
-                              "start:h!=='standby'||!pg.value"));
+                              "start:ps.disabled"));
     // A pending confirmation is bound to mode, run and catalog revision and
     // the selected program; it is dropped on change, on send and without a
     // valid snapshot. Unchanged polls keep it.
     TEST_ASSERT_TRUE(contains(body,
-                              "c=P?[h,P[0].revisions.run,P[0]."
-                              "revisions[Z],PC,pg.value]"
+                              "c=P?[h,rv().run,rv()[Z],PC,pg.value,JSON."
+                              "stringify(sc()),SD?.revision,sn.value]"
                               ".join():''"));
     TEST_ASSERT_TRUE(contains(body, "if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';"));
-    TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ui();"));
+    TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ld();"));
     TEST_ASSERT_TRUE(contains(body, "send(i){K='';B=true;"));
     // A failed refresh makes the snapshot unusable until a fresh one arrives.
     // Abort the siblings, then check the generation before display effects
@@ -3586,8 +3691,10 @@ void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
         TEST_ASSERT_TRUE(contains(authenticatedShell(fixture, session.cookie),
                                   "const U=true;let Q=1;"));
         TEST_ASSERT_TRUE(contains(shellBody(fixture), "lg.addEventListener"));
-        TEST_ASSERT_TRUE(
-            contains(shellBody(fixture), "if(r.ok)location.reload();"));
+        // B-1: success still reloads; a failed attempt is shown, not ignored.
+        TEST_ASSERT_TRUE(contains(shellBody(fixture),
+                                  "if(r&&r.ok)location.reload();else nt[X]="));
+        TEST_ASSERT_TRUE(contains(shellBody(fixture), "catch{}if(r&&r.ok)"));
     }
     {
         ComposedFixture fixture;
@@ -3608,29 +3715,29 @@ void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
 }
 
 void test_shell_stays_within_the_limit_in_all_states() {
-    constexpr size_t kLimit = kShellLimit;
+    constexpr size_t kLimit = 2048U;
     // Reserve for the widest possible sequence (20 digits) on top of "1".
     constexpr size_t kSequenceHeadroom = 19U;
     {
         ComposedFixture fixture;  // unprovisioned setup form
-        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+        TEST_ASSERT_TRUE(rawShell(fixture).size() + kShellMinimumReserve <=
+                         4096U);
     }
     {
         ComposedFixture fixture;  // protected, anonymous and authenticated
         TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
             fixture.application, passwordUnderTest(), kPinUnderTest));
-        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+        TEST_ASSERT_TRUE(rawShell(fixture).size() <= kLimit);
         const auto session = loginComposed(fixture);
-        const auto measuredBytes =
-            authenticatedShell(fixture, session.cookie).size();
+        const auto measuredBytes = rawShell(fixture, session.cookie).size();
         std::printf("WEB_SHELL_AUTH_BYTES=%zu RESERVE=%zu\n", measuredBytes,
                     kLimit - measuredBytes);
-        TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
+        TEST_ASSERT_TRUE(rawShell(fixture, session.cookie).size() +
                              kSequenceHeadroom <=
                          kLimit);
         // The measured shell keeps the owner reserve (it includes the
         // sequence headroom above).
-        TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
+        TEST_ASSERT_TRUE(rawShell(fixture, session.cookie).size() +
                              kShellMinimumReserve <=
                          kLimit);
     }
@@ -3657,7 +3764,7 @@ void test_shell_stays_within_the_limit_in_all_states() {
         ComposedFixture fixture;  // recovery required
         TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
             fixture.application, AuthProvisioningState::RecoveryRequired));
-        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+        TEST_ASSERT_TRUE(rawShell(fixture).size() <= kLimit);
     }
 }
 
@@ -3948,7 +4055,7 @@ void test_language_selector_is_in_every_shell_state_without_server_state() {
         auto request = makeWebRequest("GET", "/");
         device_platform::HttpResponse response;
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
-        check(completeBody(response));
+        check(shellDocument(response));
         TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
         TEST_ASSERT_FALSE(response.metadata.setCookie->find("lang") !=
                           std::string::npos);
@@ -3963,8 +4070,7 @@ void test_language_choice_never_reaches_the_api_or_the_polling_contract() {
     TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "setInterval("));
     TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
-    TEST_ASSERT_TRUE(
-        contains(body, "sw.onchange=()=>{sl(sw.value);dr();ui();"));
+    TEST_ASSERT_TRUE(contains(body, "sw.onchange=()=>{sl(sw.value);ui();"));
     TEST_ASSERT_TRUE(contains(body, "try{localStorage.lang=lc}catch(e){}"));
     TEST_ASSERT_TRUE(contains(body, "b[X]=K===k?T.sure:T[k]+"));
     // The labels of the selector are not translated and carry no table key.
@@ -4554,10 +4660,10 @@ void test_shell_start_flow_text_contract() {
     const auto body = shellBody(fixture);
     // Names are shown, ids are sent; the list is only requested with a
     // usable sequence and its result never makes Start available by itself.
-    TEST_ASSERT_TRUE(contains(body, "fetch('/api/v1/programs'"));
+    TEST_ASSERT_TRUE(contains(body, "get('programs')"));
     TEST_ASSERT_TRUE(contains(body, "new Option(x.name,x.id)"));
-    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:{p:pg.value}}"));
-    TEST_ASSERT_TRUE(contains(body, "start:h!=='standby'||!pg.value"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:sc()}"));
+    TEST_ASSERT_TRUE(contains(body, "start:ps.disabled"));
     // Start needs two clicks like Stop/Complete (no direct-send branch).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
     TEST_ASSERT_FALSE(contains(body, "a==='start'&&"));
@@ -4565,12 +4671,15 @@ void test_shell_start_flow_text_contract() {
     // enabled only while list and status revision agree, a mismatch or failed
     // load clears the selection and reloads, and the intent carries the
     // list revision instead of the latest status revision.
-    TEST_ASSERT_TRUE(contains(body, "!PC||P[0].revisions[Z]!==PC"));
+    TEST_ASSERT_TRUE(contains(body, "!PC||!va()") &&
+                     contains(body, "rv()[Z]!==PC"));
     TEST_ASSERT_TRUE(contains(body, "v&&v!==PC)lp();"));
     TEST_ASSERT_TRUE(contains(body, "PC='';pg[Y]();"));
     TEST_ASSERT_TRUE(contains(body, "PC=j.catalogRevision;"));
     TEST_ASSERT_TRUE(contains(body, "if(i.t==='start-program')o.c=PC;"));
-    TEST_ASSERT_TRUE(contains(body, "revisions[Z],PC,pg.value]"));
+    TEST_ASSERT_TRUE(contains(
+        body,
+        "rv()[Z],PC,pg.value,JSON.stringify(sc()),SD?.revision,sn.value]"));
 }
 
 void test_other_states_get_no_provisioning_form_or_bypass() {
@@ -4996,10 +5105,18 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
         }
         const auto expected =
             shell_golden::webShell(state, csrf, authenticated, sequence);
-        TEST_ASSERT_EQUAL_STRING(expected.c_str(),
-                                 completeBody(response).c_str());
+        if (state == WebAuthenticationState::Unprovisioned) {
+            TEST_ASSERT_EQUAL_STRING(expected.c_str(),
+                                     shellDocument(response).c_str());
+        } else {
+            const auto split = expected.find(";const E=");
+            TEST_ASSERT_EQUAL_STRING(
+                expected.substr(0U, split).c_str(),
+                shellDocument(response).substr(0U, split).c_str());
+        }
         if (state != WebAuthenticationState::Unprovisioned) {
-            TEST_ASSERT_LESS_OR_EQUAL_UINT32(1536U, response.body.size());
+            TEST_ASSERT_LESS_OR_EQUAL_UINT32(1920U,
+                                             completeBody(response).size());
         }
         if (state == WebAuthenticationState::PasswordProtected) {
             const auto session = loginComposed(fixture);
@@ -5007,8 +5124,10 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
             TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
             const auto expectedAuthenticated =
                 shell_golden::webShell(state, session.csrf, true, 1U);
-            TEST_ASSERT_EQUAL_STRING(expectedAuthenticated.c_str(),
-                                     completeBody(response).c_str());
+            const auto split = expectedAuthenticated.find(";const E=");
+            TEST_ASSERT_EQUAL_STRING(
+                expectedAuthenticated.substr(0U, split).c_str(),
+                shellDocument(response).substr(0U, split).c_str());
         }
         // Real shell construction sets a suffix before the real size check.
         WebRouteDispatcherTestAccess::extraShellBytes(8192U);
@@ -5028,8 +5147,749 @@ void test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors() {
     }
 }
 
+void test_asset_route_crc_cache_and_public_bytes() {
+    std::string canonical;
+    for (unsigned mode = 0U; mode < 4U; ++mode) {
+        ComposedFixture fixture;
+        if (mode != 0U)
+            TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+                fixture.application, passwordUnderTest(), kPinUnderTest));
+        if (mode == 2U)
+            TEST_ASSERT_TRUE(
+                FermentationApplicationTestAccess::setWebPasswordEnabled(
+                    fixture.application, false));
+        if (mode == 3U)
+            TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+                fixture.application, AuthProvisioningState::RecoveryRequired));
+        // CRC derived independently from the actual public bytes.
+        char path[24]{};
+        const std::string bytes(kWebApplicationAsset);
+        std::snprintf(
+            path, sizeof(path), "/assets/app.%08x.js",
+            static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(bytes)));
+        auto request = makeWebRequest("GET", path);
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        TEST_ASSERT_TRUE(response.body.empty());
+        TEST_ASSERT_EQUAL_STRING(bytes.c_str(), completeBody(response).c_str());
+        TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+        TEST_ASSERT_TRUE(response.metadata.cache ==
+                         device_platform::HttpResponseCache::ImmutableAsset);
+        if (canonical.empty()) canonical = completeBody(response);
+        TEST_ASSERT_EQUAL_STRING(canonical.c_str(),
+                                 completeBody(response).c_str());
+        for (const auto& wrong :
+             {std::string(path) + "?v=1",
+              std::string("/assets/app.00000000.js"),
+              std::string("/assets/APP.js"), std::string(path) + "/x"}) {
+            request.path = wrong;
+            response = {};
+            TEST_ASSERT_FALSE(fixture.http.routes()->handle(request, response));
+            TEST_ASSERT_TRUE(response.metadata.cache ==
+                             device_platform::HttpResponseCache::None);
+        }
+        request.path = path;
+        request.method = "POST";
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(405U, response.statusCode);
+        TEST_ASSERT_TRUE(response.staticBodySuffix.empty());
+        TEST_ASSERT_TRUE(response.metadata.cache ==
+                         device_platform::HttpResponseCache::None);
+        request.method = "GET";
+        request.metadata.host = "invalid\r\n";
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+        request.metadata.host = "esp.local";
+        request.body = "x";
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+    }
+}
+
+void test_independent_shell_and_asset_boundaries() {
+    for (bool setup : {true, false}) {
+        ComposedFixture fixture;
+        if (!setup)
+            TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+                fixture.application, passwordUnderTest(), kPinUnderTest));
+        auto request = makeWebRequest("GET", "/");
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        const auto size = completeBody(response).size();
+        const std::size_t limit = setup ? 4096U : 2048U;
+        TEST_ASSERT_TRUE(size + 128U + (setup ? 0U : 19U) <= limit);
+        WebRouteDispatcherTestAccess::extraShellBytes(limit - size);
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        TEST_ASSERT_EQUAL_UINT32(limit, completeBody(response).size());
+        WebRouteDispatcherTestAccess::extraShellBytes(limit - size + 1U);
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        WebRouteDispatcherTestAccess::extraShellBytes(0U);
+        TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+        TEST_ASSERT_EQUAL_STRING("{\"error\":\"web-shell-unavailable\"}",
+                                 response.body.c_str());
+        TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
+                                 response.contentType.c_str());
+        TEST_ASSERT_TRUE(response.staticBodySuffix.empty());
+    }
+    ComposedFixture fixture;
+    char path[24]{};
+    const std::string bytes(kWebApplicationAsset);
+    std::snprintf(
+        path, sizeof(path), "/assets/app.%08x.js",
+        static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(bytes)));
+    auto request = makeWebRequest("GET", path);
+    device_platform::HttpResponse response;
+    WebRouteDispatcherTestAccess::extraAssetBytes(16384U - bytes.size());
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_EQUAL_UINT32(16384U, completeBody(response).size());
+    WebRouteDispatcherTestAccess::extraAssetBytes(16384U - bytes.size() + 1U);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    WebRouteDispatcherTestAccess::extraAssetBytes(0U);
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"web-asset-unavailable\"}",
+                             response.body.c_str());
+    TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
+                             response.contentType.c_str());
+    TEST_ASSERT_TRUE(response.staticBodySuffix.empty());
+    TEST_ASSERT_TRUE(response.metadata.cache ==
+                     device_platform::HttpResponseCache::None);
+}
+
+void test_program_detail_route_contract_and_session_gate() {
+    ComposedFixture fixture;
+    auto request = makeWebRequest("GET", "/api/v1/programs/test");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    const auto session = composedRunSession(fixture);
+    const auto source = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(source.has_value());
+    const auto id = source->programCatalog.programs.front().program.id;
+    request = makeWebRequest("GET", "/api/v1/programs/" + id);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+    request = makeAuthenticatedRequest("GET", "/api/v1/programs/" + id,
+                                       session.web.cookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(
+        contains(response.body, ("\"id\":\"" + id + "\"").c_str()));
+    TEST_ASSERT_TRUE(contains(response.body, "\"catalogRevision\":\""));
+    TEST_ASSERT_TRUE(contains(response.body, "\"defaultSensorMode\":"));
+    for (const auto& invalid :
+         {std::string(), std::string(49U, 'a'), std::string("UPPER"),
+          id + "?x=1", id + "/extra"}) {
+        request.path = "/api/v1/programs/" + invalid;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+        TEST_ASSERT_EQUAL_STRING("{\"error\":\"invalid-program-id\"}",
+                                 response.body.c_str());
+    }
+    request.path = "/api/v1/programs/" + std::string(48U, 'z');
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(404U, response.statusCode);
+    request.path = "/api/v1/programs/a";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(404U, response.statusCode);
+    request.method = "POST";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(405U, response.statusCode);
+    request.method = "GET";
+    request.body = "x";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+    FermentationApplication unavailableApplication;
+    WebReadOnlyApiHandler api(unavailableApplication);
+    request.body.clear();
+    TEST_ASSERT_TRUE(api.handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+}
+
+void test_program_detail_projection_bounds_nulls_and_completion_binding() {
+    ComposedFixture fixture;
+    const auto read = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(read.has_value());
+    auto source = *read;
+    auto entry = source.programCatalog.programs.front();
+    entry.program.id = std::string(48U, 'p');
+    entry.program.name.clear();
+    for (unsigned i = 0; i < 48U; ++i) entry.program.name += "é";
+    source.programCatalog.programs.assign(16U, entry);
+    source.programCatalogRevision = ProgramCatalogRevision{UINT64_MAX};
+    std::string body;
+    TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+    TEST_ASSERT_TRUE(body.size() <= 3072U);
+    TEST_ASSERT_TRUE(
+        contains(body, "\"catalogRevision\":\"18446744073709551615\""));
+    TEST_ASSERT_FALSE(contains(body, "notes"));
+    TEST_ASSERT_FALSE(contains(body, "fermentationStages"));
+    entry.program.name = std::string(48U, '"');
+    TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+    TEST_ASSERT_TRUE(contains(body, "\\\""));
+    entry.program.fermentationStages.clear();
+    TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+    TEST_ASSERT_TRUE(contains(body, "\"targetCelsius\":null"));
+    TEST_ASSERT_TRUE(contains(body, "\"durationMinutes\":null"));
+    TEST_ASSERT_TRUE(contains(body, "\"startable\":false"));
+    for (const auto& flag : {0U, 1U}) {
+        auto hidden = entry;
+        if (flag)
+            hidden.program.installed = false;
+        else
+            hidden.program.enabled = false;
+        TEST_ASSERT_FALSE(encodeWebApiProgram(source, hidden, body));
+    }
+    const std::array<CompletionMode, 4U> modes{
+        CompletionMode::FinishWithoutCooling, CompletionMode::CoolThenFinish,
+        CompletionMode::CoolAndHoldForDuration,
+        CompletionMode::CoolAndHoldUntilManualStop};
+    const std::array<const char*, 4U> display{
+        "finish", "cool-finish", "cool-hold-duration", "cool-hold-manual"};
+    const std::array<const char*, 4U> intent{
+        "finish-without-cooling", "cool-then-finish",
+        "cool-and-hold-for-duration", "cool-and-hold-until-manual-stop"};
+    for (std::size_t i = 0; i < modes.size(); ++i) {
+        entry.program.completion.mode = modes[i];
+        entry.program.completion.coolingTargetCelsius =
+            i ? std::optional<double>(5.0) : std::nullopt;
+        entry.program.completion.holdDurationMinutes =
+            i == 2U ? std::optional<std::uint32_t>(90U) : std::nullopt;
+        TEST_ASSERT_TRUE(encodeWebApiProgram(source, entry, body));
+        TEST_ASSERT_TRUE(contains(
+            body, (std::string("\"mode\":\"") + display[i] + "\"").c_str()));
+        WebRunMutationDto dto;
+        const auto json = std::string(
+                              "{\"v\":1,\"r\":{\"s\":1},\"i\":{\"t\":\"start-"
+                              "program\",\"c\":{\"p\":\"test\",\"c\":\"") +
+                          intent[i] + "\"" + (i ? ",\"k\":5" : "") +
+                          (i == 2U ? ",\"l\":90" : "") + "}}}";
+        TEST_ASSERT_TRUE(decodeWebRunMutation(json, dto) ==
+                         WebRunMutationDecodeStatus::Success);
+        TEST_ASSERT_TRUE(std::get<FermentationUiStartProgramIntent>(dto.intent)
+                             .candidate.completionMode == modes[i]);
+    }
+}
+
+std::string nameBody(UserConfigurationRevision revision,
+                     const std::string& name = "New device") {
+    return "{\"v\":1,\"r\":{\"u\":\"" + std::to_string(revision.value()) +
+           "\"},\"i\":{\"t\":\"set-device-name\",\"n\":\"" + name + "\"}}";
+}
+
+void test_settings_decode_closed_schema_and_separate_run_budget() {
+    WebMutationDto dto;
+    const auto valid = nameBody(UserConfigurationRevision{7U});
+    TEST_ASSERT_TRUE(decodeWebMutation(valid, dto) ==
+                     WebRunMutationDecodeStatus::Success);
+    TEST_ASSERT_TRUE(std::holds_alternative<WebConfigurationMutationDto>(dto));
+    const std::array<const char*, 8U> invalid{
+        "{\"v\":1,\"r\":{},\"i\":{\"t\":\"set-device-name\",\"n\":\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":7},\"i\":{\"t\":\"set-device-name\",\"n\":"
+        "\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"18446744073709551616\"},\"i\":{\"t\":\"set-"
+        "device-name\",\"n\":\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\",\"s\":1},\"i\":{\"t\":\"set-device-name\","
+        "\"n\":\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\"},\"i\":{\"t\":\"set-device-name\",\"n\":"
+        "\"Test\",\"origin\":3}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\"},\"i\":{\"t\":\"set-time-zone\",\"n\":"
+        "\"Europe/Zurich\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1x\"},\"i\":{\"t\":\"set-device-name\",\"n\":"
+        "\"Test\"}}",
+        "{\"v\":1,\"r\":{\"u\":\"1\",\"u\":\"2\"},\"i\":{\"t\":\"set-device-"
+        "name\",\"n\":\"Test\"}}"};
+    for (const auto* body : invalid)
+        TEST_ASSERT_TRUE(decodeWebMutation(body, dto) ==
+                         WebRunMutationDecodeStatus::Invalid);
+    TEST_ASSERT_TRUE(decodeWebMutation(
+                         valid + std::string(1024U - valid.size(), ' '), dto) ==
+                     WebRunMutationDecodeStatus::Success);
+    TEST_ASSERT_TRUE(decodeWebMutation(
+                         valid + std::string(1025U - valid.size(), ' '), dto) ==
+                     WebRunMutationDecodeStatus::TooLarge);
+    WebRunMutationDto run;
+    const std::string runJson =
+        "{\"v\":1,\"r\":{\"s\":1},\"i\":{\"t\":\"ack-message\",\"id\":7}}";
+    TEST_ASSERT_TRUE(
+        decodeWebRunMutation(runJson + std::string(481U - runJson.size(), ' '),
+                             run) == WebRunMutationDecodeStatus::TooLarge);
+}
+
+void test_settings_all_preview_and_commit_outcomes() {
+    using P = ConfigurationPreviewStatus;
+    using C = ConfigurationCommitStatus;
+    using O = ReplayOutcomeCode;
+    const std::array<std::pair<P, O>, 7U> previews{
+        {{P::ConfigurationRuntimeUnavailable, O::Unavailable},
+         {P::ConfigurationModelBudgetBusy, O::Busy},
+         {P::InvalidCandidate, O::Rejected},
+         {P::NotAllowed, O::Rejected},
+         {P::StateChanged, O::Stale},
+         {P::PreviewNotFound, O::Unavailable},
+         {P::PreviewSuperseded, O::Busy}}};
+    const std::array<std::pair<C, O>, 12U> commits{
+        {{C::Activated, O::Applied},
+         {C::NoChange, O::Applied},
+         {C::PreviewNotFound, O::Unavailable},
+         {C::PreviewSuperseded, O::Busy},
+         {C::ConfigurationMutationBusy, O::Busy},
+         {C::ConfigurationConflictFailure, O::Stale},
+         {C::ConfigurationValidationFailure, O::Rejected},
+         {C::PersistenceFailure, O::WriteFailed},
+         {C::CapacityFailure, O::WriteFailed},
+         {C::ConfigurationCommitIndeterminate, O::Unavailable},
+         {C::ConfigurationRuntimeFailure, O::Unavailable},
+         {C::ReadyForConfirmation, O::Unavailable}}};
+    for (const auto& [preview, expected] : previews)
+        for (const auto& [commit, unused] : commits) {
+            static_cast<void>(unused);
+            TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                                 {preview, commit}) == expected);
+        }
+    for (const auto& [commit, expected] : commits)
+        TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                             {P::Success, commit}) == expected);
+    TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                         {static_cast<P>(255U), C::Activated}) ==
+                     O::Unavailable);
+    TEST_ASSERT_TRUE(WebRunMutationHandlerTestAccess::projectConfig(
+                         {P::Success, static_cast<C>(255U)}) == O::Unavailable);
+}
+
+void test_settings_route_gate_replay_origin_and_network_characterization() {
+    ComposedFixture fixture;
+    const auto session = composedRunSession(fixture);
+    const auto before = fixture.application.webSettings();
+    TEST_ASSERT_TRUE(before.has_value());
+    const auto body = nameBody(before->revision);
+    const auto manifest =
+        FermentationApplicationTestAccess::manifest(fixture.application);
+    const auto host = fixture.network.hostname(),
+               ssid = fixture.network.accessPointSsid();
+    const auto starts = fixture.network.startCallCount(),
+               stops = fixture.network.stopCallCount();
+    for (unsigned gate = 0U; gate < 14U; ++gate) {
+        auto request =
+            makeRunRequest(session.web.cookie, session.web.csrf, "1", body);
+        switch (gate) {
+            case 0U:
+                request.method = "GET";
+                break;
+            case 1U:
+                request.metadata.host = "bad\r\n";
+                break;
+            case 2U:
+                request.metadata.contentType = "text/plain";
+                break;
+            case 3U:
+                request.metadata.origin = "http://foreign.local";
+                break;
+            case 4U:
+                request.body.clear();
+                break;
+            case 5U:
+                request.metadata.cookie.reset();
+                break;
+            case 6U:
+                request.metadata.csrfToken = "bad";
+                break;
+            case 7U:
+                request.metadata.mutationSeq.reset();
+                break;
+            case 8U:
+                request.metadata.mutationSeq = "invalid";
+                break;
+            case 9U:
+                request.metadata.mutationSeq = "2";
+                break;
+            case 11U:
+                request.body =
+                    "{\"v\":1,\"r\":{\"u\":\"1\"},\"i\":{\"t\":\"set-time-"
+                    "zone\",\"n\":\"Europe/Zurich\"}}";
+                break;
+            case 12U:
+                request.metadata.cookie = "FSSESSION=invalid";
+                break;
+            case 13U:
+                request.body = std::string(1025U, 'x');
+                break;
+            case 10U:
+                request.body =
+                    "{\"v\":1,\"r\":{},\"i\":{\"t\":\"set-device-name\",\"n\":"
+                    "\"Test\"}}";
+                break;
+        }
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_TRUE(response.statusCode >= 400U);
+        TEST_ASSERT_EQUAL_UINT32(
+            0U,
+            FermentationApplicationTestAccess::webCalls(fixture.application));
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::manifest(fixture.application)
+                .version == manifest.version);
+    }
+    const auto applied = postRun(fixture, session, 1U, body);
+    TEST_ASSERT_EQUAL_UINT16(200U, applied.statusCode);
+    TEST_ASSERT_EQUAL_STRING("{\"outcome\":\"applied\"}", applied.body.c_str());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, FermentationApplicationTestAccess::webCalls(fixture.application));
+    const auto after =
+        FermentationApplicationTestAccess::manifest(fixture.application);
+    TEST_ASSERT_TRUE(after.version != manifest.version);
+    ConfigurationGraphStore graphStore(fixture.store, fixture.timeZoneResolver);
+    const auto persisted = graphStore.loadCanonicalGraph(after.storageEpoch);
+    TEST_ASSERT_TRUE(persisted.graph.has_value());
+    TEST_ASSERT_TRUE(persisted.graph->active.manifest.origin ==
+                     decodeChangeOrigin(3U));
+    TEST_ASSERT_TRUE(persisted.graph->active.manifest.origin.kind ==
+                     ChangeOriginKind::WebInterface);
+    TEST_ASSERT_EQUAL_STRING(host.c_str(), fixture.network.hostname().c_str());
+    TEST_ASSERT_EQUAL_STRING(ssid.c_str(),
+                             fixture.network.accessPointSsid().c_str());
+    TEST_ASSERT_EQUAL_UINT32(starts, fixture.network.startCallCount());
+    TEST_ASSERT_EQUAL_UINT32(stops, fixture.network.stopCallCount());
+    const auto replay = postRun(fixture, session, 1U, body);
+    TEST_ASSERT_EQUAL_STRING(applied.body.c_str(), replay.body.c_str());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, FermentationApplicationTestAccess::webCalls(fixture.application));
+    TEST_ASSERT_EQUAL_UINT16(
+        409U,
+        postRun(fixture, session, 1U, nameBody(before->revision, "Different"))
+            .statusCode);
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, FermentationApplicationTestAccess::webCalls(fixture.application));
+    const auto current = fixture.application.webSettings();
+    TEST_ASSERT_EQUAL_UINT16(
+        200U,
+        postRun(fixture, session, 2U, nameBody(current->revision, "New device"))
+            .statusCode);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::manifest(fixture.application)
+            .version == after.version);
+    TEST_ASSERT_EQUAL_UINT16(
+        409U, postRun(fixture, session, 3U, nameBody(before->revision, "Stale"))
+                  .statusCode);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::manifest(fixture.application)
+            .version == after.version);
+    auto request =
+        makeAuthenticatedRequest("GET", "/api/v1/settings", session.web.cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(
+        200U, response.statusCode);  // Session survives name change.
+    TEST_ASSERT_TRUE(contains(response.body, "\"timeZone\":\"Europe/Zurich\""));
+    TEST_ASSERT_TRUE(contains(response.body, "\"nameEditable\":true"));
+    const auto touch = fixture.application.applyUserSettings(
+        FermentationUiUserSettingsChange{std::string("Touch name")},
+        fixture.application.webSettings()->revision);
+    TEST_ASSERT_TRUE(touch.commit == ConfigurationCommitStatus::Activated);
+    const auto touched =
+        FermentationApplicationTestAccess::manifest(fixture.application);
+    const auto touchGraph = graphStore.loadCanonicalGraph(touched.storageEpoch);
+    TEST_ASSERT_TRUE(touchGraph.graph->active.manifest.origin ==
+                     decodeChangeOrigin(2U));
+    const auto maxBody =
+        nameBody(fixture.application.webSettings()->revision, "Touch name");
+    const auto padded = maxBody + std::string(1024U - maxBody.size(), ' ');
+    TEST_ASSERT_EQUAL_UINT16(200U,
+                             postRun(fixture, session, 4U, padded).statusCode);
+    const auto calls =
+        FermentationApplicationTestAccess::webCalls(fixture.application);
+    TEST_ASSERT_EQUAL_UINT16(200U,
+                             postRun(fixture, session, 4U, padded).statusCode);
+    TEST_ASSERT_EQUAL_UINT32(calls, FermentationApplicationTestAccess::webCalls(
+                                        fixture.application));
+    TEST_ASSERT_EQUAL_UINT16(
+        413U, postRun(fixture, session, 5U, padded + " ").statusCode);
+    TEST_ASSERT_EQUAL_UINT32(calls, FermentationApplicationTestAccess::webCalls(
+                                        fixture.application));
+    installActiveRunForStatus(fixture.application, "Active");
+    TEST_ASSERT_FALSE(fixture.application.webSettings()->nameEditable);
+    const auto rejected = postRun(
+        fixture, session, 5U,
+        nameBody(fixture.application.webSettings()->revision, "Forbidden"));
+    TEST_ASSERT_EQUAL_UINT16(422U, rejected.statusCode);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::manifest(fixture.application)
+            .version == touched.version);
+}
+
+void test_new_handler_allocation_windows_and_final_budgets() {
+    ComposedFixture fixture;
+    const auto session = composedRunSession(fixture);
+    const auto source = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(source.has_value());
+    const auto& id = source->programCatalog.programs.front().program.id;
+    char asset[24]{};
+    std::snprintf(asset, sizeof(asset), "/assets/app.%08x.js",
+                  static_cast<unsigned>(device_platform::computeCrc32IsoHdlc(
+                      kWebApplicationAsset)));
+    for (const auto& path :
+         {std::string("/"), std::string(asset), std::string("/api/v1/settings"),
+          std::string("/api/v1/programs/") + id})
+        for (unsigned pass = 0; pass < 2; ++pass) {
+            const auto request =
+                makeAuthenticatedRequest("GET", path, session.web.cookie);
+            device_platform::HttpResponse response;
+            bool handled = false;
+            const auto w = alloc_window::measure([&] {
+                handled = fixture.http.routes()->handle(request, response);
+            });
+            TEST_ASSERT_TRUE(handled);
+            TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+            TEST_ASSERT_EQUAL_UINT32(0U, w.cJsonLiveBytes);
+            if (path == asset) TEST_ASSERT_TRUE(response.body.empty());
+            std::printf(
+                "PR209_ALLOC %s pass=%u count=%zu bytes=%zu largest=%zu "
+                "peak_live=%zu cjson_count=%zu body=%zu\n",
+                path.c_str(), pass, w.count, w.requestedBytes, w.largestBlock,
+                w.peakLiveBytes, w.cJsonCount, completeBody(response).size());
+        }
+    const auto shell = rawShell(fixture, session.web.cookie);
+    TEST_ASSERT_TRUE(shell.size() + 19U + 128U <= 2048U);
+    TEST_ASSERT_TRUE(contains(shell, "nav[hidden]{display:none}"));
+    TEST_ASSERT_TRUE(sizeof(kWebApplicationAsset) - 1U + 1024U <= 16384U);
+    std::printf(
+        "PR209_FINAL_BYTES shell=%zu shell_max_sequence=%zu asset=%zu "
+        "asset_reserve=%zu\n",
+        shell.size(), shell.size() + 19U, sizeof(kWebApplicationAsset) - 1U,
+        16384U - (sizeof(kWebApplicationAsset) - 1U));
+}
+
+// Same native fixture is also run against 095f393: requested bytes, not an
+// ESP32 heap/fragmentation proof. Aligned Q3 CommitScratch is outside these
+// hooks.
+void test_q4_maximum_catalog_mutation_allocation_and_cleanup_windows() {
+    for (unsigned scenario = 0U; scenario < 7U; ++scenario) {
+        alloc_window::Window window;
+        {
+            ComposedFixture fixture;
+            FermentationApplicationTestAccess::commissionMaximumCatalog(
+                fixture.application);
+            fixture.timeSource.setUnixTimeSeconds(1'700'000'000);
+            CrossRolePlausibilityContext evidence;
+            evidence.air.quality = device_platform::SensorQuality::Valid;
+            evidence.product.quality = device_platform::SensorQuality::Valid;
+            evidence.cooling.quality = device_platform::SensorQuality::Valid;
+            fixture.application.publishOwningRuntimeEvidence(evidence);
+            const auto session = composedRunSession(fixture);
+            const auto id = std::string(46U, 'u') + "11";
+            const auto start =
+                std::string("{\"t\":\"start-program\",\"c\":{\"p\":\"") + id +
+                "\"}}";
+            if (scenario == 1U)
+                fixture.store.setNextWriteFault(
+                    device_platform_test_support::
+                        SimulatedPersistentStateStore::WriteFault::
+                            FailBeforeBegin);
+            if (scenario == 2U) {
+                fixture.store.setNextWriteFault(
+                    device_platform_test_support::
+                        SimulatedPersistentStateStore::WriteFault::
+                            PowerCutAfterCommitBeforeReturn);
+                fixture.store.failNextReadAfterWrite();
+            }
+            if (scenario == 6U) {
+                std::string maxName;
+                for (unsigned n = 0U; n < 48U; ++n) maxName += "\xC3\xA4";
+                installActiveRunForStatus(fixture.application, maxName);
+                auto& state = FermentationApplicationTestAccess::runtimeState(
+                    fixture.application);
+                auto document =
+                    *storedProgram(state.activeProgramRun->snapshot().source);
+                document.program.notes.clear();
+                for (unsigned n = 0U; n < 512U; ++n)
+                    document.program.notes += "\xC3\xA4";
+                state.activeProgramRun = ActiveRun::start(
+                    document, ProgramSourceKind::FactoryCatalog,
+                    RunProgramSourceRevision{1U});
+                for (unsigned n = 0U; n < 31U; ++n) {
+                    RunAdjustmentRequest adjustment;
+                    adjustment.confirmed = true;
+                    adjustment.targetTemperatureCelsius = n % 2U ? 38.0 : 39.0;
+                    adjustment.timestamp.monotonicMillis = n;
+                    const auto decision =
+                        state.activeProgramRun->decideAdjustment(
+                            adjustment,
+                            {true, 0U, 0U,
+                             RunAdjustmentPhaseContext::Fermenting});
+                    TEST_ASSERT_TRUE(decision.proposed());
+                    TEST_ASSERT_TRUE(
+                        state.activeProgramRun->applyAdjustment(decision)
+                            .status == RunAdjustmentStatus::Applied);
+                }
+                state.sensorSelection.emplace();
+                state.processRunSnapshot =
+                    makeProcessRunSnapshot(*state.activeProgramRun);
+                fixture.timeSource.advanceMonotonicMillis(1000U);
+            }
+            const auto body =
+                scenario == 3U
+                    ? nameBody(fixture.application.webSettings()->revision,
+                               std::string(48U, 'n'))
+                    : runBody(fixture.application,
+                              scenario == 6U
+                                  ? "{\"t\":\"adjust-run\",\"x\":38.0}"
+                                  : start);
+            // Faults 4/5 deliberately cover host unwinding vs checked cJSON
+            // OOM.
+            bool threw = false;
+            unsigned status = 0U;
+            window = alloc_window::measure(
+                [&] {
+                    try {
+                        const auto response =
+                            postRun(fixture, session, 1U, body);
+                        status = response.statusCode;
+                        if (scenario == 0U || scenario == 6U) {
+                            TEST_ASSERT_EQUAL_UINT16(200U, status);
+                            const auto replay =
+                                postRun(fixture, session, 1U, body);
+                            TEST_ASSERT_EQUAL_STRING(
+                                completeBody(response).c_str(),
+                                completeBody(replay).c_str());
+                        }
+                    } catch (const std::bad_alloc&) {
+                        threw = true;
+                    }
+                },
+                scenario == 4U || scenario == 5U ? 1U : 0U, scenario == 5U);
+            if (scenario == 4U) TEST_ASSERT_TRUE(threw);
+            if (scenario == 5U) TEST_ASSERT_FALSE(threw);
+            TEST_ASSERT_FALSE(fixture.store.hasPendingWriteForTesting());
+            if (scenario == 4U || scenario == 5U) {
+                // The failed operation releases internal serializers/borrows.
+                const auto retried = postRun(fixture, session, 2U, body);
+                TEST_ASSERT_TRUE(retried.statusCode != 500U);
+            }
+            std::printf(
+                "Q4_MUTATION_ALLOC case=%u count=%zu bytes=%zu largest=%zu "
+                "peak=%zu live_after=%zu status=%u host_bad_alloc=%u\n",
+                scenario, window.count, window.requestedBytes,
+                window.largestBlock, window.peakLiveBytes, window.liveBytes,
+                status, threw);
+        }
+        TEST_ASSERT_EQUAL_UINT32(0U, alloc_window::gWindow.liveBytes);
+    }
+}
+
+void test_q4_borrow_candidate_construction_allocation_failure_unwinds_without_apply() {
+    for (std::size_t failure = 1U; failure <= 6U; ++failure) {
+        ComposedFixture fixture;
+        FermentationApplicationTestAccess::commissionMaximumCatalog(
+            fixture.application);
+        fixture.timeSource.setUnixTimeSeconds(1'700'000'000);
+        CrossRolePlausibilityContext evidence;
+        evidence.air.quality = evidence.product.quality =
+            evidence.cooling.quality = device_platform::SensorQuality::Valid;
+        fixture.application.publishOwningRuntimeEvidence(evidence);
+        const auto session = composedRunSession(fixture);
+        static_cast<void>(session);
+        WebRunMutationDto dto;
+        const auto body =
+            runBody(fixture.application,
+                    std::string("{\"t\":\"start-program\",\"c\":{\"p\":\"") +
+                        std::string(46U, 'u') + "11\"}}");
+        TEST_ASSERT_TRUE(decodeWebRunMutation(body, dto) ==
+                         WebRunMutationDecodeStatus::Success);
+        FermentationUiCommandContext context;
+        context.surface = device_platform::UiSurface::WebInterface;
+        context.monotonicMillis = fixture.timeSource.monotonicMillis();
+        context.expected = dto.expected;
+        auto prepared =
+            fixture.application.prepareEnvelope(context, dto.intent);
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+        TEST_ASSERT_TRUE(fixture.application.confirmPreparedInPlace(prepared) ==
+                         FermentationApplicationRequestStatus::Prepared);
+        bool threw = false;
+        static_cast<void>(alloc_window::measure(
+            [&] {
+                try {
+                    static_cast<void>(
+                        fixture.application.applyConfirmedPrepared(
+                            *prepared.request));
+                } catch (const std::bad_alloc&) {
+                    threw = true;
+                }
+            },
+            failure));
+        TEST_ASSERT_TRUE(threw);
+        const auto& state = FermentationApplicationTestAccess::runtimeState(
+            fixture.application);
+        TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_UINT32(0U, state.processedCommandCount);
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::borrowReleased(
+            fixture.application));
+        TEST_ASSERT_EQUAL_UINT32(0U, alloc_window::gWindow.liveBytes);
+    }
+    // This proves native exception unwinding only; target -fno-exceptions does
+    // not turn std::string/vector allocation failure into a returned status.
+}
+
+void test_q4_codec_recovery_and_sensor_requests_use_borrowed_application_path() {
+    for (const bool activeRun : {false, true}) {
+        ComposedFixture fixture;
+        if (activeRun) installActiveRunForStatus(fixture.application, "run");
+        const auto session = composedRunSession(fixture);
+        std::uint64_t sequence = 1U;
+        for (const char* intent :
+             {"{\"t\":\"recovery-time-correction\",\"d\":20}",
+              "{\"t\":\"sensor-selection\",\"a\":\"recheck-product\"}"}) {
+            const auto body = runBody(fixture.application, intent);
+            WebRunMutationDto dto;
+            TEST_ASSERT_TRUE(decodeWebRunMutation(body, dto) ==
+                             WebRunMutationDecodeStatus::Success);
+            FermentationUiCommandContext context;
+            context.surface = device_platform::UiSurface::WebInterface;
+            context.monotonicMillis = fixture.timeSource.monotonicMillis();
+            context.expected = dto.expected;
+            auto prepared =
+                fixture.application.prepareEnvelope(context, dto.intent);
+            TEST_ASSERT_TRUE(prepared.request.has_value());
+            TEST_ASSERT_TRUE(
+                fixture.application.confirmPreparedInPlace(prepared) ==
+                FermentationApplicationRequestStatus::Prepared);
+            // Both prepared payloads run through the same borrowed
+            // candidate/View path as every other run command; a domain
+            // rejection is a decision-only result, never Unavailable.
+            const auto result =
+                fixture.application.applyConfirmedPrepared(*prepared.request);
+            TEST_ASSERT_TRUE(result.phase ==
+                             FermentationUiCommandPhase::DecisionOnly);
+            TEST_ASSERT_TRUE(FermentationApplicationTestAccess::borrowReleased(
+                fixture.application));
+            const auto response = postRun(fixture, session, sequence, body);
+            TEST_ASSERT_EQUAL_UINT16(422U, response.statusCode);
+            const auto replay = postRun(fixture, session, sequence, body);
+            TEST_ASSERT_EQUAL_STRING(completeBody(response).c_str(),
+                                     completeBody(replay).c_str());
+            ++sequence;
+        }
+    }
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_q4_codec_recovery_and_sensor_requests_use_borrowed_application_path);
+    RUN_TEST(
+        test_q4_borrow_candidate_construction_allocation_failure_unwinds_without_apply);
+    RUN_TEST(test_q4_maximum_catalog_mutation_allocation_and_cleanup_windows);
+    RUN_TEST(test_new_handler_allocation_windows_and_final_budgets);
+    RUN_TEST(test_settings_decode_closed_schema_and_separate_run_budget);
+    RUN_TEST(test_settings_all_preview_and_commit_outcomes);
+    RUN_TEST(
+        test_settings_route_gate_replay_origin_and_network_characterization);
+    RUN_TEST(test_program_detail_route_contract_and_session_gate);
+    RUN_TEST(
+        test_program_detail_projection_bounds_nulls_and_completion_binding);
+    RUN_TEST(test_asset_route_crc_cache_and_public_bytes);
+    RUN_TEST(test_independent_shell_and_asset_boundaries);
     RUN_TEST(
         test_split_shell_matches_frozen_generator_and_clears_suffix_on_errors);
     RUN_TEST(test_outcome_matrix_accepts_only_owning_apply_results);

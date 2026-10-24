@@ -194,7 +194,49 @@ void applyLiveRecoveryEvidence(
     RunCommandState& current,
     const CrossRolePlausibilityContext& liveSensorEvidence);
 
+struct RunPersistenceBefore {
+    const std::uint32_t runRevision;
+    const std::uint32_t transitionSequence;
+    RunPersistenceBefore(const RunCommandState& state)
+        : runRevision(state.runRevision),
+          transitionSequence(state.processState.transitionSequence) {}
+    RunPersistenceBefore(const CommandApplyGuard& guard)
+        : runRevision(guard.runRevision),
+          transitionSequence(guard.processState.transitionSequence) {}
+};
 class RunPersistenceCoordinator {
+   public:
+    class CommandOperation {
+        friend class RunPersistenceCoordinator;
+        RunPersistenceCoordinator* owner_;
+        explicit CommandOperation(RunPersistenceCoordinator* p) : owner_(p) {}
+
+       public:
+        CommandOperation(const CommandOperation&) = delete;
+        CommandOperation& operator=(const CommandOperation&) = delete;
+        CommandOperation(CommandOperation&& o) noexcept : owner_(o.owner_) {
+            o.owner_ = nullptr;
+        }
+        CommandOperation& operator=(CommandOperation&&) = delete;
+        ~CommandOperation() {
+            if (owner_ != nullptr) {
+                owner_->releaseCommandOperation();
+            }
+        }
+    };
+
+   private:
+    friend class FermentationApplication;
+    std::optional<CommandOperation> beginCommandOperation();
+    [[nodiscard]] bool commandOperationActive() const {
+        return commandBorrowed_;
+    }
+    RunCommandState* commandCandidate(CommandOperation&);
+    RunPersistenceResult persistBorrowedCommand(
+        CommandOperation&, RunCommandState&, const CommandDecisionView&,
+        const RunCheckpointTime&, const CrossRolePlausibilityContext*,
+        const FreshStartSnapshotProvenance*);
+
    public:
     // Private implementation data is declared here solely because the
     // canonical wire helpers in the implementation unit need their complete
@@ -305,8 +347,9 @@ class RunPersistenceCoordinator {
         RunPersistenceFallbackDirective fallbackDirective = {});
 
    private:
+    template <typename Decision>
     [[nodiscard]] RunPersistenceResult persistCommandInternal(
-        RunCommandState& current, const CommandDecision& decision,
+        RunCommandState& current, const Decision& decision,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence,
         const FreshStartSnapshotProvenance* freshStartProvenance);
@@ -325,16 +368,28 @@ class RunPersistenceCoordinator {
     // records a mutation kind).
     [[nodiscard]] RunPersistenceResult writeSnapshot(
         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
-        bool periodic, const RunCommandState& before,
+        bool periodic, const RunPersistenceBefore& before,
         RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId = std::nullopt);
+    enum class SnapshotRecordPreparation : std::uint8_t {
+        Success,
+        InvalidSnapshot,
+        CapacityExceeded
+    };
+    [[nodiscard]] SnapshotRecordPreparation prepareSnapshotRecord(
+        const RunPersistenceSnapshot&, const RunCheckpointTime&);
+    [[nodiscard]] RunPersistenceResult writeSnapshotTransaction(
+        const RunPersistenceSnapshot&, bool, const RunPersistenceBefore&,
+        RunPersistenceMutationKind, std::optional<CommandId>,
+        const RunPersistenceFallbackDirective&, RunPersistenceCoordinatorState,
+        std::size_t, std::optional<CommandId>);
     [[nodiscard]] RunPersistenceResult writeSnapshotCore(
         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
-        bool periodic, const RunCommandState& before,
+        bool periodic, const RunPersistenceBefore& before,
         RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId,
         std::optional<std::size_t> targetSlotOverride,
-        RunPersistenceFallbackDirective fallbackDirective,
+        const RunPersistenceFallbackDirective& fallbackDirective,
         RunPersistenceCoordinatorState rollbackState);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
 
@@ -346,7 +401,7 @@ class RunPersistenceCoordinator {
         const RunCommandState& current,
         const RunPersistenceRawRecord& loadedRecord,
         const RunCheckpointTime& time, std::optional<std::size_t> targetSlot,
-        RunPersistenceFallbackDirective fallbackDirective,
+        const RunPersistenceFallbackDirective& fallbackDirective,
         RunPersistenceCoordinatorState rollbackState,
         bool selectedFallbackCompletionToNoActiveRun = false);
     [[nodiscard]] RunPersistenceResult result(
@@ -362,6 +417,9 @@ class RunPersistenceCoordinator {
     device_platform::StorageEpoch epoch_;
     RunCheckpointSchedule schedule_;
     RunPersistenceWorkingSet workingSet_;
+    void releaseCommandOperation();
+    bool commandBorrowed_{false};
+    [[nodiscard]] RunPersistenceResult borrowedBusyResult() const;
     RunPersistenceCoordinatorState state_{
         RunPersistenceCoordinatorState::Uninitialized};
     std::optional<RunPersistenceRawRecord> slots_[2];

@@ -177,6 +177,52 @@ void test_catalog_templates_cannot_silently_become_runnable() {
         "defaults.max_product_wait_min"));
 }
 
+void test_migration_into_and_value_share_steps_without_publishing_partial_errors() {
+    for (const unsigned version : {4U, 5U, 6U, 3U, 7U}) {
+        for (const bool malformed : {false, true}) {
+            auto source = makeRunnableProgram();
+            source.schema.version = version;
+            source.schema.presentFields =
+                version == 4U   ? fermentation::kSchema4RequiredProgramFields
+                : version == 5U ? fermentation::kSchema5RequiredProgramFields
+                                : fermentation::kCurrentRequiredProgramFields;
+            if (malformed)
+                source.schema.presentFields &=
+                    ~fermentation::fieldMask(ProgramField::Id);
+            const auto originalFields = source.schema.presentFields;
+            const auto originalWait = source.program.maximumProductWaitMinutes;
+            const auto value =
+                fermentation::migrateProgramToCurrentSchema(source);
+            auto unpublished = source;
+            const auto status =
+                fermentation::migrateProgramToCurrentSchemaInto(unpublished);
+            TEST_ASSERT_EQUAL_INT(static_cast<int>(value.status),
+                                  static_cast<int>(status));
+            TEST_ASSERT_EQUAL_UINT32(version, source.schema.version);
+            TEST_ASSERT_EQUAL_UINT32(originalFields,
+                                     source.schema.presentFields);
+            TEST_ASSERT_TRUE(originalWait ==
+                             source.program.maximumProductWaitMinutes);
+            if (value.document) {
+                TEST_ASSERT_EQUAL_UINT32(value.document->schema.version,
+                                         unpublished.schema.version);
+                TEST_ASSERT_EQUAL_UINT32(value.document->schema.presentFields,
+                                         unpublished.schema.presentFields);
+                TEST_ASSERT_TRUE(
+                    value.document->program.maximumProductWaitMinutes ==
+                    unpublished.program.maximumProductWaitMinutes);
+                TEST_ASSERT_TRUE(
+                    value.document->program.productSensorFailure
+                        .returnStrategy ==
+                    unpublished.program.productSensorFailure.returnStrategy);
+            } else {
+                TEST_ASSERT_FALSE(value.document.has_value());
+                TEST_ASSERT_EQUAL_UINT32(version, unpublished.schema.version);
+            }
+        }
+    }
+}
+
 void test_schema_versions_and_v4_migration_are_explicit() {
     auto current = makeRunnableProgram();
     const auto unchanged = fermentation::migrateProgramToCurrentSchema(current);
@@ -591,6 +637,8 @@ void test_unexpected_value_rules_are_shared_by_validator_and_editor() {
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_migration_into_and_value_share_steps_without_publishing_partial_errors);
     RUN_TEST(test_documented_boundaries_are_accepted);
     RUN_TEST(test_values_outside_documented_boundaries_are_rejected);
     RUN_TEST(test_missing_required_and_unknown_fields_are_rejected);

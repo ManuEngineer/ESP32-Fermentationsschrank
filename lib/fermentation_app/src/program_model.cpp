@@ -176,39 +176,37 @@ void validateSensorFailureCrossFields(ValidationResult& result,
     }
 }
 
-MigrationResult migrateProgramSchema4To5(const ProgramDocument& source) {
+MigrationStatus migrateProgramSchema4To5Into(ProgramDocument& source) {
     if ((source.schema.presentFields & ~kSchema4RequiredProgramFields) != 0U ||
         (source.schema.presentFields & kSchema4RequiredProgramFields) !=
             kSchema4RequiredProgramFields) {
-        return {MigrationStatus::InvalidSourceDocument, std::nullopt};
+        return MigrationStatus::InvalidSourceDocument;
     }
-    ProgramDocument migrated = source;
-    migrated.schema.version = 5U;
-    migrated.schema.presentFields = kSchema5RequiredProgramFields;
-    migrated.program.maximumProductWaitMinutes = std::nullopt;
-    return {MigrationStatus::Migrated, std::move(migrated)};
+    source.schema.version = 5U;
+    source.schema.presentFields = kSchema5RequiredProgramFields;
+    source.program.maximumProductWaitMinutes = std::nullopt;
+    return MigrationStatus::Migrated;
 }
 
-MigrationResult migrateProgramSchema5To6(const ProgramDocument& source) {
+MigrationStatus migrateProgramSchema5To6Into(ProgramDocument& source) {
     if ((source.schema.presentFields & ~kSchema5RequiredProgramFields) != 0U ||
         (source.schema.presentFields & kSchema5RequiredProgramFields) !=
             kSchema5RequiredProgramFields) {
-        return {MigrationStatus::InvalidSourceDocument, std::nullopt};
+        return MigrationStatus::InvalidSourceDocument;
     }
-    ProgramDocument migrated = source;
-    migrated.schema.version = 6U;
-    migrated.schema.presentFields = kCurrentRequiredProgramFields;
-    if (programHasFixedSensorFailure(migrated.program)) {
+    source.schema.version = 6U;
+    source.schema.presentFields = kCurrentRequiredProgramFields;
+    if (programHasFixedSensorFailure(source.program)) {
         // AirOnly-Normalisierung (6.2.2): inert, weil AirOnly Luft nie
         // verlaesst - bewahrt ein vor diesem Update gueltiges Dokument als
         // weiterhin gueltig, statt es an der neuen 6.13-Cross-Field-Regel
         // scheitern zu lassen.
-        applyAirOnlySensorFailure(migrated.program);
+        applyAirOnlySensorFailure(source.program);
     } else {
-        migrated.program.productSensorFailure.returnStrategy =
+        source.program.productSensorFailure.returnStrategy =
             ReturnStrategy::AutomaticValidatedReturnToProduct;
     }
-    return {MigrationStatus::Migrated, std::move(migrated)};
+    return MigrationStatus::Migrated;
 }
 
 }  // namespace
@@ -385,30 +383,36 @@ ValidationResult validateProgram(const ProgramDocument& document,
     return result;
 }
 
-MigrationResult migrateProgramToCurrentSchema(const ProgramDocument& source) {
-    if (source.schema.version == kCurrentProgramSchemaVersion) {
-        return {MigrationStatus::NotRequired, source};
+MigrationStatus migrateProgramToCurrentSchemaInto(ProgramDocument& current) {
+    if (current.schema.version == kCurrentProgramSchemaVersion) {
+        return MigrationStatus::NotRequired;
     }
+    if (current.schema.version < kMinimumMigratableProgramSchemaVersion ||
+        current.schema.version > kCurrentProgramSchemaVersion) {
+        return MigrationStatus::UnsupportedSourceVersion;
+    }
+    while (current.schema.version < kCurrentProgramSchemaVersion) {
+        const auto status = current.schema.version == 4U
+                                ? migrateProgramSchema4To5Into(current)
+                                : migrateProgramSchema5To6Into(current);
+        if (status != MigrationStatus::Migrated) {
+            return status;
+        }
+    }
+    return MigrationStatus::Migrated;
+}
+MigrationResult migrateProgramToCurrentSchema(const ProgramDocument& source) {
     if (source.schema.version < kMinimumMigratableProgramSchemaVersion ||
         source.schema.version > kCurrentProgramSchemaVersion) {
         return {MigrationStatus::UnsupportedSourceVersion, std::nullopt};
     }
-
-    // Kanonische Copy-Migrationskette (docs/CONFIGURATION_PERSISTENCE.md):
-    // jeder Schritt einzeln auf einer Kopie, exakt die zwei existierenden
-    // Schritte 4->5 und 5->6 - kein generischer Schrittregistry-Mechanismus.
     ProgramDocument current = source;
-    while (current.schema.version < kCurrentProgramSchemaVersion) {
-        auto step = current.schema.version == 4U
-                        ? migrateProgramSchema4To5(current)
-                        : migrateProgramSchema5To6(current);
-        if (step.status != MigrationStatus::Migrated ||
-            !step.document.has_value()) {
-            return step;
-        }
-        current = std::move(*step.document);
+    const auto status = migrateProgramToCurrentSchemaInto(current);
+    if (status != MigrationStatus::Migrated &&
+        status != MigrationStatus::NotRequired) {
+        return {status, std::nullopt};
     }
-    return {MigrationStatus::Migrated, std::move(current)};
+    return {status, std::move(current)};
 }
 
 }  // namespace fermentation

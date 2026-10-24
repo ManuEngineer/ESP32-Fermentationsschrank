@@ -1,0 +1,79 @@
+Experimental declaration excerpts; Head pointers are aliases, not additional Head storage.
+esp32_release
+struct RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotTransaction (struct RunPersistenceCoordinator * const this, const struct RunPersistenceSnapshot & snapshot, const struct RunCheckpointTime & time, bool periodic, const struct RunPersistenceBefore & before, RunPersistenceMutationKind mutationKind, struct optional commandId, struct RunPersistenceFallbackDirective fallbackDirective, RunPersistenceCoordinatorState rollbackState, size_t target, struct optional previousCommandIdHighWater)
+{
+  struct in_place_t D.177660;
+  struct RunPersistenceHead * D.177663;
+  bool retval$338;
+  bool iftmp$339;
+  struct optional D.154721;
+  bool retval$340;
+  struct RunPersistenceHead * D.177683;
+  bool retval$343;
+  struct optional D.154736;
+  struct RunPersistenceHead * D.177688;
+  bool retval$344;
+  bool iftmp$345;
+  struct optional D.154746;
+  bool retval$346;
+  bool iftmp$347;
+  RunPersistenceStep iftmp$348;
+  RunPersistenceResultStatus iftmp$349;
+  long long unsigned int iftmp$350;
+  long long unsigned int iftmp$351;
+  long long unsigned int iftmp$352;
+  RunPersistenceCoordinatorState iftmp$353;
+  bool retval$354;
+  RunPersistenceResultStatus iftmp$355;
+  const struct RunCheckpointReference ref;
+  const uint64_t firstHeadRevision;
+  struct optional headStorage;
+  struct optional preparedBytes;
+  struct optional committedBytes;
+  const struct optional oldHead;
+  struct StateStoreReadResult physicalTarget;
+  struct optional oldSlot;
+  struct $_anon_102 readyState;
+  typedef struct $_anon_102 $_anon_102;
+  struct $_anon_103 writeFailure;
+  typedef struct $_anon_103 $_anon_103;
+
+
+esp32_bringup
+struct RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotTransaction (struct RunPersistenceCoordinator * const this, const struct RunPersistenceSnapshot & snapshot, const struct RunCheckpointTime & time, bool periodic, const struct RunPersistenceBefore & before, RunPersistenceMutationKind mutationKind, struct optional commandId, struct RunPersistenceFallbackDirective fallbackDirective, RunPersistenceCoordinatorState rollbackState, size_t target, struct optional previousCommandIdHighWater)
+{
+  struct in_place_t D.177679;
+  struct RunPersistenceHead * D.177682;
+  bool retval$338;
+  bool iftmp$339;
+  struct optional D.154754;
+  bool retval$340;
+  struct RunPersistenceHead * D.177702;
+  bool retval$343;
+  struct optional D.154769;
+  struct RunPersistenceHead * D.177707;
+  bool retval$344;
+  bool iftmp$345;
+  struct optional D.154779;
+  bool retval$346;
+  bool iftmp$347;
+  RunPersistenceStep iftmp$348;
+  RunPersistenceResultStatus iftmp$349;
+  long long unsigned int iftmp$350;
+  long long unsigned int iftmp$351;
+  long long unsigned int iftmp$352;
+  RunPersistenceCoordinatorState iftmp$353;
+  bool retval$354;
+  RunPersistenceResultStatus iftmp$355;
+  const struct RunCheckpointReference ref;
+  const uint64_t firstHeadRevision;
+  struct optional headStorage;
+  struct optional preparedBytes;
+  struct optional committedBytes;
+  const struct optional oldHead;
+  struct StateStoreReadResult physicalTarget;
+  struct optional oldSlot;
+  struct $_anon_102 readyState;
+  typedef struct $_anon_102 $_anon_102;
+  struct $_anon_103 writeFailure;
+  typedef struct $_anon_103 $_anon_103;

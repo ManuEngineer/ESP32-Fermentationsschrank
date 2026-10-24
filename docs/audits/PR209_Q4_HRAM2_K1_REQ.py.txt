@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""H-RAM-2 K1 requests (authenticated). Usage: k1_req.py OUT_JSONL SCENARIO PWFILE
+SCENARIO: login | login_status | sensor | intents8 | namecommit
+Stdlib only. Password only from a 600 file; password/cookie/CSRF never logged.
+Stops at the first non-200 login; stops if a rejected-intent request unexpectedly returns outcome 'applied'."""
+import http.client, json, os, re, stat, sys, time
+HOST = "<DEVICE_IP>"; out, scen, pwfile = sys.argv[1], sys.argv[2], sys.argv[3]
+assert not (stat.S_IMODE(os.stat(pwfile).st_mode) & 0o077)
+password = open(pwfile, encoding="utf-8").read().rstrip("\n")
+log = open(out, "a", buffering=1)
+def emit(**kw):
+    kw["wall"] = time.strftime("%Y-%m-%dT%H:%M:%S%z"); log.write(json.dumps(kw) + "\n")
+def req(method, path, headers=None, body=None):
+    c = http.client.HTTPConnection(HOST, 80, timeout=30); t = time.monotonic()
+    h = {"Origin": f"http://{HOST}", "Sec-Fetch-Site": "same-origin", "Connection": "close"}; h.update(headers or {})
+    try:
+        c.request(method, path, body=body, headers=h); r = c.getresponse(); d = r.read()
+        return r.status, d, r.getheader("Set-Cookie"), round(time.monotonic() - t, 3)
+    except Exception as e:
+        return None, b"", None, type(e).__name__
+    finally:
+        c.close()
+def stop(msg):
+    emit(event="STOP", reason=msg); sys.exit(2)
+st, d, ck, dt = req("POST", "/api/v1/login", {"Content-Type": "application/json"}, json.dumps({"password": password}))
+emit(event="login", status=st, seconds=dt)
+if st != 200 or not ck: stop("login not 200")
+cookie = ck.split(";", 1)[0]; csrf = json.loads(d).get("csrfToken", "")
+H = {"Cookie": cookie}
+if scen == "login": sys.exit(0)
+def get(path):
+    st, d, _, dt = req("GET", path, H); emit(event="GET", path=path if path.startswith("/api") or path == "/" else "other", status=st, bytes=len(d), seconds=dt); return st, d
+if scen == "login_status":
+    get("/api/v1/status"); sys.exit(0)
+st, shell = get("/")
+m = re.search(rb"let Q=(\d+)", shell); 
+if not m: stop("no mutation sequence in shell")
+seq = int(m.group(1))
+st, sd = get("/api/v1/status"); status = json.loads(sd); rev = status["revisions"]
+MAP = {"stateSequence": "s", "run": "r", "messages": "m", "fault": "f", "recoveryEpisode": "e", "userConfiguration": "u", "programCatalog": "c"}
+r = {MAP[k]: v for k, v in rev.items() if k in MAP}
+def mutate(intent, revs=None, expect_applied=False):
+    global seq
+    body = json.dumps({"v": 1, "r": revs if revs is not None else r, "i": intent})
+    st, d, _, dt = req("POST", "/internal/ui/run", {**H, "Content-Type": "application/json", "X-CSRF-Token": csrf, "X-UI-Mutation-Seq": str(seq)}, body)
+    outcome = None
+    try: outcome = json.loads(d).get("outcome")
+    except Exception: pass
+    emit(event="MUTATION", type=intent["t"], status=st, outcome=outcome, seconds=dt, seq=seq)
+    if outcome != "sequence-conflict": seq += 1   # the server consumes the sequence for every other outcome (incl. unavailable)
+    if outcome == "applied" and not expect_applied: stop(f"unexpected applied outcome for {intent['t']}")
+    return st, outcome
+if scen == "sensor":
+    mutate({"t": "sensor-selection", "a": "recheck-product"}); sys.exit(0)
+if scen == "intents8":
+    st, pd = get("/api/v1/programs"); pj = json.loads(pd); pid = pj["programs"][0]["id"]
+    rc = dict(r); rc["c"] = pj["catalogRevision"]
+    mutate({"t": "start-program", "c": {"p": pid}}, rc)
+    mutate({"t": "start-manual-timed", "x": 30.5, "d": 120, "s": "air", "h": False, "q": 0.5, "qd": 10, "tr": 180, "c": "finish-without-cooling"})
+    mutate({"t": "start-manual-holding", "p": {"x": 30, "s": "air", "h": False, "q": 0.5, "qd": 10, "tr": 180}})
+    mutate({"t": "stop-run", "o": "abort-and-turn-off"})
+    mutate({"t": "complete-run", "c": False})
+    mutate({"t": "adjust-run", "x": 31.5, "d": 90})
+    mutate({"t": "recovery-time-correction", "d": 20})
+    mutate({"t": "ack-message", "id": 7}); mutate({"t": "mute-message", "id": 7}); mutate({"t": "reset-fault"})
+    sys.exit(0)
+if scen == "namecommit":
+    st, sj = get("/api/v1/settings"); s = json.loads(sj)
+    orig, srev = s["deviceName"], s["revision"]
+    emit(event="settings", nameEditable=s.get("nameEditable"), revisionKnown=bool(srev))
+    new = (orig + "-t")[:48]
+    json.dump({"orig": orig}, open(os.path.join(os.path.dirname(out) or ".", "ORIGINAL_NAME.private.json"), "w"))
+    st1, o1 = mutate({"t": "set-device-name", "n": new}, {"u": srev}, expect_applied=True)
+    st, sj = get("/api/v1/settings"); s2 = json.loads(sj)
+    emit(event="after_first", nameChanged=(s2["deviceName"] == new))
+    st2, o2 = mutate({"t": "set-device-name", "n": orig}, {"u": s2["revision"]}, expect_applied=True)
+    st, sj = get("/api/v1/settings"); s3 = json.loads(sj)
+    emit(event="after_revert", nameRestored=(s3["deviceName"] == orig))
+    sys.exit(0)

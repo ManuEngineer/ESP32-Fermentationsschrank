@@ -16,6 +16,13 @@
 
 namespace fermentation {
 
+class RunPersistenceCoordinatorTestAccess {
+   public:
+    static auto borrow(RunPersistenceCoordinator& c) {
+        return c.beginCommandOperation();
+    }
+};
+
 class FermentationApplicationTestAccess {
    public:
     // Manual-run requests are refused on every surface while no owner of the
@@ -56,6 +63,10 @@ class FermentationApplicationTestAccess {
                committed.status == ConfigurationCommitStatus::NoChange;
     }
 
+    static auto borrow(FermentationApplication& app) {
+        return RunPersistenceCoordinatorTestAccess::borrow(
+            *app.runPersistenceCoordinator_);
+    }
     static bool coreReady(const FermentationApplication& application) {
         return application.applicationReadiness();
     }
@@ -189,6 +200,62 @@ void assertDecisionOnly(const FermentationUiCommandResult& result) {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationUiCommandPhase::DecisionOnly),
         static_cast<int>(result.phase));
+}
+
+void test_in_place_confirmation_preserves_identity_and_borrow_blocks_application_reentry() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver resolver;
+    FermentationApplication app;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(app.begin(platform, store, resolver));
+    app.publishOwningRuntimeEvidence(uiEvidence());
+    FermentationUiStartManualHoldingIntent manual;
+    manual.plan.targetTemperatureCelsius = 30.0;
+    manual.plan.qualificationBandCelsius = 0.5;
+    manual.plan.qualificationDurationMinutes = 10U;
+    manual.plan.maximumTargetReachMinutes = 60U;
+    FermentationUiCommandContext context;
+    context.surface = device_platform::UiSurface::WebInterface;
+    context.monotonicMillis = 100U;
+    auto prepared =
+        FermentationApplicationTestAccess::prepareStartManualHoldingBody(
+            app, context, manual);
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    const auto id = prepared.request->commandId();
+    const auto* address = &*prepared.request;
+    const auto copied = app.confirmPrepared(prepared);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(app.confirmPreparedInPlace(prepared)));
+    TEST_ASSERT_EQUAL_PTR(address, &*prepared.request);
+    TEST_ASSERT_EQUAL_UINT64(id, prepared.request->commandId());
+    TEST_ASSERT_EQUAL_UINT64(copied.request->commandId(),
+                             prepared.request->commandId());
+    TEST_ASSERT_TRUE(prepared.request->commandEnvelope().confirmed);
+    TEST_ASSERT_TRUE(prepared.request->commandEnvelope().source ==
+                     CommandSource::WebInterface);
+    {
+        auto operation = FermentationApplicationTestAccess::borrow(app);
+        TEST_ASSERT_TRUE(operation.has_value());
+        const auto result = app.applyConfirmedPrepared(*prepared.request);
+        assertDecisionOnly(result);
+        TEST_ASSERT_TRUE(
+            result.category ==
+            device_platform::DeviceUiCommandOutcomeCategory::Unavailable);
+        TEST_ASSERT_FALSE(app.begin(platform, store, resolver));
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::coreReady(app));
+    }
+    // Same prepared identity remains usable after the foreign operation ends.
+    const auto result = app.applyConfirmedPrepared(*prepared.request);
+    TEST_ASSERT_FALSE(
+        result.category ==
+        device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    if (std::holds_alternative<CommandStatus>(result.detail))
+        TEST_ASSERT_TRUE(std::get<CommandStatus>(result.detail) !=
+                         CommandStatus::ContextMissing);
+    auto next = FermentationApplicationTestAccess::borrow(app);
+    TEST_ASSERT_TRUE(next.has_value());
 }
 
 void test_ui_request_id_is_the_existing_command_id() {
@@ -853,6 +920,8 @@ void tearDown() {}
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_in_place_confirmation_preserves_identity_and_borrow_blocks_application_reentry);
     RUN_TEST(test_ui_request_id_is_the_existing_command_id);
     RUN_TEST(test_canonical_validation_precedes_ui_confirmation);
     RUN_TEST(test_command_result_preserves_typed_app_details);

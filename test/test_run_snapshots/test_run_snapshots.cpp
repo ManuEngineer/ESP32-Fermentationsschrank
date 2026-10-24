@@ -122,6 +122,49 @@ RunAdjustmentResult decideAndApply(ActiveRun& run,
     return run.applyAdjustment(decision);
 }
 
+void test_start_into_matches_value_and_preserves_destination_on_invalid_source() {
+    const auto document = makeCommissionedUserProgram();
+    const fermentation::ProgramRunSource source{document};
+    const auto revision = fermentation::RunProgramSourceRevision{9U};
+    const auto value = ActiveRun::start(source, revision);
+    std::optional<ActiveRun> into;
+    TEST_ASSERT_TRUE(ActiveRun::startInto(source, revision, into));
+    TEST_ASSERT_TRUE(value.has_value());
+    TEST_ASSERT_EQUAL_UINT64(value->snapshot().sourceProgramRevision->value(),
+                             into->snapshot().sourceProgramRevision->value());
+    TEST_ASSERT_EQUAL_DOUBLE(value->effectiveValues().targetTemperatureCelsius,
+                             into->effectiveValues().targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(value->effectiveValues().remainingDurationMinutes,
+                             into->effectiveValues().remainingDurationMinutes);
+    TEST_ASSERT_EQUAL_UINT32(0U, into->revisionCount());
+    auto changed = document;
+    changed.program.name = "changed after construction";
+    TEST_ASSERT_EQUAL_STRING(
+        document.program.name.c_str(),
+        fermentation::storedProgram(into->snapshot().source)
+            ->program.name.c_str());
+    const auto invalid = FactoryProgramCatalog::programs().front();
+    TEST_ASSERT_FALSE(ActiveRun::startInto(
+        fermentation::ProgramRunSource{invalid}, revision, into));
+    TEST_ASSERT_EQUAL_UINT64(9U,
+                             into->snapshot().sourceProgramRevision->value());
+    TEST_ASSERT_EQUAL_STRING(
+        document.program.name.c_str(),
+        fermentation::storedProgram(into->snapshot().source)
+            ->program.name.c_str());
+    TEST_ASSERT_FALSE(ActiveRun::startInto(
+        source, fermentation::RunProgramSourceRevision{0U}, into));
+    // A successful replacement destroys the previous owning source and resets
+    // revisions.
+    TEST_ASSERT_TRUE(ActiveRun::startInto(
+        fermentation::ProgramRunSource{changed}, revision, into));
+    TEST_ASSERT_EQUAL_STRING(
+        changed.program.name.c_str(),
+        fermentation::storedProgram(into->snapshot().source)
+            ->program.name.c_str());
+    TEST_ASSERT_EQUAL_UINT32(0U, into->revisionCount());
+}
+
 void test_start_accepts_standard_and_user_programs() {
     const auto standard = makeCommissionedFactoryProgram("yogurt-mild");
     const auto user = makeCommissionedUserProgram();
@@ -854,6 +897,8 @@ void test_noop_and_invalid_metadata_do_not_create_revisions() {
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_start_into_matches_value_and_preserves_destination_on_invalid_source);
     RUN_TEST(test_start_accepts_standard_and_user_programs);
     RUN_TEST(test_start_rejects_uncommissioned_or_mismatched_sources);
     RUN_TEST(test_source_program_changes_do_not_change_run_snapshot);

@@ -48,7 +48,7 @@ bool mutationDigest(const device_platform::HttpRequest& request,
         request.method.size() > kMaximumMutationMethodBytes ||
         request.path.empty() ||
         request.path.size() > kMaximumMutationPathBytes ||
-        request.body.size() > kMaximumWebRunMutationBodyBytes) {
+        request.body.size() > kMaximumWebMutationBodyBytes) {
         return false;
     }
     const auto bodyLength = std::to_string(request.body.size());

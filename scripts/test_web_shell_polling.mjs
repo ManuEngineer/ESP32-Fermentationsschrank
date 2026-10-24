@@ -4,10 +4,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../lib/fermentation_app/src/web_application_routes.cpp', import.meta.url), 'utf8');
-const literal = source.match(/constexpr char kWebShellSuffix\[\] =([\s\S]*?);\n\nstd::string provisioningShell/);
-assert.ok(literal, 'extract the actual production suffix');
-const suffix = [...literal[1].matchAll(/"(?:[^"\\]|\\.)*"/g)].map(x => JSON.parse(x[0])).join('');
-const script = "const S='local-fixture',A='password-protected',U=true;let Q=1" + suffix.split('</script>')[0];
+const assetSource = readFileSync(new URL('../lib/fermentation_app/src/web_application_asset.hpp', import.meta.url), 'utf8');
+const suffix = ';' + assetSource.match(/R"webjs\(([\s\S]*?)\)webjs"/)[1] + '</script></body></html>';
+const script = suffix.slice(1).split('</script>')[0];
 const paths = ['status', 'temperatures', 'alerts'];
 const actions = ['ack', 'mute', 'stop', 'done', 'start'];
 const csrfToken = 'local-fixture';
@@ -23,7 +22,11 @@ function deferred() {
 
 class Element {
   constructor() { this.children = []; this.dataset = {}; this.value = ''; }
-  addEventListener() {}
+  checkValidity() { if(this.disabled)return true;const n=Number(this.value);return (!this.required||this.value!=='')&&(this.min===undefined||n>=this.min)&&(this.max===undefined||n<=this.max); }
+  addEventListener(type, callback) { (this.listeners ||= {})[type] = callback; }
+  append(...children) { this.children.push(...children); }
+  after(...children) { this.afterNodes = children; }
+  setAttribute(name, value) { (this.attributes ||= {})[name] = value; }
   replaceChildren(...children) {
     this.children = children;
     this.value = children[0]?.value || '';
@@ -32,14 +35,14 @@ class Element {
 
 function snapshot(mode = 'active-run', run = '1') {
   return [
-    { homeMode: mode, revisions: { run, programCatalog: '1' } },
+    { homeMode: mode, revisions: { run, programCatalog: '1', userConfiguration:'1' } },
     { temperatures: [] },
     { alerts: mode === 'active-run' ? [{ id: '1', code: 'test-alert', active: true, acknowledged: false, muted: false, severity: 'warning' }] : [] },
   ];
 }
 
-async function fixture(language = 'en', storage) {
-  const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0 };
+async function fixture(language = 'en', storage, scriptCode = script) {
+  const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0, logins: [], loginReply: () => Promise.resolve({ ok: false, status: 401 }) };
   let timerId = 0;
   const elements = new Map();
   const element = selector => {
@@ -60,7 +63,7 @@ async function fixture(language = 'en', storage) {
   };
   const context = vm.createContext({
     document: { querySelector: element, createElement: () => new Element(), documentElement: {} },
-    navigator: { language }, window: { __WEB_CSRF__: csrfToken },
+    navigator: { language }, window: { __WEB_CSRF__: csrfToken, addEventListener: (event, cb) => { h[event] = cb; } },
     ...(storage ? { localStorage: storage } : {}),
     location: { reload: () => { ++h.reloads; } },
     Option: class extends Element { constructor(name, id) { super(); this.textContent = name; this.value = id; } },
@@ -69,13 +72,19 @@ async function fixture(language = 'en', storage) {
     clearTimeout: id => h.timers.delete(id),
     setInterval: (callback, delay) => setTimer(callback, delay, true),
     fetch: (url, options) => {
+      if (url === '/api/v1/login') { h.logins.push(options); return h.loginReply(); }
+      if (url === '/api/v1/settings') return Promise.resolve({ok:true,json:async()=>h.settings || {revision:'1',deviceName:'Fixture',timeZone:'Europe/Zurich',nameEditable:true}});
+      if (url.startsWith('/api/v1/programs/')) {
+        const id=decodeURIComponent(url.split('/').at(-1));
+        return Promise.resolve({ok:true,json:async()=>h.detail || {catalogRevision:'1',program:{id,name:'Fixture',builtIn:true,startable:true,targetCelsius:42,durationMinutes:480,preheat:false,sensor:'product-if-available-else-air',defaultSensorMode:'product',completion:{mode:'finish',coolingTargetCelsius:null,holdDurationMinutes:null}}}});
+      }
       if (url === '/api/v1/programs') {
         return Promise.resolve({ ok: true, json: async () => ({ catalogRevision: '1', programs: [{ name: 'Fixture', id: 'p1' }] }) });
       }
       if (url === '/internal/ui/run') {
         const response = deferred(), body = deferred();
-        h.posts.push({ url, options, started: h.time, reply: outcome => {
-          response.resolve({ status: 200, json: () => body.promise });
+        h.posts.push({ url, options, started: h.time, reply: (outcome, status = 200) => {
+          response.resolve({ status, json: () => body.promise });
           body.resolve({ outcome });
         } });
         return response.promise;
@@ -134,7 +143,8 @@ async function fixture(language = 'en', storage) {
   h.locked = () => assert.ok(buttons.every(b => b.disabled), 'all run actions locked');
   h.noDeadline = () => assert.ok([...h.timers.values()].every(x => x.interval), 'group timer cleaned up');
   h.command = () => h.run("send({t:'ack-message',id:'1'})");
-  vm.runInContext(script, context);
+  vm.runInContext("const S='local-fixture',A='password-protected',U=true;let Q=1;", context);
+  vm.runInContext(scriptCode, context);
   await drain();
   assert.equal(h.requests.length, 3, 'immediate initial group');
   return h;
@@ -678,6 +688,146 @@ test('language (setup shell): a pending request answers in the language selected
   assert.equal(p.id('m').textContent, p.run('L.es.ap'), 'answered in the language chosen meanwhile');
   assert.equal(p.fetches.length, 1);
   switchSetup(p, 'en'); assert.equal(p.id('m').textContent, p.run('L.en.ap'));
+});
+
+for (const language of ['de','en','es']) test('C1 navigation/alerts '+language, async () => {
+  const h=await fixture(language); const data=snapshot();
+  data[2].alerts=Array.from({length:16},(_,i)=>({id:String(i+1),code:'code-'+i,severity:i?'information':'safety-fault',active:true,acknowledged:i===1,muted:i===2,resolved:i===3,decisionRequired:i===4}));
+  await h.finish(data);
+  assert.equal(h.run('nv.hidden'),false);
+  const requests=h.requests.length;
+  h.run("nb[1].onclick()");
+  assert.equal(h.requests.length,requests);
+  assert.equal(h.run('H'),'alerts');
+  assert.equal(h.run('nb[1].attributes["aria-current"]'),'page');
+  assert.equal(h.run('ls.children.length'),17);
+  assert.equal(h.run('ls.children[1].textContent').split(' · ')[0],'code-0');
+  assert.equal(h.run('ls.children[16].textContent').split(' · ')[0],'code-15');
+  assert.equal(h.run('ls.children[2].children[0].disabled'),true);
+  assert.equal(h.run('ls.children[3].children[1].disabled'),true);
+  assert.equal(h.run('ls.children[4].children[0].disabled'),true);
+  h.run("location.hash='#invalid';fr()");assert.equal(h.run('H'),'alerts');
+  h.run("location.hash='#overview';fr()");assert.equal(h.run('H'),'overview');
+  h.run("location.hash='#alerts';fr();P=null;ui()");
+  assert.equal(h.run('ls.children[1].children[0].disabled'),true);
+  h.run('P=LP;B=true;ui()');assert.equal(h.run('ls.children[1].children[0].disabled'),true);
+  h.run('B=false;ui();ls.children[1].children[0].onclick()');
+  assert.equal(JSON.parse(h.posts[0].options.body).i.id,'1');
+  assert.equal(JSON.parse(h.posts[0].options.body).i.t,'ack-message');
+  assert.equal(h.run('ls.children[1].children[0].disabled'),true);
+});
+
+test('C2 program details, overrides and confirmation binding', async()=>{
+  const h=await fixture();await h.finish(snapshot('standby'));
+  assert.equal(h.run('PD.id'),'p1');
+  h.run("nb[2].onclick()");assert.equal(h.run('pd.hidden'),false);
+  assert.deepEqual(JSON.parse(h.run('JSON.stringify(sc())')),{p:'p1'});
+  h.run("pf.x.value='43';pf.x.onchange();ps.onclick()");
+  assert.equal(h.posts.length,0);assert.equal(h.run('K'),'start');
+  h.run("pf.d.value='90';pf.d.onchange()");assert.equal(h.run('K'),'');
+  h.run('ps.onclick();ps.onclick()');assert.equal(h.posts.length,1);
+  assert.deepEqual(JSON.parse(h.posts[0].options.body).i,{t:'start-program',c:{p:'p1',x:43,d:90}});
+});
+test('C2 null/not-startable and stale program details cannot start',async()=>{
+  const h=await fixture();h.detail={catalogRevision:'1',program:{id:'p1',name:'TBD',startable:false,targetCelsius:null,durationMinutes:null,preheat:false,defaultSensorMode:'air',completion:{mode:'finish',coolingTargetCelsius:null,holdDurationMinutes:null}}};
+  await h.finish(snapshot('standby'));assert.equal(h.run('ps.disabled'),true);
+  assert.equal(h.run('pf.x.value'),'');assert.equal(h.run('pf.d.value'),'');
+  h.detail.catalogRevision='2';await h.run('ld()');
+  assert.equal(h.run('PD'),null);assert.equal(h.run('pg.value'),'');assert.equal(h.run('PC'),'');
+  assert.equal(h.posts.length,0);
+});
+
+for(const language of ['de','en','es'])test('C3 settings confirmation and read-only zone '+language,async()=>{
+  const h=await fixture(language);await h.finish(snapshot('standby'));
+  h.run('nb[3].onclick()');await drain();
+  assert.equal(h.run('SD.timeZone'),'Europe/Zurich');assert.equal(h.run('sz.textContent'),'Europe/Zurich');
+  assert.equal(h.run('sn.attributes["aria-label"]'),h.run('T.name'));
+  h.run("sn.value='New name';sn.oninput();sb.onclick()");assert.equal(h.posts.length,0);
+  h.run("sn.value='Other';sn.oninput();sb.onclick()");assert.equal(h.posts.length,0);
+  h.run('sb.onclick()');assert.equal(h.posts.length,1);
+  assert.deepEqual(JSON.parse(h.posts[0].options.body),{v:1,r:{u:'1'},i:{t:'set-device-name',n:'Other'}});
+  assert.equal(h.run('sb.disabled'),true);
+});
+test('C3 settings nameEditable false and stale lock writes',async()=>{
+ const h=await fixture();await h.finish();h.settings={revision:'1',deviceName:'Fixed',timeZone:'Europe/Zurich',nameEditable:false};
+ h.run('nb[3].onclick()');await drain();assert.equal(h.run('sn.disabled'),true);h.run('sb.onclick()');assert.equal(h.posts.length,0);
+ h.run('SD.nameEditable=true;P=null;ui()');assert.equal(h.run('sb.disabled'),true);assert.equal(h.run('sn.disabled'),true);
+});
+
+for(const language of ['de','en','es'])test('C5 uncertain settings outcome locks sequence and refreshes '+language,async()=>{
+ const h=await fixture(language);await h.finish(snapshot('standby'));h.run('nb[3].onclick()');await drain();
+ const command=h.run("send({t:'set-device-name',n:'Maybe'})");
+ h.posts[0].reply('unavailable',503);await drain();
+ assert.equal(h.run('Q'),0);assert.ok(h.run('nt.textContent').includes(h.run('T.uncertain')));assert.equal(h.run('sb.disabled'),true);
+ await h.finish(snapshot('standby'));await command;
+ assert.ok(h.run('SD'));assert.equal(h.run('sb.disabled'),true);assert.equal(h.reloads,0);
+});
+test('C5 rendered input constraints block invalid overrides',async()=>{
+ const h=await fixture();await h.finish(snapshot('standby'));
+ h.run("pf.x.value='';pf.x.onchange()");assert.equal(h.run('ps.disabled'),true);
+ h.run("pf.x.value='46';pf.x.onchange()");assert.equal(h.run('ps.disabled'),true);
+ h.run("pf.x.value='43';pf.c.value='cool-hold-duration';pf.c.onchange()");assert.equal(h.run('ps.disabled'),true);
+ h.run("pf.k.value='5';pf.l.value='90';pf.l.onchange()");assert.equal(h.run('ps.disabled'),false);
+ h.run('ps.onclick();ps.onclick()');const intent=JSON.parse(h.posts[0].options.body).i;
+ assert.equal(intent.c.c,'cool-and-hold-for-duration');assert.equal(intent.c.k,5);assert.equal(intent.c.l,90);
+});
+
+
+// B-1/B-2 (PR #209 browser follow-ups): visible, language-correct feedback instead of silent failure.
+const submitLogin = async h => { h.el('#password').value = 'fixture-secret'; await h.el('#login').listeners.submit({ preventDefault() {} }); await drain(); };
+for (const language of ['de', 'en', 'es']) test('B-1 login failures are visible, never fake success, never leak secrets ' + language, async () => {
+  const unhandled = []; const watch = reason => unhandled.push(reason); process.on('unhandledRejection', watch);
+  try {
+    const h = await fixture(language); const T = key => h.run('T.' + key);
+    const note = () => h.run('nt.textContent');
+    h.loginReply = () => Promise.resolve({ ok: false, status: 401 });
+    await submitLogin(h);
+    assert.equal(note(), T('pl') + ' · ' + T('rejected')); assert.equal(h.reloads, 0);
+    assert.equal(h.logins.length, 1); assert.equal(JSON.parse(h.logins[0].body).password, 'fixture-secret');
+    h.loginReply = () => Promise.resolve({ ok: false, status: 503 });
+    await submitLogin(h); assert.equal(note(), T('busy')); assert.equal(h.reloads, 0);
+    h.loginReply = () => Promise.reject(new TypeError('fixture network failure'));
+    await submitLogin(h); assert.equal(note(), T('failed')); assert.equal(h.reloads, 0);
+    for (const text of [note(), h.run('document.body?.textContent||""')]) assert.ok(!String(text).includes('fixture-secret'));
+    // language switch: the next failure is rendered in the newly selected language
+    const other = language === 'de' ? 'es' : 'de'; h.run(`sw.value='${other}';sw.onchange()`);
+    h.loginReply = () => Promise.resolve({ ok: false, status: 401 });
+    await submitLogin(h); assert.equal(note(), T('pl') + ' · ' + T('rejected')); assert.equal(h.run('lc'), other);
+    assert.equal(h.posts.length, 0);
+    h.loginReply = () => Promise.resolve({ ok: true, status: 200 });
+    const before = note(); await submitLogin(h); assert.equal(h.reloads, 1); assert.equal(note(), before);
+    await drain(); assert.deepEqual(unhandled, []);
+  } finally { process.off('unhandledRejection', watch); }
+});
+for (const language of ['de', 'en', 'es']) test('B-2 empty device name is rejected visibly before any POST ' + language, async () => {
+  const h = await fixture(language); await h.finish(snapshot('standby')); h.run('nb[3].onclick()'); await drain();
+  const note = () => h.run('nt.textContent'), T = key => h.run('T.' + key);
+  h.run("sn.value='';sn.oninput();sb.onclick()");
+  assert.equal(note(), T('name') + ' · ' + T('rejected')); assert.equal(h.posts.length, 0); assert.equal(h.reloads, 0);
+  assert.equal(h.run('K'), ''); assert.notEqual(h.run('sb.textContent'), T('sure'));
+  h.run("sn.value='Valid';sn.oninput();sb.onclick()"); assert.equal(h.posts.length, 0); assert.equal(h.run('sb.textContent'), T('sure'));
+  h.run('sb.onclick()'); assert.equal(h.posts.length, 1);
+  assert.deepEqual(JSON.parse(h.posts[0].options.body), { v: 1, r: { u: '1' }, i: { t: 'set-device-name', n: 'Valid' } });
+  h.posts[0].reply('applied'); await drain(); await h.finish(snapshot('standby'));
+  assert.ok(note().startsWith(T('ok'))); assert.ok(note().includes(T('hint')));
+  h.run("sn.value='';sn.oninput();sb.onclick()"); assert.equal(note(), T('name') + ' · ' + T('rejected')); assert.equal(h.posts.length, 1);
+});
+test('C5 closed Application dispatch architecture', async()=>{
+ const handler=source.slice(source.indexOf('bool WebRunMutationHandler::handle('),source.indexOf('bool WebReadOnlyApiHandler::handle('));
+ const calls=[...new Set([...handler.matchAll(/application_\s*\.\s*(\w+)\s*\(/g)].map(x=>x[1]))].sort();
+ assert.deepEqual(calls,['applyConfirmedPrepared','applyWebConfigurationChange','confirmPreparedInPlace','prepareEnvelope']);
+ assert.ok(!handler.includes('configurationService_'));
+ assert.ok(source.includes('nav[hidden]{display:none}'));
+ assert.ok(!script.includes("nv.style='display:flex"));
+});
+test('C5 synthetic regressions detect removed gates, wrong ID, bad fragment and unbound override',async()=>{
+ const probes=[
+  ["b.disabled=B||!P||!x.active", "b.disabled=B||!x.active", async h=>{await h.finish();h.run("nb[1].onclick();P=null;ui()");assert.equal(h.run('ls.children[1].children[0].disabled'),true)}],
+  ["id:x.id", "id:'wrong'", async h=>{await h.finish();h.run('nb[1].onclick();ls.children[1].children[0].onclick()');assert.equal(JSON.parse(h.posts[0].options.body).i.id,'1')}],
+  ["if(views.includes(v))", "if(v)", async h=>{await h.finish();h.run("nb[1].onclick();location.hash='#invalid';fr()");assert.equal(h.run('H'),'alerts')}],
+  [",JSON.stringify(sc())", "", async h=>{await h.finish(snapshot('standby'));h.run("ps.onclick();pf.x.value='43';ui()");assert.equal(h.run('K'),'')}]
+ ];
+ for(const[from,to,probe]of probes){await probe(await fixture());const mutant=script.replace(from,to);assert.notEqual(mutant,script);await assert.rejects(async()=>probe(await fixture('en',undefined,mutant)),assert.AssertionError)}
 });
 
 

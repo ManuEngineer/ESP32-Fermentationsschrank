@@ -1433,18 +1433,29 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     const LoadedConfigurationGraph& current,
     const ConfigurationCommitCandidate& candidate, ChangeOrigin origin,
     ChangeOperation operation) const {
+    ConfigurationCommitPrepareResult result;
+    prepareCommitInto(current, candidate, origin, operation, result);
+    return result;
+}
+
+void ConfigurationGraphStore::prepareCommitInto(
+    const LoadedConfigurationGraph& current,
+    const ConfigurationCommitCandidate& candidate, ChangeOrigin origin,
+    ChangeOperation operation, ConfigurationCommitPrepareResult& result) const {
+    result.prepared.reset();
+    result.status = ConfigurationCommitPrepareStatus::PersistenceFailure;
     if (!candidate.userConfiguration || !candidate.serviceConfiguration ||
         !candidate.programCatalog) {
-        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                std::nullopt};
+        result.status = ConfigurationCommitPrepareStatus::InvalidCandidate;
+        return;
     }
     auto userValidation = validateUserConfiguration(
         *candidate.userConfiguration, timeZoneResolver_);
     if (userValidation.status != UserConfigurationStatus::Success ||
         validateProgramCatalog(*candidate.programCatalog) !=
             ProgramCatalogStatus::Success) {
-        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                std::nullopt};
+        result.status = ConfigurationCommitPrepareStatus::InvalidCandidate;
+        return;
     }
     const ConfigurationChangeMask changes{
         !configurationContentEquals(*candidate.userConfiguration,
@@ -1455,8 +1466,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
                                     *current.active.programCatalog)};
     if (!changes.userConfiguration && !changes.serviceConfiguration &&
         !changes.programCatalog) {
-        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                std::nullopt};
+        result.status = ConfigurationCommitPrepareStatus::InvalidCandidate;
+        return;
     }
     const auto scan = validationScan(current);
     if (scan.status != ConfigurationScanStatus::Success) {
@@ -1486,15 +1497,16 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         } else if (scan.status == ConfigurationScanStatus::CapacityError) {
             status = ConfigurationCommitPrepareStatus::CapacityFailure;
         }
-        return {status, std::nullopt};
+        result.status = status;
+        return;
     }
     auto slotPlan = planSlots(current, scan.highWater, changes);
     if (!slotPlan.plan.has_value()) {
-        return {
+        result.status =
             slotPlan.status == ConfigurationSlotPlanStatus::HighWaterOverflow
                 ? ConfigurationCommitPrepareStatus::HighWaterOverflow
-                : ConfigurationCommitPrepareStatus::NoUnreferencedSlotAvailable,
-            std::nullopt};
+                : ConfigurationCommitPrepareStatus::NoUnreferencedSlotAvailable;
+        return;
     }
     auto plan = *slotPlan.plan;
     const auto epoch = current.active.manifestReference.storageEpoch;
@@ -1507,8 +1519,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
                 *candidate.userConfiguration,
                 kCurrentUserConfigurationSchemaVersion, timeZoneResolver_,
                 payload) != ConfigurationCodecStatus::Success) {
-            return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                    std::nullopt};
+            result.status = ConfigurationCommitPrepareStatus::InvalidCandidate;
+            return;
         }
         userReference = {
             configuration_storage_contract::kUserConfigurationRecordType,
@@ -1524,8 +1536,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         if (encodeServiceConfigurationPayload(*candidate.serviceConfiguration,
                                               payload) !=
             ConfigurationCodecStatus::Success) {
-            return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                    std::nullopt};
+            result.status = ConfigurationCommitPrepareStatus::InvalidCandidate;
+            return;
         }
         serviceReference = {
             configuration_storage_contract::kServiceConfigurationRecordType,
@@ -1540,8 +1552,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     if (changes.programCatalog) {
         if (encodeProgramCatalogPayload(*candidate.programCatalog, payload) !=
             ConfigurationCodecStatus::Success) {
-            return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                    std::nullopt};
+            result.status = ConfigurationCommitPrepareStatus::InvalidCandidate;
+            return;
         }
         programReference = {
             configuration_storage_contract::kProgramCatalogRecordType,
@@ -1558,8 +1570,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     std::string manifestPayload;
     if (encodeConfigurationManifestPayload(manifest, manifestPayload) !=
         ConfigurationGraphCodecStatus::Success) {
-        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                std::nullopt};
+        result.status = ConfigurationCommitPrepareStatus::InvalidCandidate;
+        return;
     }
     const ConfigurationManifestReference manifestReference{
         configuration_storage_contract::kConfigurationManifestRecordType,
@@ -1573,8 +1585,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     if (encodeConfigurationManifestRecord(
             manifest, plan.manifestGeneration, epoch, std::nullopt,
             manifestRecord) != ConfigurationGraphCodecStatus::Success) {
-        return {ConfigurationCommitPrepareStatus::CapacityFailure,
-                std::nullopt};
+        result.status = ConfigurationCommitPrepareStatus::CapacityFailure;
+        return;
     }
     const ConfigurationRootRecord root{manifestReference,
                                        current.active.manifestReference};
@@ -1582,8 +1594,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     if (encodeConfigurationRootRecord(root, plan.rootSequence, epoch,
                                       std::nullopt, rootRecord) !=
         ConfigurationGraphCodecStatus::Success) {
-        return {ConfigurationCommitPrepareStatus::CapacityFailure,
-                std::nullopt};
+        result.status = ConfigurationCommitPrepareStatus::CapacityFailure;
+        return;
     }
     const auto previousTarget = store_.read(
         key(configuration_storage_contract::kConfigurationRootSlotKeys
@@ -1595,27 +1607,41 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         previousTargetBytes = previousTarget.value;
     } else if (previousTarget.status !=
                device_platform::StateStoreReadStatus::NotFound) {
-        return {previousTarget.status ==
-                        device_platform::StateStoreReadStatus::CapacityError
-                    ? ConfigurationCommitPrepareStatus::CapacityFailure
-                    : ConfigurationCommitPrepareStatus::PersistenceFailure,
-                std::nullopt};
+        result.status =
+            previousTarget.status ==
+                    device_platform::StateStoreReadStatus::CapacityError
+                ? ConfigurationCommitPrepareStatus::CapacityFailure
+                : ConfigurationCommitPrepareStatus::PersistenceFailure;
+        return;
     }
-    ConfigurationGraphBranch newActive{
-        manifestReference,           manifest,
-        candidate.userConfiguration, candidate.serviceConfiguration,
-        candidate.programCatalog,    manifestRecord};
-    ConfigurationGraphMetadataBranch previousActive{
-        current.active.manifestReference, current.active.manifest,
-        current.active.canonicalManifestRecordBytes};
-    LoadedConfigurationGraph newGraph{
-        plan.rootSlot,        plan.rootSequence,         root, rootRecord,
-        std::move(newActive), std::move(previousActive), false};
-    return {ConfigurationCommitPrepareStatus::Success,
-            PreparedConfigurationCommit{current, std::move(newGraph), changes,
-                                        plan, std::move(manifestRecord),
-                                        std::move(rootRecord),
-                                        std::move(previousTargetBytes)}};
+    result.prepared.emplace();
+    auto& prepared = *result.prepared;
+    prepared.oldGraph = current;
+    auto& newGraph = prepared.newGraph;
+    newGraph.rootSlot = plan.rootSlot;
+    newGraph.rootSequence = plan.rootSequence;
+    newGraph.root = root;
+    newGraph.canonicalRootRecordBytes = rootRecord;
+    auto& active = newGraph.active;
+    active.manifestReference = manifestReference;
+    active.manifest = manifest;
+    active.userConfiguration = candidate.userConfiguration;
+    active.serviceConfiguration = candidate.serviceConfiguration;
+    active.programCatalog = candidate.programCatalog;
+    active.canonicalManifestRecordBytes = manifestRecord;
+    newGraph.fallback.emplace();
+    auto& fallback = *newGraph.fallback;
+    fallback.manifestReference = current.active.manifestReference;
+    fallback.manifest = current.active.manifest;
+    fallback.canonicalManifestRecordBytes =
+        current.active.canonicalManifestRecordBytes;
+    newGraph.selectedFallback = false;
+    prepared.changes = changes;
+    prepared.slotPlan = plan;
+    prepared.manifestRecordBytes = std::move(manifestRecord);
+    prepared.rootRecordBytes = std::move(rootRecord);
+    prepared.previousTargetRootRecordBytes = std::move(previousTargetBytes);
+    result.status = ConfigurationCommitPrepareStatus::Success;
 }
 
 ConfigurationCommitExecutionResult ConfigurationGraphStore::

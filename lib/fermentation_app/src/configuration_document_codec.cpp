@@ -623,12 +623,9 @@ ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
         return status;
     }
     if (candidate.schema.version < kCurrentProgramSchemaVersion) {
-        auto migrated = migrateProgramToCurrentSchema(candidate);
-        if (migrated.status != MigrationStatus::Migrated ||
-            !migrated.document.has_value()) {
+        const auto migrated = migrateProgramToCurrentSchemaInto(candidate);
+        if (migrated != MigrationStatus::Migrated)
             return ConfigurationCodecStatus::MigrationFailed;
-        }
-        candidate = std::move(*migrated.document);
     }
     out = std::move(candidate);
     return ConfigurationCodecStatus::Success;
@@ -704,8 +701,17 @@ configuration_codec_internal::encodeSingleProgramDocumentPayload(
     if (!validateProgram(document, ValidationPurpose::Runnable).valid()) {
         return ConfigurationCodecStatus::InvalidDocument;
     }
-    ByteWriter writer(configuration_limits::kMaximumProgramCatalogPayloadBytes);
-    if (!writeProgram(writer, document)) {
+    // Exact size of this single document: the accumulator starts at 0 (no
+    // catalog count byte) and keeps the 32768 B limit that used to be the
+    // writer capacity. Any failure maps to CapacityExceeded, which is what
+    // writeProgram reported for the same inputs before.
+    ProgramCatalogPayloadSizeAccumulator size;
+    if (addProgramPayloadSize(size, document) !=
+        ConfigurationCodecStatus::Success) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    ByteWriter writer(size.size());
+    if (!writeProgram(writer, document) || writer.size() != size.size()) {
         return ConfigurationCodecStatus::CapacityExceeded;
     }
     auto encoded = writer.takeBytes();

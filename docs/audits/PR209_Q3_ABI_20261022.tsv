@@ -1,0 +1,5 @@
+profile	type	sizeof_bytes	alignof_bytes
+esp32_release	scratch	1856	8
+esp32_release	owner	4	4
+esp32_bringup	scratch	1856	8
+esp32_bringup	owner	4	4

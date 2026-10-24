@@ -876,6 +876,52 @@ void test_prepares_high_water_values_and_exact_fallback_before_writes() {
                      loaded.graph->active.manifestReference);
 }
 
+void test_in_place_prepare_matches_value_entry_and_clears_reused_result() {
+    LocalStore firstStore;
+    LocalTimeZoneResolver resolver;
+    seedGraph(firstStore);
+    LocalStore secondStore;
+    seedGraph(secondStore);
+    fermentation::ConfigurationGraphStore first(firstStore, resolver);
+    fermentation::ConfigurationGraphStore second(secondStore, resolver);
+    const auto loaded = first.loadCanonicalGraph(StorageEpoch{1U});
+    const auto candidate =
+        changedCandidate(*loaded.graph, "Gleiche Goldenbytes");
+    const auto origin = fermentation::decodeChangeOrigin(3U);
+    const auto operation = fermentation::decodeChangeOperation(1U);
+    auto byValue =
+        first.prepareCommit(*loaded.graph, candidate, origin, operation);
+    fermentation::ConfigurationCommitPrepareResult inPlace;
+    second.prepareCommitInto(*loaded.graph, candidate, origin, operation,
+                             inPlace);
+    TEST_ASSERT_TRUE(byValue.status == inPlace.status);
+    TEST_ASSERT_TRUE(inPlace.prepared.has_value());
+    TEST_ASSERT_EQUAL_STRING(byValue.prepared->manifestRecordBytes.c_str(),
+                             inPlace.prepared->manifestRecordBytes.c_str());
+    TEST_ASSERT_EQUAL_STRING(byValue.prepared->rootRecordBytes.c_str(),
+                             inPlace.prepared->rootRecordBytes.c_str());
+    TEST_ASSERT_TRUE(byValue.prepared->previousTargetRootRecordBytes ==
+                     inPlace.prepared->previousTargetRootRecordBytes);
+    TEST_ASSERT_TRUE(byValue.prepared->newGraph.fallback->manifestReference ==
+                     inPlace.prepared->newGraph.fallback->manifestReference);
+    TEST_ASSERT_TRUE(first.executePreparedCommit(*byValue.prepared).status ==
+                     second.executePreparedCommit(*inPlace.prepared).status);
+    const auto firstGraph = first.loadCanonicalGraph(StorageEpoch{1U});
+    const auto secondGraph = second.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(firstGraph.status == secondGraph.status);
+    TEST_ASSERT_EQUAL_STRING(
+        firstGraph.graph->canonicalRootRecordBytes.c_str(),
+        secondGraph.graph->canonicalRootRecordBytes.c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        firstGraph.graph->active.canonicalManifestRecordBytes.c_str(),
+        secondGraph.graph->active.canonicalManifestRecordBytes.c_str());
+    const auto rejected =
+        first.prepareCommit(*loaded.graph, {}, origin, operation);
+    second.prepareCommitInto(*loaded.graph, {}, origin, operation, inPlace);
+    TEST_ASSERT_TRUE(rejected.status == inPlace.status);
+    TEST_ASSERT_FALSE(inPlace.prepared.has_value());
+}
+
 void test_document_write_failure_leaves_old_graph_canonical() {
     LocalStore store;
     LocalTimeZoneResolver resolver;
@@ -1923,6 +1969,8 @@ int main() {
     RUN_TEST(test_unknown_newer_schema_blocks_mutation_before_plan);
     RUN_TEST(test_identical_root_duplicate_is_diagnostic_and_loadable);
     RUN_TEST(test_prepares_high_water_values_and_exact_fallback_before_writes);
+    RUN_TEST(
+        test_in_place_prepare_matches_value_entry_and_clears_reused_result);
     RUN_TEST(test_document_write_failure_leaves_old_graph_canonical);
     RUN_TEST(test_unknown_root_outcome_resolves_exactly_old_or_new);
     RUN_TEST(test_root_write_outcome_matrix_obeys_state_store_contract);

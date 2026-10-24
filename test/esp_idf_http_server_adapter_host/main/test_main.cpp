@@ -115,6 +115,12 @@ class RecordingRouteSink final : public device_platform::IHttpRouteSink {
             response.contentType = "application/json; charset=utf-8";
             response.body = "{\"error\":\"web-shell-unavailable\"}";
         }
+        if (request.path == "/immutable")
+            response.metadata.cache =
+                device_platform::HttpResponseCache::ImmutableAsset;
+        if (request.path == "/invalid-cache")
+            response.metadata.cache =
+                static_cast<device_platform::HttpResponseCache>(255U);
         return true;
     }
 
@@ -410,6 +416,26 @@ void runChunkResponseCases() {
 extern "C" void app_main() {
     runAdapterDispatchCases();
     runChunkResponseCases();
+    {
+        RecordingRouteSink routes;
+        device_platform_esp_idf::EspIdfHttpServerLifecycle server;
+        expect(server.start(routes), "cache-server-start");
+        const auto cached = exchange(
+            requestWithHeaders("GET", "/immutable", "Host: esp.local\r\n"));
+        expect(cached.find(
+                   "Cache-Control: private, max-age=31536000, immutable\r\n") !=
+                   std::string::npos,
+               "immutable-cache-exact-header");
+        const auto normal =
+            exchange(requestWithHeaders("GET", "/", "Host: esp.local\r\n"));
+        expect(normal.find("Cache-Control:") == std::string::npos,
+               "default-no-cache-header");
+        const auto invalid = exchange(
+            requestWithHeaders("GET", "/invalid-cache", "Host: esp.local\r\n"));
+        expect(hasStatus(invalid, "500 Internal Server Error"),
+               "invalid-cache-fail-closed");
+        static_cast<void>(server.stop());
+    }
     std::cout << "ESP_IDF_HTTP_ADAPTER_DISPATCH="
               << (failures == 0U ? "PASS" : "FAIL") << std::endl;
     std::exit(failures == 0U ? 0 : 1);

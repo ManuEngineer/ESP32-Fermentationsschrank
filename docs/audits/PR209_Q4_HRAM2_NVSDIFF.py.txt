@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""nvsdiff.py A.bin B.bin : entry-level diff of two NVS images via nvs_tool.py (read-only); prints only key names, sizes, envelope versions."""
+import re, subprocess, sys, struct
+T = "/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/components/nvs_flash/nvs_partition_tool/nvs_tool.py"
+def load(path):
+    txt = subprocess.run([sys.executable, T, "-d", "blobs", "--color", "never", path], capture_output=True, text=True).stdout
+    blobs, cur = {}, None
+    for l in txt.splitlines():
+        m = re.match(r'(\S+):(\S+) - Type: Blob', l)
+        if m: cur = m[2]; blobs[cur] = bytearray(); continue
+        m = re.match(r'\s*0x[0-9a-f]+\s+((?:[0-9a-f]{2} +){1,32})', l)
+        if m and cur: blobs[cur] += bytes.fromhex(m[1].replace(' ', ''))
+    return {k: bytes(v) for k, v in blobs.items()}
+def ver(b):
+    return struct.unpack_from('>Q', b, 20)[0] if b[:4] == b'DPRF' and len(b) >= 28 else None
+a, b = load(sys.argv[1]), load(sys.argv[2])
+print("keys A/B:", len(a), len(b))
+for k in sorted(set(a) | set(b)):
+    if k not in a: print("ADDED  ", k, len(b[k]), "ver", ver(b[k]))
+    elif k not in b: print("REMOVED", k)
+    elif a[k] != b[k]: print("CHANGED", k, "size", len(a[k]), "->", len(b[k]), "envelope version", ver(a[k]), "->", ver(b[k]))
+print("diff done")

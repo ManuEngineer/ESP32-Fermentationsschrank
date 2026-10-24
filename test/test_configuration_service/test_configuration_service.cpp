@@ -1,6 +1,8 @@
 #include <unity.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <cstddef>
 #include <cstdlib>
 #include <map>
@@ -42,6 +44,10 @@ namespace {
 
 std::atomic<std::size_t> gLiveAllocBytes{0U};
 std::atomic<std::size_t> gPeakAllocBytes{0U};
+std::atomic<bool> gFailNextScratchAllocation{false};
+std::atomic<std::size_t> gScratchAttempts{0U};
+std::atomic<std::size_t> gScratchLiveBytes{0U};
+std::atomic<std::size_t> gScratchPeakBytes{0U};
 constexpr std::size_t kAllocHeader = alignof(std::max_align_t);
 
 void recordAllocation(std::size_t size) {
@@ -74,6 +80,49 @@ void operator delete(void* ptr) noexcept {
 
 void operator delete(void* ptr, std::size_t) noexcept { operator delete(ptr); }
 
+// The production scratch uses an explicit aligned, non-throwing allocation.
+void* operator new(std::size_t size, std::align_val_t requestedAlignment,
+                   const std::nothrow_t&) noexcept {
+    gScratchAttempts.fetch_add(1U);
+    if (gFailNextScratchAllocation.exchange(false)) {
+        return nullptr;
+    }
+    const auto alignment =
+        std::max(kAllocHeader, static_cast<std::size_t>(requestedAlignment));
+    const auto bytes =
+        ((size + alignment + alignment - 1U) / alignment) * alignment;
+    void* raw = std::aligned_alloc(alignment, bytes);
+    if (raw == nullptr) {
+        return nullptr;
+    }
+    *static_cast<std::size_t*>(raw) = size;
+    recordAllocation(size);
+    const auto live = gScratchLiveBytes.fetch_add(size) + size;
+    auto peak = gScratchPeakBytes.load();
+    while (peak < live &&
+           !gScratchPeakBytes.compare_exchange_weak(peak, live)) {
+    }
+    return static_cast<char*>(raw) + alignment;
+}
+
+void operator delete(void* ptr, std::align_val_t requestedAlignment) noexcept {
+    if (ptr == nullptr) {
+        return;
+    }
+    const auto alignment =
+        std::max(kAllocHeader, static_cast<std::size_t>(requestedAlignment));
+    void* raw = static_cast<char*>(ptr) - alignment;
+    const auto size = *static_cast<std::size_t*>(raw);
+    gScratchLiveBytes.fetch_sub(size);
+    gLiveAllocBytes.fetch_sub(size);
+    std::free(raw);
+}
+
+void operator delete(void* ptr, std::align_val_t alignment,
+                     const std::nothrow_t&) noexcept {
+    ::operator delete(ptr, alignment);
+}
+
 struct ConfigurationServiceHookControl {
     std::atomic<int> desiredPoint{-1};
     std::atomic<bool> reached{false};
@@ -88,6 +137,9 @@ namespace fermentation {
 
 class ConfigurationServiceTestAccess {
    public:
+    static std::size_t scratchSize() {
+        return sizeof(ConfigurationService::CommitScratch);
+    }
     static bool initialize(ConfigurationService& service,
                            const LoadedConfigurationGraph& graph) {
         return service.initializeForTest(graph);
@@ -1270,6 +1322,7 @@ void test_indeterminate_commit_blocks_runtime_until_exact_new_resolution() {
     TEST_ASSERT_TRUE(committed.status ==
                      fermentation::ConfigurationCommitStatus::
                          ConfigurationCommitIndeterminate);
+    TEST_ASSERT_EQUAL_UINT64(0U, gScratchLiveBytes.load());
     TEST_ASSERT_TRUE(
         fixture.service.mode() ==
         fermentation::ConfigurationServiceMode::CommitIndeterminate);
@@ -1460,6 +1513,91 @@ void test_maximum_valid_active_and_preview_never_create_third_model() {
         fixture.service.beginPreview().status ==
         fermentation::ConfigurationPreviewStatus::ConfigurationModelBudgetBusy);
     TEST_ASSERT_EQUAL_UINT32(2U, fixture.service.fullModelGenerationCount());
+}
+
+void test_scratch_oom_preserves_preview_and_releases_mutation_without_writes() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Nach OOM bestaetigt");
+    const auto writes = fixture.store.writeCount();
+    const auto live = gLiveAllocBytes.load();
+    const auto attempts = gScratchAttempts.load();
+    auto before = fixture.service.acquireRuntime();
+    const auto generation = before.lease->volatileGenerationId();
+    before.lease = {};
+    gFailNextScratchAllocation = true;
+    TEST_ASSERT_TRUE(
+        fixture.service.confirmPreview(preview.handle).status ==
+        fermentation::ConfigurationCommitStatus::ConfigurationMutationBusy);
+    TEST_ASSERT_EQUAL_UINT64(attempts + 1U, gScratchAttempts.load());
+    TEST_ASSERT_EQUAL_UINT64(writes, fixture.store.writeCount());
+    TEST_ASSERT_EQUAL_UINT64(live, gLiveAllocBytes.load());
+    TEST_ASSERT_EQUAL_UINT64(0U, gScratchLiveBytes.load());
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::Operational);
+    TEST_ASSERT_EQUAL_UINT64(preview.handle,
+                             fixture.service.visiblePreview()->handle);
+    {
+        auto mutation = fixture.coordinator.tryAcquire();
+        TEST_ASSERT_TRUE(mutation.lease.valid());
+        auto runtime = fixture.service.acquireRuntime();
+        TEST_ASSERT_EQUAL_UINT64(generation,
+                                 runtime.lease->volatileGenerationId());
+    }
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(preview.handle).status ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT64(0U, gScratchLiveBytes.load());
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.service.fullModelGenerationCount());
+}
+
+void test_no_change_and_stale_preview_do_not_request_scratch() {
+    Fixture fixture;
+    auto build = fixture.service.beginPreview();
+    const auto unchanged = fixture.service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    const auto attempts = gScratchAttempts.load();
+    const auto writes = fixture.store.writeCount();
+    TEST_ASSERT_TRUE(
+        fixture.service.confirmPreview(unchanged.preview->handle).status ==
+        fermentation::ConfigurationCommitStatus::NoChange);
+    TEST_ASSERT_EQUAL_UINT64(attempts, gScratchAttempts.load());
+    const auto old = installChangedPreview(fixture, "Alt");
+    TEST_ASSERT_TRUE(fixture.service.cancelPreview(old.handle) ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    const auto next = installChangedPreview(fixture, "Neu");
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(old.handle).status !=
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT64(attempts, gScratchAttempts.load());
+    TEST_ASSERT_EQUAL_UINT64(writes, fixture.store.writeCount());
+    TEST_ASSERT_EQUAL_UINT64(next.handle,
+                             fixture.service.visiblePreview()->handle);
+}
+
+void test_maximum_catalog_name_commit_has_only_one_transient_scratch() {
+    Fixture fixture(maximumCountCatalog());
+    std::string name;
+    for (std::size_t i = 0; i < 48U; ++i) {
+        name += "é";
+    }
+    const auto preview = installChangedPreview(fixture, name.c_str());
+    const auto attempts = gScratchAttempts.load();
+    gScratchPeakBytes = 0U;
+    const auto baseline = gLiveAllocBytes.load();
+    gPeakAllocBytes = baseline;
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(preview.handle).status ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT64(attempts + 1U, gScratchAttempts.load());
+    TEST_ASSERT_EQUAL_UINT64(
+        fermentation::ConfigurationServiceTestAccess::scratchSize(),
+        gScratchPeakBytes.load());
+    TEST_ASSERT_EQUAL_UINT64(0U, gScratchLiveBytes.load());
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.service.fullModelGenerationCount());
+    std::printf(
+        "Q3_HOST64_MAX_CATALOG_NAME: scratch=%zu peak_delta=%zu "
+        "final_delta=%lld\n",
+        gScratchPeakBytes.load(), gPeakAllocBytes.load() - baseline,
+        static_cast<long long>(gLiveAllocBytes.load()) -
+            static_cast<long long>(baseline));
 }
 
 void test_preview_cancel_cycles_return_to_stable_live_allocation() {
@@ -2269,6 +2407,10 @@ int main() {
     RUN_TEST(test_stale_no_change_active_basis_conflicts_without_store_access);
     RUN_TEST(test_maximum_count_catalog_keeps_two_model_limit_through_commit);
     RUN_TEST(test_maximum_valid_active_and_preview_never_create_third_model);
+    RUN_TEST(
+        test_scratch_oom_preserves_preview_and_releases_mutation_without_writes);
+    RUN_TEST(test_no_change_and_stale_preview_do_not_request_scratch);
+    RUN_TEST(test_maximum_catalog_name_commit_has_only_one_transient_scratch);
     RUN_TEST(test_preview_cancel_cycles_return_to_stable_live_allocation);
     RUN_TEST(test_two_parallel_preview_starts_reserve_exactly_one_full_model);
     RUN_TEST(test_superseded_no_change_handle_cannot_remove_newer_preview);

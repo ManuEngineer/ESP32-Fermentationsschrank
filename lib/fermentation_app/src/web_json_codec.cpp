@@ -17,6 +17,7 @@
 #include "configuration_limits.hpp"
 #include "configuration_text.hpp"
 #include "program_limits.hpp"
+#include "fermentation_touch_workspace.hpp"
 #include "run_snapshot.hpp"
 
 namespace fermentation {
@@ -765,10 +766,10 @@ const char* messageSeverityName(MessageClass value) {
 
 }  // namespace
 
-WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
-                                                WebRunMutationDto& output) {
+WebRunMutationDecodeStatus decodeWebMutation(const std::string& exactBody,
+                                             WebMutationDto& output) {
     if (exactBody.empty()) return WebRunMutationDecodeStatus::Invalid;
-    if (exactBody.size() > kMaximumWebRunMutationBodyBytes) {
+    if (exactBody.size() > kMaximumWebMutationBodyBytes) {
         return WebRunMutationDecodeStatus::TooLarge;
     }
     if (containsForbiddenNulInput(exactBody)) {
@@ -778,7 +779,9 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
     CJsonDocument document(cJSON_ParseWithLengthOpts(
         exactBody.c_str(), exactBody.size() + 1U, nullptr, true));
     if (!document || !cJSON_IsObject(document.get())) {
-        return WebRunMutationDecodeStatus::Invalid;
+        return exactBody.size() > kMaximumWebRunMutationBodyBytes
+                   ? WebRunMutationDecodeStatus::TooLarge
+                   : WebRunMutationDecodeStatus::Invalid;
     }
     const auto* const root = document.get();
     std::uint32_t version{};
@@ -787,6 +790,27 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
         return WebRunMutationDecodeStatus::Invalid;
     }
 
+    const auto* revisions = member(root, "r");
+    const auto* intent = member(root, "i");
+    const auto* type = member(intent, "t");
+    if (cJSON_IsString(type) &&
+        std::strcmp(type->valuestring, "set-device-name") == 0) {
+        std::uint64_t revision{};
+        std::string name;
+        if (hasDuplicateKeys(root) || !hasOnlyKeys(revisions, {"u"}) ||
+            hasDuplicateKeys(revisions) ||
+            !readRevisionDecimal(member(revisions, "u"), revision) ||
+            !hasOnlyKeys(intent, {"t", "n"}) || hasDuplicateKeys(intent) ||
+            !readString(member(intent, "n"),
+                        configuration_limits::kMaximumVisibleNameBytes, name))
+            return WebRunMutationDecodeStatus::Invalid;
+        output =
+            WebConfigurationMutationDto{UserConfigurationRevision{revision},
+                                        WebDeviceNameChange{std::move(name)}};
+        return WebRunMutationDecodeStatus::Success;
+    }
+    if (exactBody.size() > kMaximumWebRunMutationBodyBytes)
+        return WebRunMutationDecodeStatus::TooLarge;
     WebRunMutationDto parsed;
     if (!readExpected(member(root, "r"), parsed.expected) ||
         !readIntent(member(root, "i"), parsed.intent)) {
@@ -794,6 +818,34 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
     }
     output = std::move(parsed);
     return WebRunMutationDecodeStatus::Success;
+}
+
+WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
+                                                WebRunMutationDto& output) {
+    if (exactBody.size() > kMaximumWebRunMutationBodyBytes)
+        return WebRunMutationDecodeStatus::TooLarge;
+    WebMutationDto dto;
+    const auto decoded = decodeWebMutation(exactBody, dto);
+    if (decoded != WebRunMutationDecodeStatus::Success) return decoded;
+    const auto* run = std::get_if<WebRunMutationDto>(&dto);
+    if (run == nullptr) return WebRunMutationDecodeStatus::Invalid;
+    output = *run;
+    return WebRunMutationDecodeStatus::Success;
+}
+
+bool encodeWebApiSettings(const ApplicationWebSettingsSnapshot& snapshot,
+                          std::string& output) {
+    CJsonDocument document(cJSON_CreateObject());
+    const auto revision = std::to_string(snapshot.revision.value());
+    return document &&
+           cJSON_AddNumberToObject(document.get(), "version", 1.0) &&
+           addString(document.get(), "revision", revision.c_str()) &&
+           addString(document.get(), "deviceName",
+                     snapshot.deviceName.c_str()) &&
+           addString(document.get(), "timeZone", snapshot.timeZone.c_str()) &&
+           cJSON_AddBoolToObject(document.get(), "nameEditable",
+                                 snapshot.nameEditable) &&
+           serializeBounded(document.get(), output);
 }
 
 WebProvisionDecodeStatus decodeWebProvision(const std::string& exactBody,
@@ -1216,6 +1268,76 @@ bool encodeWebApiPrograms(const FermentationUiPresentationSource& source,
         }
     }
     return serializeBounded(document.get(), output);
+}
+
+bool encodeWebApiProgram(const FermentationUiPresentationSource& source,
+                         const ProgramDocument& entry, std::string& output) {
+    const auto& stored = entry.program;
+    if (!stored.installed || !stored.enabled ||
+        validateVisibleName(stored.name) != ConfigurationTextStatus::Success ||
+        validateLowercaseIdentifier(
+            stored.id, configuration_limits::kMinimumProgramIdBytes,
+            configuration_limits::kMaximumProgramIdBytes) !=
+            ConfigurationTextStatus::Success)
+        return false;
+    const auto summary = makeProgramSummary(entry, nullptr, true);
+    const char* sensor = nullptr;
+    switch (summary.sensorPreference) {
+        case SensorPreference::ProductIfAvailableElseAir:
+            sensor = "product-if-available-else-air";
+            break;
+        case SensorPreference::AirProductOptional:
+            sensor = "air-product-optional";
+            break;
+        case SensorPreference::ProductRequired:
+            sensor = "product-required";
+            break;
+        case SensorPreference::AirOnly:
+            sensor = "air-only";
+            break;
+    }
+    const auto mode = defaultProgramStartSensorMode(summary.sensorPreference);
+    const auto revision = std::to_string(source.programCatalogRevision.value());
+    CJsonDocument document(cJSON_CreateObject());
+    if (!document || !cJSON_AddNumberToObject(document.get(), "version", 1.0) ||
+        !addString(document.get(), "catalogRevision", revision.c_str()))
+        return false;
+    auto* program = cJSON_AddObjectToObject(document.get(), "program");
+    if (!program || !sensor || !addString(program, "id", stored.id.c_str()) ||
+        !addString(program, "name", summary.name.c_str()) ||
+        !cJSON_AddBoolToObject(program, "builtIn", stored.builtIn) ||
+        !cJSON_AddBoolToObject(program, "startable", summary.valuesValid) ||
+        !addOptionalNumber(program, "targetCelsius",
+                           summary.targetTemperatureCelsius) ||
+        !addOptionalSeconds(
+            program, "durationMinutes",
+            summary.durationMinutes.has_value()
+                ? std::optional<std::uint64_t>(*summary.durationMinutes)
+                : std::nullopt) ||
+        !cJSON_AddBoolToObject(program, "preheat", summary.preheat) ||
+        !addString(program, "sensor", sensor) ||
+        !(mode.has_value()
+              ? addString(program, "defaultSensorMode",
+                          *mode == RunSensorMode::Product ? "product" : "air")
+              : cJSON_AddNullToObject(program, "defaultSensorMode") != nullptr))
+        return false;
+    auto* completion = cJSON_AddObjectToObject(program, "completion");
+    return completion &&
+           addString(completion, "mode",
+                     completionModeName(summary.completionMode)) &&
+           addOptionalNumber(
+               completion, "coolingTargetCelsius",
+               summary.completionMode == CompletionMode::FinishWithoutCooling
+                   ? std::nullopt
+                   : summary.coolingTargetCelsius) &&
+           addOptionalSeconds(
+               completion, "holdDurationMinutes",
+               summary.completionMode ==
+                           CompletionMode::CoolAndHoldForDuration &&
+                       summary.holdDurationMinutes.has_value()
+                   ? std::optional<std::uint64_t>(*summary.holdDurationMinutes)
+                   : std::nullopt) &&
+           serializeBounded(document.get(), output);
 }
 
 }  // namespace fermentation

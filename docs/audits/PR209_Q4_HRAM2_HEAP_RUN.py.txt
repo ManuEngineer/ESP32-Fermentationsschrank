@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""H-RAM-2 heap run client (authenticated, one client). Usage: heap_run.py OUT_JSONL PWFILE START_DELAY_S POLL_S
+Waits START_DELAY_S (idle phase, no request), then: login, shell GET, 5 s single-flight polling groups for POLL_S,
+rejected mutations for ten intents, two device-name commits (second restores the original name), settings reads.
+Stops at the first non-200 login, at the first invalid polling answer, and if a rejected intent returns 'applied'.
+Stdlib only; password/cookie/CSRF never logged."""
+import http.client, json, os, re, stat, sys, threading, time
+HOST = "<DEVICE_IP>"; out, pwfile, delay, poll_s = sys.argv[1], sys.argv[2], float(sys.argv[3]), int(sys.argv[4])
+assert not (stat.S_IMODE(os.stat(pwfile).st_mode) & 0o077)
+password = open(pwfile, encoding="utf-8").read().rstrip("\n")
+log = open(out, "a", buffering=1); T0 = time.monotonic()
+def emit(**kw):
+    kw["t"] = round(time.monotonic() - T0, 3); kw["wall"] = time.strftime("%Y-%m-%dT%H:%M:%S%z"); log.write(json.dumps(kw) + "\n")
+def req(method, path, headers=None, body=None):
+    c = http.client.HTTPConnection(HOST, 80, timeout=30); t = time.monotonic()
+    h = {"Origin": f"http://{HOST}", "Sec-Fetch-Site": "same-origin", "Connection": "close"}; h.update(headers or {})
+    try:
+        c.request(method, path, body=body, headers=h); r = c.getresponse(); d = r.read()
+        return r.status, d, r.getheader("Set-Cookie"), round(time.monotonic() - t, 3), None
+    except Exception as e:
+        return None, b"", None, round(time.monotonic() - t, 3), type(e).__name__
+    finally:
+        c.close()
+def stop(msg):
+    emit(event="STOP", reason=msg); sys.exit(2)
+emit(event="start", delay=delay); time.sleep(delay)
+st, d, ck, dt, err = req("POST", "/api/v1/login", {"Content-Type": "application/json"}, json.dumps({"password": password}))
+emit(event="login", status=st, seconds=dt, error=err)
+if st != 200 or not ck: stop("login not 200")
+H = {"Cookie": ck.split(";", 1)[0]}; csrf = json.loads(d).get("csrfToken", "")
+st, shell, _, dt, err = req("GET", "/", H); emit(event="shell", status=st, bytes=len(shell), seconds=dt)
+m = re.search(rb"let Q=(\d+)", shell)
+if st != 200 or not m: stop("shell/seq")
+seq = int(m.group(1))
+end = time.monotonic() + poll_s; nxt = time.monotonic(); grp = 0
+while time.monotonic() < end:
+    now = time.monotonic()
+    if now < nxt: time.sleep(min(0.2, nxt - now)); continue
+    grp += 1; res = {}
+    def one(n): res[n] = req("GET", f"/api/v1/{n}", H)
+    ths = [threading.Thread(target=one, args=(n,)) for n in ("status", "temperatures", "alerts")]
+    t = time.monotonic(); [x.start() for x in ths]; [x.join() for x in ths]
+    rec = {"event": "group", "group": grp, "seconds": round(time.monotonic() - t, 3)}
+    ok = True
+    for n in ("status", "temperatures", "alerts"):
+        s, b, _, secs, e = res[n]; v = False
+        if s == 200:
+            try: v = json.loads(b).get("version") == 1
+            except ValueError: v = False
+        rec[n] = {"status": s, "bytes": len(b), "seconds": secs, "valid": v, "error": e}; ok = ok and v
+    emit(**rec)
+    if not ok: stop(f"polling group {grp} invalid")
+    nxt += 5.0
+    if nxt < time.monotonic(): nxt = time.monotonic() + 5.0
+st, sd, _, _, _ = req("GET", "/api/v1/status", H); rev = json.loads(sd)["revisions"]
+MAP = {"stateSequence": "s", "run": "r", "messages": "m", "fault": "f", "recoveryEpisode": "e", "userConfiguration": "u", "programCatalog": "c"}
+r = {MAP[k]: v for k, v in rev.items() if k in MAP}
+def mutate(intent, revs=None, expect_applied=False):
+    global seq
+    st, d, _, dt, err = req("POST", "/internal/ui/run", {**H, "Content-Type": "application/json", "X-CSRF-Token": csrf, "X-UI-Mutation-Seq": str(seq)}, json.dumps({"v": 1, "r": revs if revs is not None else r, "i": intent}))
+    o = None
+    try: o = json.loads(d).get("outcome")
+    except Exception: pass
+    emit(event="MUTATION", type=intent["t"], status=st, outcome=o, seconds=dt, seq=seq)
+    if o != "sequence-conflict": seq += 1
+    if o == "applied" and not expect_applied: stop(f"unexpected applied for {intent['t']}")
+    return o
+st, pd, _, _, _ = req("GET", "/api/v1/programs", H); pj = json.loads(pd); rc = dict(r); rc["c"] = pj["catalogRevision"]
+mutate({"t": "start-program", "c": {"p": pj["programs"][0]["id"]}}, rc)
+mutate({"t": "sensor-selection", "a": "recheck-product"})
+mutate({"t": "start-manual-timed", "x": 30.5, "d": 120, "s": "air", "h": False, "q": 0.5, "qd": 10, "tr": 180, "c": "finish-without-cooling"})
+mutate({"t": "start-manual-holding", "p": {"x": 30, "s": "air", "h": False, "q": 0.5, "qd": 10, "tr": 180}})
+mutate({"t": "stop-run", "o": "abort-and-turn-off"}); mutate({"t": "complete-run", "c": False}); mutate({"t": "adjust-run", "x": 31.5, "d": 90})
+mutate({"t": "recovery-time-correction", "d": 20}); mutate({"t": "ack-message", "id": 7}); mutate({"t": "mute-message", "id": 7}); mutate({"t": "reset-fault"})
+st, sj, _, _, _ = req("GET", "/api/v1/settings", H); s = json.loads(sj); orig = s["deviceName"]; new = (orig + "-t")[:48]
+json.dump({"orig": orig}, open(os.path.join(os.path.dirname(out) or ".", "ORIGINAL_NAME.private.json"), "w"))
+o1 = mutate({"t": "set-device-name", "n": new}, {"u": s["revision"]}, True)
+st, sj, _, _, _ = req("GET", "/api/v1/settings", H); s2 = json.loads(sj); emit(event="after_first", nameChanged=s2["deviceName"] == new)
+o2 = mutate({"t": "set-device-name", "n": orig}, {"u": s2["revision"]}, True)
+st, sj, _, _, _ = req("GET", "/api/v1/settings", H); s3 = json.loads(sj); emit(event="after_revert", nameRestored=s3["deviceName"] == orig)
+emit(event="done")

@@ -1,0 +1,109 @@
+{
+  "approved_plan": "623bc4520bcf3601d3666e7c717ae00213047901",
+  "baseline_product": "095f393f0eed4eb95944c164a8e967ce973c3fc9",
+  "product": "e31e952def3264ca419187b86a2988bd20e3a487",
+  "implementation_commits": [
+    "832075fcc22b2ed4d98e907ef197e3a6e358ecf8",
+    "e31e952def3264ca419187b86a2988bd20e3a487"
+  ],
+  "idf_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+  "compiler": "xtensa-esp32-elf GCC 15.2.0 (esp-15.2.0_20251204)",
+  "abi": "ESP32 Xtensa windowed ABI, ELF32 little endian, real profile DB flags; -Og, C++17, -fno-exceptions",
+  "build_command": "python3 scripts/build_esp_idf_profiles.py all --require-clean-source-tree",
+  "build_result": "PASS: both profiles plus canonical profile contract; SOURCE_TREE_CLEAN=YES",
+  "self_check_command": "PRE_READY_EXPECTED_HEAD=e31e952def3264ca419187b86a2988bd20e3a487 bash scripts/run_pre_ready_gates.sh self-check",
+  "self_check_result": "PASS; clang-format and clang-tidy 21; no Pre-Ready run/status",
+  "profiles": {
+    "esp32_bringup": {
+      "project_version": "e31e952",
+      "hashes": {
+        "esp32_fermentationsschrank.bin": "1d8261e030269bfaeab65e9896446761f5e1fa011f39b32723b220172111c434",
+        "esp32_fermentationsschrank.elf": "20b380cd2f5e5cf6bfa18a8baf7a01b3bf0f96865b8c1eba5d2893fca8522b7e",
+        "compile_commands.json": "81af31378629c967f3a8b7aacaaaf1eb46924d28439dfce77689fec5b77b4e63",
+        "project_description.json": "b5b105169c4b0580e361ce3c05a8803e11c8d4b55f831808d4080b3f73696cc5",
+        "sdkconfig": "0b06aa5dab0ad26e2a3d97568ec83cda9654373c9c7cf0801880e19868ab7d1a",
+        "toolchain/cflags": "86e61f49841635cb1d9b28c1f3f19b02dc1279b5a4983543df94ece3b7adf66e",
+        "toolchain/cxxflags": "ecedf2f8c6a47e6a5799c87d84cdc5c972c83aa2b0a665ddf3c77fc69c4876a7"
+      },
+      "response_files": {
+        "toolchain/cflags": "-Wno-frame-address\n-mlongcalls\n-fno-builtin-memcpy\n-fno-builtin-memset\n-fno-builtin-bzero\n\"-specs=/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/build/esp32_bringup/specs/picolibc.specs\"\n",
+        "toolchain/cxxflags": "-Wno-frame-address\n-mlongcalls\n-fno-builtin-memcpy\n-fno-builtin-memset\n-fno-builtin-bzero\n\"-specs=/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/build/esp32_bringup/specs/picolibc.specs\"\n-fno-rtti\n"
+      },
+      "additional_sdk_instrumentation": [
+        "-fstack-usage",
+        "-fcallgraph-info=su"
+      ],
+      "original_sdk_adapter_units": 54,
+      "target_abi_object_sha256": "c6ef5f2e3c55d1899a45c04509dc08d5f622150c7eecd0b71903ce3fdfee8fa2"
+    },
+    "esp32_release": {
+      "project_version": "e31e952",
+      "hashes": {
+        "esp32_fermentationsschrank.bin": "38c2a625c0298c1d65acd7e3d3dc53a9aa530d8ef5b379b9f48c8be6c4c92d54",
+        "esp32_fermentationsschrank.elf": "3b402f120e41ed0deecc2d27a044fcaf2439c54bd8661809bbab05218777ca21",
+        "compile_commands.json": "a7852ecd88806accb11b6b79b9fad2ee5ced8a1a44310038b5e229c535e89ab0",
+        "project_description.json": "8f1e1ac8dc3cb5927675d9dae19eb18aca0dfb6cbabc7a9fb5a3a73f47e01fc2",
+        "sdkconfig": "9ab3490da37da6bd5a9689eb067c9739276974c0b3cfe20d8c40def2d925c3ea",
+        "toolchain/cflags": "caf7277b98fe770acb5622967d0cd3cc44b498735f9f7676c3423a06b5463235",
+        "toolchain/cxxflags": "26746724e1c5eda7cb0be325c278337745a2f90ce46429ac515c2590a2a6a02c"
+      },
+      "response_files": {
+        "toolchain/cflags": "-Wno-frame-address\n-mlongcalls\n-fno-builtin-memcpy\n-fno-builtin-memset\n-fno-builtin-bzero\n\"-specs=/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/build/esp32_release/specs/picolibc.specs\"\n",
+        "toolchain/cxxflags": "-Wno-frame-address\n-mlongcalls\n-fno-builtin-memcpy\n-fno-builtin-memset\n-fno-builtin-bzero\n\"-specs=/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/build/esp32_release/specs/picolibc.specs\"\n-fno-rtti\n"
+      },
+      "additional_sdk_instrumentation": [
+        "-fstack-usage",
+        "-fcallgraph-info=su"
+      ],
+      "original_sdk_adapter_units": 54,
+      "target_abi_object_sha256": "91e45d01ad62b362246ad9aec4be7d499699238d5f3870dad6611838c22eeb39"
+    }
+  },
+  "product_sources": {
+    "lib/fermentation_app/src/configuration_document_codec.cpp": "c8303d2a1956c24605eccc09284bc79a869f272700ff6e384e1af6aa0b46b90f",
+    "lib/fermentation_app/src/fermentation_application.cpp": "09194ff736b299a5d2dc6783cd9b09936bddb44ccdd27b58869f1a73147b2ac2",
+    "lib/fermentation_app/src/fermentation_application.hpp": "294d70dde72af256cc3e4c8c7ab3c37915223d7049b158e2ec39ed9aed85e791",
+    "lib/fermentation_app/src/fermentation_ui_commands.cpp": "a21e00ad469df0dad870c9e82977fd7fb870f6937a95c7f982db2a10cdf62b95",
+    "lib/fermentation_app/src/fermentation_ui_commands.hpp": "fab5f1c65ee424dee747129739ec7040e286fe23e24ecd2bed33af1083d069a4",
+    "lib/fermentation_app/src/program_model.cpp": "a5cc23c3600510297c1daaa52008d9737aecb4d948754d03ef6d13f7561115fb",
+    "lib/fermentation_app/src/program_model.hpp": "114ac783a0e52c3441fca13623ef0e53fa85d2f8fcca7d880a07efb38b934967",
+    "lib/fermentation_app/src/run_commands.cpp": "eff33621eb106aabbe592bafb19f8c57d1165710416496e36430a0dae26b9ef7",
+    "lib/fermentation_app/src/run_commands.hpp": "89860090f65c775e13f72ace6b1afef71b7e4813f579416f257f781cc03337cd",
+    "lib/fermentation_app/src/run_persistence_coordinator.cpp": "e74be96d3f0db636e91d9c2d02852dedbba7fe29a3d539042b6f85d9f1b8ea23",
+    "lib/fermentation_app/src/run_persistence_coordinator.hpp": "e553fc380ca56647ebc1553f77ff9f7981325bd16c3b502641a50d1b79f5f455",
+    "lib/fermentation_app/src/run_snapshot.cpp": "63d49d87af85546dce3cf0e292af5483c40f50c063c131f693bd86d0cfcc032a",
+    "lib/fermentation_app/src/run_snapshot.hpp": "6589a9abc8a46c425d1e846b7fde40012a0088ca8dafa0569df9a8453da88dad",
+    "lib/fermentation_app/src/web_application_routes.cpp": "7905d4987e794889c39a7de9b3c9ecfdda2ba2b277bc5ee6063e36441d8502a7"
+  },
+  "test_sources": {
+    "test/test_run_commands/test_run_commands.cpp": "09f97861530e7b33dec0de79fc9b3bd6b684d2353fb462471388418867154fc4",
+    "test/test_run_snapshots/test_run_snapshots.cpp": "f5423915d76f4f2048b48c00f82705a3e840144cf9662faeaf2f432f668aaa10",
+    "test/test_program_models/test_program_models.cpp": "0a995d80f41c589a4902ca6d350d3e4be73a98044cdb1e2fe7daa27367c74de3",
+    "test/test_configuration_documents/test_configuration_documents.cpp": "ebc8bda9aecbb5bcdc181ef054ddbbb8c271deaad5f96422835e31d39aab2364",
+    "test/test_configuration_graph_codecs/test_configuration_graph_codecs.cpp": "623bf62326098affe1fbce3203c12af32a3cc80f5dbea5da34d956426bc68f74",
+    "test/test_fermentation_ui_commands/test_fermentation_ui_commands.cpp": "f4063a1a77c61e6896c009670ad0350b6b49d105cb884987aa9cb05d6219cc35",
+    "test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp": "fab3a1c4a4fa1a2c6de4c83c3493f5a932ccc4db5113fea1761ebf3435fff28a",
+    "test/test_web_application_routes/shell_frozen_labels.json": "b96d6487c3ea3939775d2996683861ff70055b6a09dc7a67c1bdf926755082a1",
+    "test/test_web_application_routes/shell_golden.hpp": "99bf1131c5c4e915e0b34d7969126151e6126eb47b63f980830cdb4786e56020",
+    "test/test_web_application_routes/test_main.cpp": "6f303fd731053acfda602aec5cd1dbca18da9f39ef7b3a33f6485362d1ddc13e",
+    "test/test_configuration_graph_store/test_configuration_graph_store.cpp": "b7ff648709bb4a1726bc04f8c2176e7ddefaaf3fc61199cec04c37871f914d21",
+    "test/test_configuration_service/test_configuration_service.cpp": "e88b32324962470d033c8025bbf10f1df67078c487bcaebcdcba21d8e62f42bc",
+    "test/test_user_settings_application/test_user_settings_application.cpp": "921292c0615313222885ac6094782a5348551755dba627b376f2ceb8ddbd0161",
+    "test/test_run_checkpoint_codec/test_run_checkpoint_codec.cpp": "05689534fcbad23403b9e6c8954a48000104f1a551098de02db888c56eca9397",
+    "test/test_issue144_run_identity/test_issue144_run_identity.cpp": "1f808cc71dc66dde11082d23dadf61465af8033410f3a8d9133d4e8fd8fc7f5a",
+    "test/test_run_recovery_time/test_run_recovery_time.cpp": "e64e68068202b235a819dd61ad4dcbf9da924438afaa189c3307b1944fa8d11d",
+    "test/test_target_qualification/test_target_qualification.cpp": "8021f67f6f21b217bc5359cb2233dea5ec9dbfaa4f62a84cdf1479319465f69f",
+    "test/test_temperature_control/test_temperature_control.cpp": "a9e62e31b8102165c607043d094933a4128efd47b9d1111e9945097c4c9eb654",
+    "test/test_configuration_codecs/test_configuration_codecs.cpp": "d1fbb7fbdbbc153ab01baa9259465137097cacbe9dba469de8605a6af5f31e08",
+    "test/test_configuration_migration/test_configuration_migration.cpp": "cd6e3a3496cb9f160049bc96503d87536e661b67207d713dfaefcaca56a928c2",
+    "test/common/allocation_window.hpp": "7b5635a604dc05220a3e1ee602489c453a6a61a625df4599374d393d50419071"
+  },
+  "logs_sha256": {
+    "pr209-q4-product-build.log": "1912547b6fcb7986880057c5cd6784764a8b24f35b73e96d694c014517e1794c",
+    "pr209-q4-native-final.log": "07fc8263a10be4e38428a0acde881c3b365f477a711379e74b359fdfc61ad851",
+    "pr209-q4-self-check.log": "307c94d235cad6543ef38eac0a2aa8a83ea116fcb2d3fc6e4fc2bccfc7ae3000",
+    "pr209-q4-web-direct.log": "cd33d55cb7023c3e74adb3bd2c9283bc6f42507938ae3aa4b3b8408663d00cac",
+    "pr209-q4-baseline-direct.log": "52d57defa6d48e214c98181dd7b67fd851313b0a94bc22b89d9f12589f87cc6e",
+    "pr209-q4-product-analysis-compile.log": "d7aece4a7fe86271d2b47b020cc332845348917fe32358e609111823c0fa6312"
+  }
+}

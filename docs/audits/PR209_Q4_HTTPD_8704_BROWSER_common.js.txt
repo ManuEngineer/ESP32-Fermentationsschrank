@@ -1,0 +1,9 @@
+const fs = require('fs');
+const { chromium } = require('/home/manuel/.npm/_npx/e41f203b7505f1fb/node_modules/playwright-core');
+exports.pw = fs.readFileSync('/var/lib/docker/data/ESP32-Projekte/hw-evidence-pr209-p0/.pw', 'utf8').replace(/\n$/, '');
+exports.open = async () => {
+  const b = await chromium.launch({ headless: true });
+  const p = await (await b.newContext({ viewport: { width: 1000, height: 900 } })).newPage();
+  p.logs = []; p.on('console', m => p.logs.push(m.type() + ': ' + m.text())); p.on('pageerror', e => p.logs.push('pageerror: ' + e.message));
+  return { b, p };
+};

@@ -167,6 +167,9 @@ bool validateUniqueHttpRequestMetadataHeaders(
 
 bool validateHttpResponseMetadata(
     const HttpResponseMetadata& metadata) noexcept {
+    if (metadata.cache != HttpResponseCache::None &&
+        metadata.cache != HttpResponseCache::ImmutableAsset)
+        return false;
     if (metadata.setCookie.has_value() &&
         !validValue(*metadata.setCookie, kMaximumSetCookieBytes)) {
         return false;

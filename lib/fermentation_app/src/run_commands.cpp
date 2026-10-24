@@ -1,5 +1,7 @@
 #include "run_commands.hpp"
 
+#include <type_traits>
+
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -174,9 +176,10 @@ void rememberProcessedCommand(RunCommandState& state, CommandId id) {
     state.processedCommandIds.back() = id;
 }
 
+template <typename Decision>
 void resultIntoLocal(const RunCommandState& current,
                      const CommandEnvelope& envelope, CommandKind kind,
-                     CommandStatus status, CommandDecision& destination) {
+                     CommandStatus status, Decision& destination) {
     destination.startSummary.reset();
     destination.adjustmentPreview.reset();
     destination.effectCount = 0U;
@@ -188,13 +191,23 @@ void resultIntoLocal(const RunCommandState& current,
     destination.status = status;
     destination.kind = kind;
     destination.envelope = envelope;
-    destination.before = current;
+    if constexpr (std::is_same_v<Decision, CommandDecision>) {
+        destination.before = current;
+    }
+    if constexpr (std::is_same_v<Decision, CommandDecisionView>) {
+        // Reject a foreign/aliased destination before touching any run state.
+        if (&current != &destination.before || &current == &destination.after) {
+            destination.status = CommandStatus::InvalidInput;
+            return;
+        }
+    }
     destination.after = current;
 }
 
+template <typename Decision>
 void beginDecisionIntoLocal(const RunCommandState& current,
                             const CommandEnvelope& envelope, CommandKind kind,
-                            CommandDecision& destination) {
+                            Decision& destination) {
     resultIntoLocal(current, envelope, kind, CommandStatus::Proposed,
                     destination);
     auto& decision = destination;
@@ -217,26 +230,20 @@ void beginDecisionIntoLocal(const RunCommandState& current,
     }
 }
 
-CommandDecision beginDecision(const RunCommandState& current,
-                              const CommandEnvelope& envelope,
-                              CommandKind kind) {
-    CommandDecision decision;
-    beginDecisionIntoLocal(current, envelope, kind, decision);
-    return decision;
-}
-
 // Die Kommandosequenz gehoert zur tatsaechlich vorgeschlagenen Gesamtmutation.
 // Sie wird deshalb erst nach allen nicht mutierenden Fachpruefungen unmittelbar
 // an der Commit-Grenze erhoeht. Abgelehnte Entscheidungen behalten damit einen
 // zu `before` identischen `after`-Zustand.
-void beginMutation(CommandDecision& decision) {
+template <typename Decision>
+void beginMutation(Decision& decision) {
     decision.after.commandSequence = decision.before.commandSequence + 1U;
     rememberProcessedCommand(decision.after, decision.envelope.id);
     decision.after.lastCommandMonotonicMillis =
         decision.envelope.monotonicMillis;
 }
 
-bool requireRunRevision(CommandDecision& decision) {
+template <typename Decision>
+bool requireRunRevision(Decision& decision) {
     if (!decision.proposed()) {
         return false;
     }
@@ -251,7 +258,8 @@ bool requireRunRevision(CommandDecision& decision) {
     return true;
 }
 
-bool requireRecoveryEpisodeRevision(CommandDecision& decision) {
+template <typename Decision>
+bool requireRecoveryEpisodeRevision(Decision& decision) {
     if (!decision.proposed()) {
         return false;
     }
@@ -267,7 +275,8 @@ bool requireRecoveryEpisodeRevision(CommandDecision& decision) {
     return true;
 }
 
-bool requireMessageRevision(CommandDecision& decision) {
+template <typename Decision>
+bool requireMessageRevision(Decision& decision) {
     if (!decision.proposed()) {
         return false;
     }
@@ -289,8 +298,8 @@ bool requireMessageRevision(CommandDecision& decision) {
 // aufgerufen werden, damit ein bereits an `UINT32_MAX` stehender Zaehler
 // `CapacityReached` liefert, ohne eine teilweise erzeugte Entscheidung, einen
 // veraenderten `after`-Zustand oder einen Effect-Eintrag zu hinterlassen.
-bool requireRevisionCapacity(CommandDecision& decision,
-                             std::uint32_t revision) {
+template <typename Decision>
+bool requireRevisionCapacity(Decision& decision, std::uint32_t revision) {
     if (!decision.proposed()) {
         return false;
     }
@@ -301,7 +310,8 @@ bool requireRevisionCapacity(CommandDecision& decision,
     return true;
 }
 
-bool addEffect(CommandDecision& decision, CommandEffect effect) {
+template <typename Decision>
+bool addEffect(Decision& decision, CommandEffect effect) {
     if (decision.effectCount >= decision.effects.size()) {
         decision.status = CommandStatus::CapacityReached;
         return false;
@@ -462,6 +472,27 @@ CommandStatus mapSensorSelectionRejection(SensorSelectionApplyStatus status) {
 // Produkt bei ProductIfAvailableElseAir, aber zum Startzeitpunkt nicht
 // gueltig - automatischer Ersatz auf Luft). Die Luft-/Kuehlkoerper-
 // Vorbedingung (Zeile-uebergreifend) wird vom Aufrufer separat geprueft.
+template <typename Decision>
+struct RestoreRejectedAfter {
+    Decision& decision;
+    const RunCommandState& input;
+    RestoreRejectedAfter(Decision& target, const RunCommandState& before)
+        : decision(target), input(before) {}
+    RestoreRejectedAfter(const RestoreRejectedAfter&) = delete;
+    RestoreRejectedAfter& operator=(const RestoreRejectedAfter&) = delete;
+    RestoreRejectedAfter(RestoreRejectedAfter&&) = delete;
+    RestoreRejectedAfter& operator=(RestoreRejectedAfter&&) = delete;
+    ~RestoreRejectedAfter() {
+        if constexpr (std::is_same_v<Decision, CommandDecisionView>) {
+            if (&input != &decision.before || &input == &decision.after) {
+                return;
+            }
+        }
+        if (!decision.proposed()) {
+            decision.after = decision.before;
+        }
+    }
+};
 }  // namespace
 
 std::optional<RunSensorMode> defaultProgramStartSensorMode(
@@ -607,16 +638,42 @@ bool validStopOption(StopOption option) {
 
 }  // namespace
 
+namespace {
+template <typename Decision>
+void resultIntoCore(const RunCommandState& current,
+                    const CommandEnvelope& envelope, CommandKind kind,
+                    CommandStatus status, Decision& destination) {
+    resultIntoLocal(current, envelope, kind, status, destination);
+}
+}  // namespace
 void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
                 CommandKind kind, CommandStatus status,
                 CommandDecision& destination) {
-    resultIntoLocal(current, envelope, kind, status, destination);
+    resultIntoCore(current, envelope, kind, status, destination);
+}
+void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                CommandKind kind, CommandStatus status,
+                CommandDecisionView& destination) {
+    resultIntoCore(current, envelope, kind, status, destination);
 }
 
+namespace {
+template <typename Decision>
+void beginDecisionIntoCore(const RunCommandState& current,
+                           const CommandEnvelope& envelope, CommandKind kind,
+                           Decision& destination) {
+    beginDecisionIntoLocal(current, envelope, kind, destination);
+}
+}  // namespace
 void beginDecisionInto(const RunCommandState& current,
                        const CommandEnvelope& envelope, CommandKind kind,
                        CommandDecision& destination) {
-    beginDecisionIntoLocal(current, envelope, kind, destination);
+    beginDecisionIntoCore(current, envelope, kind, destination);
+}
+void beginDecisionInto(const RunCommandState& current,
+                       const CommandEnvelope& envelope, CommandKind kind,
+                       CommandDecisionView& destination) {
+    beginDecisionIntoCore(current, envelope, kind, destination);
 }
 
 // #21, 6.14.6: einzige Implementierung; ersetzt das vormalige
@@ -736,12 +793,15 @@ std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
                : std::nullopt;
 }
 
-void decideProgramStartInto(const RunCommandState& current,
-                            const ProgramStartRequest& request,
-                            CommandDecision& destination) {
+namespace {
+template <typename Decision>
+void decideProgramStartIntoCore(const RunCommandState& current,
+                                const ProgramStartRequest& request,
+                                Decision& destination) {
     beginDecisionInto(current, request.envelope, CommandKind::StartProgram,
                       destination);
     auto& decision = destination;
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireRunRevision(decision)) {
         return;
     }
@@ -783,8 +843,10 @@ void decideProgramStartInto(const RunCommandState& current,
         return;
     }
 
-    auto run = ActiveRun::start(request.program, request.sourceProgramRevision);
-    if (!run.has_value()) {
+    auto& run = decision.after.activeProgramRun;
+    if (!ActiveRun::startInto(request.program, request.sourceProgramRevision,
+                              run) ||
+        !run.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return;
     }
@@ -839,7 +901,7 @@ void decideProgramStartInto(const RunCommandState& current,
         return;
     }
 
-    auto candidate = decision.before;
+    auto& candidate = decision.after;
     if (!applyTransition(candidate, ProcessEvent::StartRun,
                          request.envelope.monotonicMillis, &*snapshot)) {
         decision.status = CommandStatus::InvalidInput;
@@ -853,10 +915,8 @@ void decideProgramStartInto(const RunCommandState& current,
 
     candidate.activeRunId = request.runId;
     candidate.activeRunSensorMode = resolution.effectiveMode;
-    candidate.activeProgramRun = std::move(run);
     candidate.activeManualRun.reset();
     candidate.processRunSnapshot = *snapshot;
-    decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
     const auto outcome = startSensorSelectionOutcome(
@@ -867,13 +927,27 @@ void decideProgramStartInto(const RunCommandState& current,
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
 }
+}  // namespace
+void decideProgramStartInto(const RunCommandState& current,
+                            const ProgramStartRequest& request,
+                            CommandDecision& destination) {
+    decideProgramStartIntoCore(current, request, destination);
+}
+void decideProgramStartInto(const RunCommandState& current,
+                            const ProgramStartRequest& request,
+                            CommandDecisionView& destination) {
+    decideProgramStartIntoCore(current, request, destination);
+}
 
-void decideManualStartInto(const RunCommandState& current,
-                           const ManualStartRequest& request,
-                           CommandDecision& destination) {
+namespace {
+template <typename Decision>
+void decideManualStartIntoCore(const RunCommandState& current,
+                               const ManualStartRequest& request,
+                               Decision& destination) {
     beginDecisionInto(current, request.envelope,
                       CommandKind::StartManualHolding, destination);
     auto& decision = destination;
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireRunRevision(decision)) {
         return;
     }
@@ -920,7 +994,7 @@ void decideManualStartInto(const RunCommandState& current,
         return;
     }
 
-    auto candidate = decision.before;
+    auto& candidate = decision.after;
     if (!installManualRun(candidate, decision.envelope, std::move(*plan))) {
         decision.status = CommandStatus::InvalidInput;
         return;
@@ -929,7 +1003,6 @@ void decideManualStartInto(const RunCommandState& current,
         decision.status = CommandStatus::NotConfirmed;
         return;
     }
-    decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
     // #21, 6.8: kein automatischer Ersatz bei manuellem Start - substituted
@@ -946,6 +1019,17 @@ void decideManualStartInto(const RunCommandState& current,
     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
 }
+}  // namespace
+void decideManualStartInto(const RunCommandState& current,
+                           const ManualStartRequest& request,
+                           CommandDecision& destination) {
+    decideManualStartIntoCore(current, request, destination);
+}
+void decideManualStartInto(const RunCommandState& current,
+                           const ManualStartRequest& request,
+                           CommandDecisionView& destination) {
+    decideManualStartIntoCore(current, request, destination);
+}
 
 CommandDecision decideProgramStart(const RunCommandState& current,
                                    const ProgramStartRequest& request) {
@@ -961,60 +1045,64 @@ CommandDecision decideManualStart(const RunCommandState& current,
     return decision;
 }
 
-CommandDecision decideStop(const RunCommandState& current,
-                           const StopRequest& request) {
-    auto decision =
-        beginDecision(current, request.envelope, CommandKind::AbortAndTurnOff);
+namespace {
+template <typename Decision>
+void decideStopIntoCore(const RunCommandState& current,
+                        const StopRequest& request, Decision& destination) {
+    beginDecisionInto(current, request.envelope, CommandKind::AbortAndTurnOff,
+                      destination);
+    auto& decision = destination;
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!decision.proposed()) {
-        return decision;
+        return;
     }
     if (!validStopOption(request.option)) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     if (request.option == StopOption::Back) {
         decision.status = CommandStatus::NoChange;
-        return decision;
+        return;
     }
     if (request.option == StopOption::AbortAndCool) {
         decision.kind = CommandKind::AbortAndCool;
     }
     if (!requireRunRevision(decision)) {
-        return decision;
+        return;
     }
     if (!activeProcessState(current.processState.state) ||
         !current.processRunSnapshot.has_value()) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
 
     std::optional<ManualRunPlan> coolingPlan;
     if (request.option == StopOption::AbortAndCool) {
         if (!request.safetyAllowsCooling) {
             decision.status = CommandStatus::SafetyRejected;
-            return decision;
+            return;
         }
         if (!request.coolingPlan.has_value()) {
             decision.status = CommandStatus::ContextMissing;
-            return decision;
+            return;
         }
         coolingPlan = makeManualPlan(*request.coolingPlan, request.envelope);
         if (!coolingPlan.has_value()) {
             decision.status = CommandStatus::InvalidInput;
-            return decision;
+            return;
         }
     }
 
     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
-        return decision;
+        return;
     }
 
-    auto candidate = decision.before;
+    auto& candidate = decision.after;
     if (!applyTransition(candidate, ProcessEvent::Abort,
                          request.envelope.monotonicMillis,
                          &*current.processRunSnapshot)) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
     clearActiveRunState(candidate);
 
@@ -1022,15 +1110,14 @@ CommandDecision decideStop(const RunCommandState& current,
         !installManualRun(candidate, decision.envelope,
                           std::move(*coolingPlan))) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
 
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
-        return decision;
+        return;
     }
 
-    decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
     // #21, 6.5/6.14.6: der Kuehl-Ersatzlauf ist ebenfalls ein aktiver Lauf
@@ -1061,63 +1148,82 @@ CommandDecision decideStop(const RunCommandState& current,
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
+}
+}  // namespace
+void decideStopInto(const RunCommandState& current, const StopRequest& request,
+                    CommandDecision& destination) {
+    decideStopIntoCore(current, request, destination);
+}
+void decideStopInto(const RunCommandState& current, const StopRequest& request,
+                    CommandDecisionView& destination) {
+    decideStopIntoCore(current, request, destination);
+}
+
+CommandDecision decideStop(const RunCommandState& current,
+                           const StopRequest& request) {
+    CommandDecision decision;
+    decideStopInto(current, request, decision);
     return decision;
 }
 
-CommandDecision decideCompletion(const RunCommandState& current,
-                                 const CompletionRequest& request) {
+namespace {
+template <typename Decision>
+void decideCompletionIntoCore(const RunCommandState& current,
+                              const CompletionRequest& request,
+                              Decision& destination) {
     const auto kind = request.startCooling ? CommandKind::CoolAfterCompletion
                                            : CommandKind::AcknowledgeCompletion;
-    auto decision = beginDecision(current, request.envelope, kind);
+    beginDecisionInto(current, request.envelope, kind, destination);
+    auto& decision = destination;
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireRunRevision(decision)) {
-        return decision;
+        return;
     }
     if (current.processState.state != ProcessState::Completed) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
 
     std::optional<ManualRunPlan> coolingPlan;
     if (request.startCooling) {
         if (!request.safetyAllowsCooling) {
             decision.status = CommandStatus::SafetyRejected;
-            return decision;
+            return;
         }
         if (!request.coolingPlan.has_value()) {
             decision.status = CommandStatus::ContextMissing;
-            return decision;
+            return;
         }
         coolingPlan = makeManualPlan(*request.coolingPlan, request.envelope);
         if (!coolingPlan.has_value()) {
             decision.status = CommandStatus::InvalidInput;
-            return decision;
+            return;
         }
     }
 
     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
-        return decision;
+        return;
     }
 
-    auto candidate = decision.before;
+    auto& candidate = decision.after;
     if (!applyTransition(candidate, ProcessEvent::AcknowledgeCompletion,
                          request.envelope.monotonicMillis, nullptr)) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
     clearActiveRunState(candidate);
     if (coolingPlan.has_value() &&
         !installManualRun(candidate, decision.envelope,
                           std::move(*coolingPlan))) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
 
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
-        return decision;
+        return;
     }
 
-    decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
     // #21, 6.5/6.14.6: siehe decideStop - derselbe Kuehl-Ersatzlauf-Fall
@@ -1136,22 +1242,43 @@ CommandDecision decideCompletion(const RunCommandState& current,
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
+}
+}  // namespace
+void decideCompletionInto(const RunCommandState& current,
+                          const CompletionRequest& request,
+                          CommandDecision& destination) {
+    decideCompletionIntoCore(current, request, destination);
+}
+void decideCompletionInto(const RunCommandState& current,
+                          const CompletionRequest& request,
+                          CommandDecisionView& destination) {
+    decideCompletionIntoCore(current, request, destination);
+}
+
+CommandDecision decideCompletion(const RunCommandState& current,
+                                 const CompletionRequest& request) {
+    CommandDecision decision;
+    decideCompletionInto(current, request, decision);
     return decision;
 }
 
-CommandDecision decideRunAdjustment(
-    const RunCommandState& current,
-    const RunAdjustmentCommandRequest& request) {
-    auto decision =
-        beginDecision(current, request.envelope, CommandKind::AdjustRun);
+namespace {
+template <typename Decision>
+void decideRunAdjustmentIntoCore(const RunCommandState& current,
+                                 const RunAdjustmentCommandRequest& request,
+                                 Decision& destination) {
+    beginDecisionInto(current, request.envelope, CommandKind::AdjustRun,
+                      destination);
+    auto& decision = destination;
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireRunRevision(decision)) {
-        return decision;
+        return;
     }
     if (!adjustmentAllowedIn(current.processState.state) ||
         !current.activeProgramRun.has_value() ||
         !current.processRunSnapshot.has_value()) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
 
     RunAdjustmentRequest adjustment;
@@ -1168,11 +1295,11 @@ CommandDecision decideRunAdjustment(
         current.activeProgramRun->decideAdjustment(adjustment, context);
     if (!runDecision.proposed()) {
         decision.status = mapAdjustmentStatus(runDecision.status);
-        return decision;
+        return;
     }
 
     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
-        return decision;
+        return;
     }
 
     const auto beforeValues = current.activeProgramRun->effectiveValues();
@@ -1185,27 +1312,27 @@ CommandDecision decideRunAdjustment(
             current, request.envelope.monotonicMillis);
         if (!observedDelta.has_value()) {
             decision.status = CommandStatus::InvalidInput;
-            return decision;
+            return;
         }
     }
-    auto candidate = decision.before;
+    auto& candidate = decision.after;
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
         if (!observedDelta.has_value() ||
             !foldObservedRunSeconds(candidate, *observedDelta)) {
             decision.status = CommandStatus::InvalidInput;
-            return decision;
+            return;
         }
     }
     if (!candidate.activeProgramRun.has_value()) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     auto& adjustedRun = candidate.activeProgramRun.value();
     const auto applied = adjustedRun.applyAdjustment(runDecision);
     if (!applied.applied()) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     const auto afterValues = adjustedRun.effectiveValues();
     const bool targetChanged = beforeValues.targetTemperatureCelsius !=
@@ -1213,7 +1340,7 @@ CommandDecision decideRunAdjustment(
     candidate.processRunSnapshot = makeProcessRunSnapshot(adjustedRun);
     if (!candidate.processRunSnapshot.has_value()) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
 
     if (targetChanged &&
@@ -1222,7 +1349,7 @@ CommandDecision decideRunAdjustment(
                          request.envelope.monotonicMillis,
                          &*candidate.processRunSnapshot)) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     decision.committedControlContextTransition =
         targetContextTransition(targetChanged);
@@ -1246,10 +1373,9 @@ CommandDecision decideRunAdjustment(
 
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
-        return decision;
+        return;
     }
 
-    decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
     decision.adjustmentPreview = RunAdjustmentPreview{
@@ -1261,17 +1387,38 @@ CommandDecision decideRunAdjustment(
             RunAdjustmentEffect::ContinueFermentationWithoutRequalification,
     };
     static_cast<void>(addEffect(decision, CommandEffect::RunAdjusted));
+}
+}  // namespace
+void decideRunAdjustmentInto(const RunCommandState& current,
+                             const RunAdjustmentCommandRequest& request,
+                             CommandDecision& destination) {
+    decideRunAdjustmentIntoCore(current, request, destination);
+}
+void decideRunAdjustmentInto(const RunCommandState& current,
+                             const RunAdjustmentCommandRequest& request,
+                             CommandDecisionView& destination) {
+    decideRunAdjustmentIntoCore(current, request, destination);
+}
+
+CommandDecision decideRunAdjustment(
+    const RunCommandState& current,
+    const RunAdjustmentCommandRequest& request) {
+    CommandDecision decision;
+    decideRunAdjustmentInto(current, request, decision);
     return decision;
 }
 
-CommandDecision decideApplyRecoveryTimeCorrection(
+namespace {
+template <typename Decision>
+void decideApplyRecoveryTimeCorrectionIntoCore(
     const RunCommandState& current,
-    const ApplyRecoveryTimeCorrectionRequest& request) {
-    auto decision = beginDecision(current, request.envelope,
-                                  CommandKind::ApplyRecoveryTimeCorrection);
+    const ApplyRecoveryTimeCorrectionRequest& request, Decision& decision) {
+    beginDecisionInto(current, request.envelope,
+                      CommandKind::ApplyRecoveryTimeCorrection, decision);
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireRunRevision(decision) ||
         !requireRecoveryEpisodeRevision(decision)) {
-        return decision;
+        return;
     }
     if (current.processState.state != ProcessState::Fermenting ||
         !current.priorBootPhaseElapsed.has_value() ||
@@ -1279,7 +1426,7 @@ CommandDecision decideApplyRecoveryTimeCorrection(
             ProcessState::Fermenting ||
         !current.priorBootPhaseElapsed->elapsed.upperBoundSeconds.has_value()) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
 
     const auto currentAdjustment = current.nominalRecoveryAdjustment.has_value()
@@ -1292,13 +1439,13 @@ CommandDecision decideApplyRecoveryTimeCorrection(
             currentAdjustment.lastAppliedEpisodeDelta == request.secondsDelta
                 ? CommandStatus::AlreadyProcessed
                 : CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
 
     if (request.secondsDelta > std::numeric_limits<std::uint32_t>::max() -
                                    currentAdjustment.cumulativeAppliedSeconds) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     const auto newCumulative =
         currentAdjustment.cumulativeAppliedSeconds + request.secondsDelta;
@@ -1308,94 +1455,162 @@ CommandDecision decideApplyRecoveryTimeCorrection(
         newCumulative;
     if (lower > *current.priorBootPhaseElapsed->elapsed.upperBoundSeconds) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
 
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
-        return decision;
+        return;
     }
 
     beginMutation(decision);
     decision.after.nominalRecoveryAdjustment = NominalRecoveryAdjustmentState{
         newCumulative, current.recoveryEpisodeRevision, request.secondsDelta};
+}
+}  // namespace
+
+void decideApplyRecoveryTimeCorrectionInto(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request,
+    CommandDecision& destination) {
+    decideApplyRecoveryTimeCorrectionIntoCore(current, request, destination);
+}
+void decideApplyRecoveryTimeCorrectionInto(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request,
+    CommandDecisionView& destination) {
+    decideApplyRecoveryTimeCorrectionIntoCore(current, request, destination);
+}
+
+CommandDecision decideApplyRecoveryTimeCorrection(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request) {
+    CommandDecision decision;
+    decideApplyRecoveryTimeCorrectionInto(current, request, decision);
     return decision;
 }
 
-CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
-                                         const MessageCommandRequest& request) {
-    auto decision = beginDecision(current, request.envelope,
-                                  CommandKind::AcknowledgeMessage);
+namespace {
+template <typename Decision>
+void decideAcknowledgeMessageIntoCore(const RunCommandState& current,
+                                      const MessageCommandRequest& request,
+                                      Decision& destination) {
+    beginDecisionInto(current, request.envelope,
+                      CommandKind::AcknowledgeMessage, destination);
+    auto& decision = destination;
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireMessageRevision(decision)) {
-        return decision;
+        return;
     }
     auto* message = findMessage(decision.after, request.messageId);
     if (message == nullptr) {
         decision.status = CommandStatus::ContextMissing;
-        return decision;
+        return;
     }
     if (message->acknowledged) {
         decision.status = CommandStatus::NoChange;
-        return decision;
+        return;
     }
     if (!requireRevisionCapacity(decision, message->revision) ||
         !requireRevisionCapacity(decision, decision.after.messageRevision)) {
-        return decision;
+        return;
     }
     beginMutation(decision);
     message->acknowledged = true;
     ++message->revision;
     ++decision.after.messageRevision;
     static_cast<void>(addEffect(decision, CommandEffect::MessageAcknowledged));
+}
+}  // namespace
+void decideAcknowledgeMessageInto(const RunCommandState& current,
+                                  const MessageCommandRequest& request,
+                                  CommandDecision& destination) {
+    decideAcknowledgeMessageIntoCore(current, request, destination);
+}
+void decideAcknowledgeMessageInto(const RunCommandState& current,
+                                  const MessageCommandRequest& request,
+                                  CommandDecisionView& destination) {
+    decideAcknowledgeMessageIntoCore(current, request, destination);
+}
+
+CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
+                                         const MessageCommandRequest& request) {
+    CommandDecision decision;
+    decideAcknowledgeMessageInto(current, request, decision);
     return decision;
 }
 
-CommandDecision decideMuteMessage(const RunCommandState& current,
-                                  const MessageCommandRequest& request) {
-    auto decision =
-        beginDecision(current, request.envelope, CommandKind::MuteMessage);
+namespace {
+template <typename Decision>
+void decideMuteMessageIntoCore(const RunCommandState& current,
+                               const MessageCommandRequest& request,
+                               Decision& destination) {
+    beginDecisionInto(current, request.envelope, CommandKind::MuteMessage,
+                      destination);
+    auto& decision = destination;
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireMessageRevision(decision)) {
-        return decision;
+        return;
     }
     auto* message = findMessage(decision.after, request.messageId);
     if (message == nullptr) {
         decision.status = CommandStatus::ContextMissing;
-        return decision;
+        return;
     }
     if (message->acousticMuted) {
         decision.status = CommandStatus::NoChange;
-        return decision;
+        return;
     }
     if (!requireRevisionCapacity(decision, message->revision) ||
         !requireRevisionCapacity(decision, decision.after.messageRevision)) {
-        return decision;
+        return;
     }
     beginMutation(decision);
     message->acousticMuted = true;
     ++message->revision;
     ++decision.after.messageRevision;
     static_cast<void>(addEffect(decision, CommandEffect::AcousticMuted));
+}
+}  // namespace
+void decideMuteMessageInto(const RunCommandState& current,
+                           const MessageCommandRequest& request,
+                           CommandDecision& destination) {
+    decideMuteMessageIntoCore(current, request, destination);
+}
+void decideMuteMessageInto(const RunCommandState& current,
+                           const MessageCommandRequest& request,
+                           CommandDecisionView& destination) {
+    decideMuteMessageIntoCore(current, request, destination);
+}
+
+CommandDecision decideMuteMessage(const RunCommandState& current,
+                                  const MessageCommandRequest& request) {
+    CommandDecision decision;
+    decideMuteMessageInto(current, request, decision);
     return decision;
 }
 
-CommandDecision decideApplySensorSelectionAction(
+namespace {
+template <typename Decision>
+void decideApplySensorSelectionActionIntoCore(
     const RunCommandState& current,
     const SensorSelectionCommandRequest& request,
-    const CrossRolePlausibilityContext& plausibility) {
-    auto decision = beginDecision(current, request.envelope,
-                                  CommandKind::ApplySensorSelectionAction);
+    const CrossRolePlausibilityContext& plausibility, Decision& decision) {
+    beginDecisionInto(current, request.envelope,
+                      CommandKind::ApplySensorSelectionAction, decision);
+    RestoreRejectedAfter<Decision> const rollback{decision, current};
     if (!requireRunRevision(decision)) {
-        return decision;
+        return;
     }
     if (!current.activeProgramRun.has_value() &&
         !current.activeManualRun.has_value()) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
     if (current.activeRunId.empty() ||
         !current.activeRunSensorMode.has_value()) {
         decision.status = CommandStatus::ContextMissing;
-        return decision;
+        return;
     }
     // 6.14.1 Aktionsspezifische Matrix bei criticalSafetyEventPending:
     // ContinueWithAir/ReturnToProduct enden hier fail-closed, bevor der
@@ -1409,7 +1624,7 @@ CommandDecision decideApplySensorSelectionAction(
         decision.status = CommandStatus::SafetyRejected;
         decision.sensorSelectionApplyStatus =
             SensorSelectionApplyStatus::InvalidDecision;
-        return decision;
+        return;
     }
 
     const auto view = sensorSelectionViewFrom(current);
@@ -1430,36 +1645,35 @@ CommandDecision decideApplySensorSelectionAction(
         // oder Permissionmutation bleibt bei offenem kritischem Safety-
         // Ereignis verworfen - kein Write, kein RAM-Apply.
         decision.status = CommandStatus::SafetyRejected;
-        return decision;
+        return;
     }
 
     switch (mutation.status) {
         case SensorSelectionApplyStatus::NoChange:
             decision.status = CommandStatus::NoChange;
-            return decision;
+            return;
         case SensorSelectionApplyStatus::AppliedPersistentCandidate:
         case SensorSelectionApplyStatus::AppliedRamOnly: {
-            auto candidate = decision.before;
             // Korrekturauftrag Befund 1: gemeinsamer mechanischer
             // Mutationshelfer mit dem automatischen Pfad (siehe
             // run_persistence_coordinator.cpp::persistSensorSelection).
-            applySensorSelectionMutation(candidate, mutation);
+            applySensorSelectionMutation(decision.after, mutation);
             if (mutation.event.has_value() &&
                 resolveControlSensorRoleTransition(
                     decision.before.processState.state,
                     decision.before.activeRunSensorMode,
-                    candidate.processState.state, candidate.activeRunSensorMode)
+                    decision.after.processState.state,
+                    decision.after.activeRunSensorMode)
                     .has_value() &&
                 !applySensorRoleChangeQualificationReset(
-                    candidate, request.envelope.monotonicMillis)) {
+                    decision.after, request.envelope.monotonicMillis)) {
                 decision.status = CommandStatus::InvalidInput;
-                return decision;
+                return;
             }
             if (!request.envelope.confirmed) {
                 decision.status = CommandStatus::NotConfirmed;
-                return decision;
+                return;
             }
-            decision.after = std::move(candidate);
             beginMutation(decision);
             if (mutation.event.has_value()) {
                 decision.sensorSelectionEvent = mutation.event;
@@ -1489,7 +1703,7 @@ CommandDecision decideApplySensorSelectionAction(
                         : CommandEffect::SensorSelectionPermissionRestored;
                 static_cast<void>(addEffect(decision, effect));
             }
-            return decision;
+            return;
         }
         case SensorSelectionApplyStatus::StaleDecision:
         case SensorSelectionApplyStatus::InvalidDecision:
@@ -1497,14 +1711,44 @@ CommandDecision decideApplySensorSelectionAction(
         case SensorSelectionApplyStatus::TimeWentBackwards:
         case SensorSelectionApplyStatus::CapacityReached:
             decision.status = mapSensorSelectionRejection(mutation.status);
-            return decision;
+            return;
     }
     decision.status = CommandStatus::InvalidInput;
+}
+}  // namespace
+
+void decideApplySensorSelectionActionInto(
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility,
+    CommandDecision& destination) {
+    decideApplySensorSelectionActionIntoCore(current, request, plausibility,
+                                             destination);
+}
+void decideApplySensorSelectionActionInto(
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility,
+    CommandDecisionView& destination) {
+    decideApplySensorSelectionActionIntoCore(current, request, plausibility,
+                                             destination);
+}
+
+CommandDecision decideApplySensorSelectionAction(
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility) {
+    CommandDecision decision;
+    decideApplySensorSelectionActionInto(current, request, plausibility,
+                                         decision);
     return decision;
 }
 
-CommandStatus applyRunCommand(RunCommandState& current,
-                              const CommandDecision& decision) {
+namespace {
+template <typename Decision, typename Before>
+CommandStatus validateRunCommandCore(const RunCommandState& current,
+                                     const Decision& decision,
+                                     const Before& before) {
     if (containsProcessedCommand(current, decision.envelope.id)) {
         return CommandStatus::AlreadyProcessed;
     }
@@ -1513,16 +1757,15 @@ CommandStatus applyRunCommand(RunCommandState& current,
         return CommandStatus::SafetyRejected;
     }
     if (!decision.proposed() ||
-        current.commandSequence != decision.before.commandSequence ||
-        !equalProcessRuntimeState(current.processState,
-                                  decision.before.processState) ||
-        current.runRevision != decision.before.runRevision ||
-        current.messageRevision != decision.before.messageRevision ||
-        current.faultRevision != decision.before.faultRevision ||
+        current.commandSequence != before.commandSequence ||
+        !equalProcessRuntimeState(current.processState, before.processState) ||
+        current.runRevision != before.runRevision ||
+        current.messageRevision != before.messageRevision ||
+        current.faultRevision != before.faultRevision ||
         current.criticalSafetyEventPending !=
-            decision.before.criticalSafetyEventPending ||
-        current.activeRunId != decision.before.activeRunId ||
-        current.activeRunSensorMode != decision.before.activeRunSensorMode ||
+            before.criticalSafetyEventPending ||
+        current.activeRunId != before.activeRunId ||
+        current.activeRunSensorMode != before.activeRunSensorMode ||
         // #21, 6.14.2 (Review-Blocking 1): ohne diese zwei Felder wuerde ein
         // zwischen Entscheidung und Anwendung durch eine parallele
         // automatische Bewertung veraenderter Auswahlzustand (z. B. ein
@@ -1530,17 +1773,57 @@ CommandStatus applyRunCommand(RunCommandState& current,
         // dem alten Zustand basierenden Kommandoentscheidung stillschweigend
         // ueberschrieben - ein Sicherheits-Lock koennte verloren gehen. Gilt
         // fuer jeden CommandKind, nicht nur ApplySensorSelectionAction.
-        current.sensorSelectionRuntime !=
-            decision.before.sensorSelectionRuntime ||
-        current.sensorSelection != decision.before.sensorSelection ||
-        current.recoveryEpisodeRevision !=
-            decision.before.recoveryEpisodeRevision ||
+        current.sensorSelectionRuntime != before.sensorSelectionRuntime ||
+        current.sensorSelection != before.sensorSelection ||
+        current.recoveryEpisodeRevision != before.recoveryEpisodeRevision ||
         decision.after.commandSequence != current.commandSequence + 1U) {
         return CommandStatus::StaleState;
     }
 
-    current = decision.after;
     return CommandStatus::Applied;
+}
+}  // namespace
+CommandApplyGuard::CommandApplyGuard(const RunCommandState& s)
+    : processState(s.processState),
+      commandSequence(s.commandSequence),
+      runRevision(s.runRevision),
+      messageRevision(s.messageRevision),
+      faultRevision(s.faultRevision),
+      criticalSafetyEventPending(s.criticalSafetyEventPending),
+      activeRunSensorMode(s.activeRunSensorMode),
+      sensorSelectionRuntime(s.sensorSelectionRuntime),
+      sensorSelection(s.sensorSelection),
+      recoveryEpisodeRevision(s.recoveryEpisodeRevision) {
+    activeRunId.size = s.activeRunId.size();
+    activeRunId.valid = activeRunId.size <= activeRunId.bytes.size();
+    if (activeRunId.valid) {
+        std::copy(s.activeRunId.begin(), s.activeRunId.end(),
+                  activeRunId.bytes.begin());
+    }
+}
+CommandStatus validateRunCommand(const RunCommandState& current,
+                                 const CommandDecision& d) {
+    return validateRunCommandCore(current, d, d.before);
+}
+CommandStatus validateRunCommand(const RunCommandState& current,
+                                 const CommandDecisionView& d) {
+    return validateRunCommandCore(current, d, d.guard);
+}
+CommandStatus applyRunCommand(RunCommandState& current,
+                              const CommandDecision& d) {
+    auto status = validateRunCommand(current, d);
+    if (status == CommandStatus::Applied) {
+        current = d.after;
+    }
+    return status;
+}
+CommandStatus applyRunCommand(RunCommandState& current,
+                              const CommandDecisionView& d) {
+    auto status = validateRunCommand(current, d);
+    if (status == CommandStatus::Applied) {
+        current = std::move(d.after);
+    }
+    return status;
 }
 
 const RuntimeMessage* highestPriorityActiveMessage(

@@ -224,6 +224,17 @@ class FermentationApplicationPreparedRequest {
         FermentationApplicationPreparedRequest&&) noexcept = default;
     FermentationApplicationPreparedRequest& operator=(
         FermentationApplicationPreparedRequest&&) noexcept = default;
+    struct ConstructionTag {
+       private:
+        ConstructionTag() = default;
+        friend class FermentationApplication;
+    };
+    template <typename Request>
+    FermentationApplicationPreparedRequest(
+        ConstructionTag /*unused*/, Request&& request,
+        std::optional<CrossRolePlausibilityContext> evidence)
+        : storage_(std::forward<Request>(request)),
+          owningPlausibility_(evidence) {}
     ~FermentationApplicationPreparedRequest() = default;
 
     [[nodiscard]] CommandId commandId() const noexcept;
@@ -406,6 +417,16 @@ class FermentationUiCommandBridge {
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt,
         CommandDecision* decisionOut = nullptr);
+    [[nodiscard]] static FermentationUiCommandResult decidePreparedInto(
+        const RunCommandState& current,
+        const FermentationApplicationPreparedRequest& request,
+        const std::optional<FermentationUiConfirmationRequest>& confirmation,
+        CommandDecision& decisionOut);
+    [[nodiscard]] static FermentationUiCommandResult decidePreparedInto(
+        const RunCommandState& current,
+        const FermentationApplicationPreparedRequest& request,
+        const std::optional<FermentationUiConfirmationRequest>& confirmation,
+        CommandDecisionView& decisionOut);
     [[nodiscard]] static FermentationUiCommandResult fromFallbackResult(
         RunPersistenceResultStatus status);
 
@@ -450,6 +471,11 @@ class FermentationUiCommandBridge {
             expectedUserConfigurationRevision);
 
    private:
+    template <typename Decision>
+    static FermentationUiCommandResult decidePreparedIntoCore(
+        const RunCommandState&, const FermentationApplicationPreparedRequest&,
+        const std::optional<FermentationUiConfirmationRequest>&, Decision&);
+
     friend class FermentationApplication;
     [[nodiscard]] static CommandEnvelope makeEnvelope(
         const FermentationUiCommandContext& context,

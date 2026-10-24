@@ -1,0 +1,136 @@
+from pathlib import Path
+import re,json,sys,subprocess,hashlib
+sys.setrecursionlimit(50000)
+root=Path.cwd();work=Path('/tmp/pr209-q4-implementation')
+allframes=[];allpaths=[];unknowns=[];resolved=[];sources=[];summaries=[]
+for profile in ['esp32_bringup','esp32_release']:
+ nodes={};edges={};storecalls=[];files=sorted((root/'build'/profile).rglob('*.ci'))+sorted((work/profile).glob('*.ci'))
+ for p in files:
+  sources.append([profile,str(p),hashlib.sha256(p.read_bytes()).hexdigest()])
+  for line in p.read_text().splitlines():
+   n=re.search(r'node: \{ title: "([^"]+)" label: "(.*)" \}',line)
+   if n:
+    k,label=n.groups();f=re.search(r'\\n(\d+) bytes \(([^)]+)\)',label)
+    if k not in nodes or f:nodes[k]={'label':label.split('\\n')[0],'frame':int(f[1]) if f else None,'kind':f[2] if f else 'UNKNOWN','source':str(p)}
+   e=re.search(r'edge: \{ sourcename: "([^"]+)" targetname: "([^"]+)"',line)
+   if e:
+    edges.setdefault(e[1],set()).add(e[2])
+    location=re.search(r'label: "([^"\n]+):(\d+):(\d+)"',line)
+    if e[2]=='__indirect_call' and location:
+     src,number,_=location.groups();path=Path(src)
+     if path.name in ['configuration_graph_store.cpp','run_persistence_store.cpp','run_identity_service.cpp','configuration_bootstrap_store.cpp'] and path.is_file():
+      code=path.read_text().splitlines()[int(number)-1]
+      call=re.search(r'\bstore_?\.(read|write)\(',code)
+      if call:storecalls.append((e[1],call[1],src+':'+number))
+ def find(term):
+  exact=[k for k,v in nodes.items() if term==v['label'] and v['frame'] is not None]
+  c=exact or [k for k,v in nodes.items() if term in v['label'] and '::<lambda' not in v['label'] and v['frame'] is not None]
+  if not c:raise ValueError((profile,term))
+  return max(c,key=lambda k:nodes[k]['frame'])
+ def add(a,b,why):
+  x,y=find(a),find(b);edges.setdefault(x,set()).add(y);resolved.append([profile,nodes[x]['label'],nodes[y]['label'],why,'POSSIBLE_TARGET_NOT_EXCLUSIVE'])
+ add('httpd_sess_enum','httpd_process_session','httpd_main.c callback registration; context-scoped prefix used below')
+ add('httpd_uri','EspIdfHttpServerLifecycle::Impl::handleRequest(','HTTP_ANY registration, concrete production adapter')
+ add('EspIdfHttpServerLifecycle::Impl::handleRequest(','WebRouteDispatcher::handle(','Application initializeNetwork route dispatcher')
+ add('RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact','NvsStateStore::write(','main composition IStateStore')
+ for a in ['RunPersistenceStore::readHead(','RunPersistenceStore::readSlot(']:add(a,'NvsStateStore::read(','main composition IStateStore')
+ for caller,method,location in storecalls:
+  target=find('NvsStateStore::'+method+'(');edges.setdefault(caller,set()).add(target)
+  resolved.append([profile,nodes.get(caller,{}).get('label',caller),nodes[target]['label'],'IStateStore production main composition at '+location,'CONCRETE_TARGET'])
+ add('nvs_set_blob(','NVSHandleSimple::set_blob(','nvs_find_ns_handle concrete handle')
+ add('nvs_get_blob(','NVSHandleSimple::get_blob(','nvs_find_ns_handle concrete handle')
+ page=Path('/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/components/nvs_flash/src/nvs_page.cpp').read_text()
+ for m in re.finditer(r'esp_err_t Page::(\w+)\s*\([^{}]*\)[^{]*\{',page):
+  a=m.end();i=a;depth=1
+  while depth:
+   if page[i]=='{':depth+=1
+   elif page[i]=='}':depth-=1
+   i+=1
+  for method in set(re.findall(r'mPartition->(\w+)\(',page[a:i])):
+   try:add('nvs::Page::'+m[1]+'(','nvs::NVSPartition::'+method+'(','nvs_page.cpp concrete nonencrypted partition')
+   except ValueError:pass
+ for a,b in [('esp_flash_write','spi_flash_chip_generic_write'),('esp_flash_read','spi_flash_chip_generic_read'),('esp_flash_erase_region','spi_flash_chip_generic_erase_sector'),('esp_flash_erase_region','spi_flash_chip_generic_erase_block'),('esp_flash_write','spiflash_start_prog'),('esp_flash_read','spiflash_start_read'),('esp_flash_erase_region','spiflash_start_prog'),('spiflash_start_core','spi1_start'),('spiflash_end_default','spi1_end'),('esp_flash_write','flash_end_flush_cache'),('esp_flash_read','spiflash_end_default'),('esp_flash_erase_region','spiflash_end_default')]:
+  add(a,b,'possible generic/default main flash table target; exclusive complete set NOT_PROVEN')
+ # Actual state_store partition is unencrypted in both validated profiles.
+ for term in ['esp_partition_read','esp_partition_write']:
+  k=find(term);edges[k]={y for y in edges.get(k,set()) if not any(t in nodes.get(y,{}).get('label','') for t in ['esp_partition_mmap','esp_flash_write_encrypted'])}
+ # Scope this graph projection to the seven rewritten variants ONLY.
+ # Recovery/sensor are Web-reachable and separately FAIL by Value-entry lower bound.
+ app=find('FermentationApplication::applyConfirmedPrepared(')
+ original_app_edges=set(edges[app])
+ edges[app]={y for y in edges[app] if 'applyConfirmedPreparedValue(' not in nodes.get(y,{}).get('label','')}
+ elf=root/'build'/profile/'esp32_fermentationsschrank.elf';objdump='/var/lib/docker/data/engineering/home/manuel/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin/xtensa-esp32-elf-objdump'
+ for sym in ['_Znwj','malloc']:
+  asm=subprocess.check_output([objdump,'-d','--disassemble='+sym,str(elf)],text=True);(work/profile/(sym+'.asm')).write_text(asm)
+  m=re.search(r'<'+sym+r'>:[\s\S]*?entry\s+a1, (\d+)',asm)
+  if m:nodes[sym]={'label':sym+' [actual ELF entry]','frame':int(m[1]),'kind':'ELF_PROLOGUE_ONLY','source':str(elf)}
+ edges.setdefault('_Znwj',set()).add('malloc');edges.setdefault('malloc',set()).add(find('heap_caps_malloc_default'))
+ impl=find('multi_heap_malloc_impl');nodes['multi_heap_malloc']={**nodes[impl],'label':'multi_heap_malloc [emitted alias]'};edges['multi_heap_malloc']=set(edges.get(impl,()))
+ active=set();memo={};cycles=set()
+ def walk(k):
+  if k in memo:return memo[k]
+  active.add(k);best=(0,[])
+  for y in sorted(edges.get(k,())):
+   if y in active:cycles.add(y);continue
+   n,path=walk(y)
+   if n>best[0]:best=n,path
+  active.remove(k);n=nodes.get(k,{}).get('frame');memo[k]=((n or 0)+best[0],[k]+best[1]);return memo[k]
+ prefixterms=['vPortTaskWrapper','httpd_thread','httpd_server','httpd_sess_enum','httpd_process_session','httpd_sess_process','httpd_req_new','httpd_parse_req','httpd_uri','EspIdfHttpServerLifecycle::Impl::handleRequest(','WebRouteDispatcher::handle(','WebRouteDispatcher::handleRun(','WebRunMutationHandler::handle(']
+ # Actual dispatcher wrapper name is handleRunMutation in some compiler labels.
+ try:prefix=[find(t) for t in prefixterms]
+ except ValueError:
+  print('PREFIX_LOOKUP',profile,[(t,[v['label'] for v in nodes.values() if t in v['label']][:2]) for t in prefixterms]);raise
+ prefixsum=sum(nodes[k]['frame'] for k in prefix)
+ web=find('WebRunMutationHandler::applyRunMutation(');appframe=nodes[app]['frame']
+ internal=find('RunPersistenceCoordinator::persistCommandInternal(')
+ # find() chooses Value768; pick View512 explicitly for private Web continuation.
+ viewinternal=next(k for k,v in nodes.items() if 'RunPersistenceCoordinator::persistCommandInternal(' in v['label'] and 'CommandDecisionView' in v['label'] and v['frame'] is not None)
+ borrow=find('RunPersistenceCoordinator::persistBorrowedCommand(')
+ write=find('RunPersistenceCoordinator::writeSnapshot(');core=find('RunPersistenceCoordinator::writeSnapshotCore(')
+ runover=prefixsum+nodes[web]['frame']+appframe+nodes[borrow]['frame']+nodes[viewinternal]['frame']+nodes[write]['frame']+nodes[core]['frame']
+ phases=[('Prepare','FermentationApplication::prepareEnvelope(',prefixsum+nodes[web]['frame']),('Confirm','FermentationApplication::confirmPreparedInPlace(',prefixsum+nodes[web]['frame']),('Decision-seven','FermentationApplication::applyConfirmedPrepared(',prefixsum+nodes[web]['frame']),('Run-encode','RunPersistenceCoordinator::prepareSnapshotRecord(',runover),('Run-store','RunPersistenceCoordinator::writeSnapshotTransaction(',runover),('Settings','FermentationApplication::applyWebConfigurationChange(',prefixsum),('Run-postcheck','validateRunCommand(const RunCommandState&, const CommandDecisionView&',prefixsum+nodes[web]['frame']+appframe+nodes[borrow]['frame']+nodes[viewinternal]['frame']),('Run-RAM-move','fermentation::RunCommandState& fermentation::RunCommandState::operator=(fermentation::RunCommandState&&)',prefixsum+nodes[web]['frame']+appframe+nodes[borrow]['frame']+nodes[viewinternal]['frame']),('Run-release','RunPersistenceCoordinator::releaseCommandOperation(',prefixsum+nodes[web]['frame']+appframe),('Factory','ActiveRun::startInto(',0),('Run-exact-write-readback','RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact',runover+672+32),('NVS-write','NvsStateStore::write(',0),('NVS-read','NvsStateStore::read(',0),('Allocator','heap_caps_malloc_default',0)]
+ # Each visitor's own max subtree includes factories/validation/allocators.
+ bridge=find('FermentationUiCommandBridge::decidePreparedIntoCore(') # may select Value by frame; choose View explicitly.
+ bridge=next(k for k,v in nodes.items() if 'FermentationUiCommandBridge::decidePreparedIntoCore(' in v['label'] and 'CommandDecisionView' in v['label'] and v['frame'] is not None)
+ # Bridge->visit->__do_visit->__invoke retains variant wrappers; calculate actual path to requested core.
+ def path_to(start,target,seen=None):
+  seen=set() if seen is None else seen
+  if start==target:return [start]
+  if start in seen:return None
+  seen.add(start)
+  for child in sorted(edges.get(start,())):
+   path=path_to(child,target,seen)
+   if path:return [start]+path
+  return None
+ for term in ['decideProgramStartIntoCore(','decideManualStartIntoCore(','decideStopIntoCore(','decideCompletionIntoCore(','decideRunAdjustmentIntoCore(','decideAcknowledgeMessageIntoCore(','decideMuteMessageIntoCore(']:
+  k=next(k for k,v in nodes.items() if term in v['label'] and 'CommandDecisionView' in v['label'] and v['frame'] is not None)
+  pre=path_to(app,k)
+  if not pre:raise ValueError(('not reachable visitor',term))
+  overhead=prefixsum+nodes[web]['frame']+sum(nodes[x]['frame'] or 0 for x in pre[:-1]);phases.append(('Visitor-'+term.split('Into')[0],nodes[k]['label'],overhead))
+ data=[]
+ for phase,term,overhead in phases:
+  k=find(term);total,path=walk(k);seen=set();todo=[k]
+  while todo:
+   x=todo.pop()
+   if x in seen:continue
+   seen.add(x);todo.extend(edges.get(x,()))
+  missing=sorted(x for x in seen if nodes.get(x,{}).get('frame') is None)
+  for x in missing:unknowns.append([profile,phase,x,nodes.get(x,{}).get('label',x),'NOT_PROVEN'])
+  item={'phase':phase,'root':term,'overhead':overhead,'known_sum':total+overhead,'unknown_nodes':len(missing),'status':'NOT_PROVEN','path':[{'symbol':x,**nodes.get(x,{'label':x,'frame':None})} for x in path]};data.append(item)
+  for order,x in enumerate(path):allpaths.append([profile,phase,order,overhead,nodes.get(x,{}).get('frame','UNKNOWN'),nodes.get(x,{}).get('label',x),'NOT_PROVEN'])
+  print(profile,phase,item['known_sum'],'overhead',overhead,'unknown',len(missing),flush=True)
+  summaries.append([profile,phase,overhead,item['known_sum'],8192-item['known_sum'],len(missing),'NOT_PROVEN'])
+ # Value fallback: entry-only lower bound is already a hard FAIL; no
+ # invalid inter-variant graph maximum is used as an actual path.
+ fallback=find('FermentationApplication::applyConfirmedPreparedValue(')
+ lower=prefixsum+nodes[web]['frame']+appframe+nodes[fallback]['frame']
+ summaries.append([profile,'Web-recovery-sensor-Value-entry',prefixsum+nodes[web]['frame']+appframe,lower,8192-lower,'UNBOUNDED_DESCENDANTS','FAIL_KNOWN_LOWER_BOUND'])
+ allpaths.append([profile,'Web-recovery-sensor-Value-entry',0,prefixsum+nodes[web]['frame']+appframe,nodes[fallback]['frame'],nodes[fallback]['label'],'FAIL_KNOWN_LOWER_BOUND'])
+ print(profile,'Web-recovery-sensor-Value-entry',lower,'FAIL; frame',nodes[fallback]['frame'],flush=True)
+ for k,v in nodes.items():
+  if v['frame'] is not None:allframes.append([profile,v['frame'],v['kind'],v['label'],v['source']])
+ (work/(profile+'-graph.json')).write_text(json.dumps({'nodes':nodes,'edges':{k:sorted(v) for k,v in edges.items()},'cycles':sorted(cycles),'prefix':[nodes[x] for x in prefix],'unrestricted_application_edges':sorted(original_app_edges),'projection':'seven rewritten request variants only; Web recovery/sensor separately FAIL'},indent=2))
+ (work/(profile+'-paths.json')).write_text(json.dumps(data,indent=2))
+ print(profile,'PREFIX',prefixsum,'runover',runover,'CI files',len(files),'nodes',len(nodes),'cycles',len(cycles),flush=True)
+for name,header,rows in [('FRAMES',['profile','bytes','kind','function','source'],allframes),('PATHS',['profile','phase','order','prefix_bytes','frame','function','status'],allpaths),('UNKNOWN',['profile','phase','symbol','label','status'],unknowns),('EDGES',['profile','caller','target','reason','status'],resolved),('SOURCES',['profile','callgraph','sha256'],sources),('SUMMARY',['profile','phase','outer_bytes','known_bytes','remaining_to_8192','unknown_nodes','status'],summaries)]:
+ (work/(name+'.tsv')).write_text('\t'.join(header)+'\n'+''.join('\t'.join(str(v).replace('\t',' ') for v in row)+'\n' for row in rows))
