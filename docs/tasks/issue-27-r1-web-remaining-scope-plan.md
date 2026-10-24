@@ -2015,3 +2015,16 @@ Befunde (nicht korrigiert): kein sichtbarer Fehlertext bei falschem Passwort und
 Wiederherstellung (`state_store`, Boot, App) byteidentisch zu `P0`; **Kontrollboot der Original-Firmware `NOT_RUN`**.
 Modellgates unveraendert: `HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=NOT_PROVEN` (tiefster Run-Pfad nicht gemessen).
 `C5_RESOURCE_GATE=HOLD`, `PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`; keine vollstaendige RAM-Freigabe.
+
+### 15.11 Browser-Follow-ups B-1/B-2 (umgesetzt, Fix Verification offen)
+
+Aus dem Chromium-Test (§15.10): B-1 falsches Webpasswort blieb ohne sichtbare Rueckmeldung, B-2 leerer Geraetename
+fuehrte zu stillem `400` mit Reload. Behoben nur im oeffentlichen JS-Asset (Produktcommit `a00bd25`): Login-Fehler
+(401/sonstiger Status → „Passwort · Abgelehnt“, 503 → „Belegt“, Netzwerkfehler → „Fehler“) und clientseitige Abweisung des
+leeren Namens vor dem POST, jeweils DE/EN/ES ueber vorhandene Tabelleneintraege in der vorhandenen Statusanzeige. Backend,
+Passwortpruefung, Lockout, Sessionlimits und API unveraendert; B-3 (Sessionlimit nach nicht abgemeldeten Tests) kein
+Produktfehler. Asset **15 330 B** (vorher 15 311 B; Grenze fuer ≥ 1 024 B Abschlussreserve: 15 360 B; Reserve 1 054 B), erreicht
+durch zwei lokale Byteeinsparungen ohne Grenzaenderung. Asset-JS-/DOM-Regression PASS (95 Faelle), native Web-Routen 120/120, beide
+Profile PASS; **keine** Geraete-/Browserlauf mit dem neuen Asset (`NOT_RUN`). Evidence und Rest-Gate-Uebersicht:
+[PR209_Q4_BROWSER_FOLLOWUPS_20261024](../audits/PR209_Q4_BROWSER_FOLLOWUPS_20261024.md). Keine Umdeklaration von `NOT_PROVEN`;
+`C5_RESOURCE_GATE=HOLD`, `PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`.
