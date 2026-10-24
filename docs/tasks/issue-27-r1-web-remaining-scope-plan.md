@@ -1580,7 +1580,7 @@ M_H1=CLOSED_GO              (Independent Review PASS/GO, M_H1_FIX_VERIFICATION=P
 H_RAM_2=EXECUTED_PARTIAL    (K0+K1, Stack- und Heap-Profil ausgefuehrt auf HEAD 4afc626; Ergebnisse §15.9,
                              Evidence PR209_Q4_HRAM2_RESULTS_20261024.md; unabhaengiger Review OFFEN)
 H_RAM_2_RESTORE=HASH_PASS   (state_store/Boot/App byteidentisch zu P0; Kontrollboot der Original-Firmware NOT_RUN)
-HTTPD_STACK_BYTES=8704      (Option B′ im Produkt, Commit 2c25c3b; Hardware-Verifikation NOT_RUN, §15.10)
+HTTPD_STACK_BYTES=8704      (Option B′ im Produkt, Commit 2c25c3b; HW-Verifikation 2026-10-24 durchgefuehrt, §15.10)
 C5_RESOURCE_GATE=HOLD
 PR209_MERGE=HOLD            (M-H1-GO ist kein Merge-GO)
 ACTUATOR_RELEASE=NO
@@ -2005,8 +2005,13 @@ Modellstand: 7 664 + 320 = **7 984 B**; Rest **208 B** bei 8 192 B, **720 B** be
 **rechnerisch** erfuellt. `HTTPD_FULL_CHAIN_STACK` und `HTTPD_STACK_RESERVE` bleiben `NOT_PROVEN` (offene indirekte
 Aufrufe, erfolgreicher Run-Pfad nicht erreicht). Die H-RAM-2-Messwerte (8 192-B-Basis) bleiben unveraendert.
 
-Erwartete Heap-Kosten **−512 B** frei intern (und bis zu −512 B groesster Block) sind eine Rechnung, **keine Messung**.
-Vorgesehen (nicht ausgefuehrt, ohne neue ausdrueckliche Ausfuehrungsfreigabe fuer das neue Image und `G-F`/`G-S`
-nicht zulaessig): kurze Hardware-Verifikation des 8 704-B-Kandidaten mit Stack-HWM-/Heap-/Largest-Free-Messpunkten
-gegen die 8 192-B-Basis (Evidence §5); keine erneute 12-KiB-Serie.
+**Hardware-Verifikation (2026-10-24, auf Ownerfreigabe, [Evidence](../audits/PR209_Q4_HTTPD_8704_HW_20261024.md)):**
+Diagnoseimage (Produkt `3004f9c` + lokales Overlay `92a5c5f`, Stack 8 704 B) geflasht, ein Boot (~36 min), kein
+Reset/Panic/`heap_alloc_failed`. HTTPD-Stack-Nutzung 6 468 B = identisch zur 8 192-B-Basis, Rest **2 236 B (+512 B)**.
+Idle-Heap −564 B (erwartet −512 B; `minimum_free_heap` Boot −1 340 B nicht allein dem Stack zuzuordnen); im Browserlauf
+Tiefststand `internal_min` 17 104 B / groesster Block 18 432 B (ohne 8 192-B-Vergleich, Risikoindikation, kein Fehler).
+Chromium-Test Anmeldung/Navigation/Dashboard/Programme/Einstellungen/DE-EN-ES PASS, Namensaenderung und Ruecksetzen PASS.
+Befunde (nicht korrigiert): kein sichtbarer Fehlertext bei falschem Passwort und bei leerem Namen (HTTP 400).
+Wiederherstellung (`state_store`, Boot, App) byteidentisch zu `P0`; **Kontrollboot der Original-Firmware `NOT_RUN`**.
+Modellgates unveraendert: `HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=NOT_PROVEN` (tiefster Run-Pfad nicht gemessen).
 `C5_RESOURCE_GATE=HOLD`, `PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`; keine vollstaendige RAM-Freigabe.
