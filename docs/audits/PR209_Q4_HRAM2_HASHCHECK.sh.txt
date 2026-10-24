@@ -1,0 +1,16 @@
+#!/bin/bash
+# Read-only: enter ROM bootloader, read boot area + state_store, hash, compare with P0 and previous chain element.
+TAG="$1"
+export IDF_PATH=/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1
+export IDF_TOOLS_PATH=/var/lib/docker/data/engineering/home/manuel/.espressif
+. $IDF_PATH/export.sh >/dev/null 2>&1
+P="--port /dev/ttyUSB0 --baud 460800"
+mkdir -p chain/$TAG
+esptool $P --before default-reset --after no-reset read-flash 0x0 0x10000 chain/$TAG/boot.bin >/dev/null 2>&1 || { echo READ_FAIL_BOOT; exit 2; }
+esptool $P --before default-reset --after no-reset read-flash 0x300000 0x100000 chain/$TAG/state_store.bin >/dev/null 2>&1 || { echo READ_FAIL_SS; exit 2; }
+( cd chain/$TAG && sha256sum boot.bin state_store.bin > SHA256SUMS )
+B=$(sha256sum chain/$TAG/boot.bin | cut -d' ' -f1); S=$(sha256sum chain/$TAG/state_store.bin | cut -d' ' -f1)
+B0=$(sha256sum boot_A.bin | cut -d' ' -f1); S0=$(sha256sum state_store_A.bin | cut -d' ' -f1)
+echo "$TAG boot=$B state_store=$S"
+[ "$B" = "$B0" ] && echo "$TAG BOOT_AREA_EQUALS_P0=YES" || echo "$TAG BOOT_AREA_EQUALS_P0=NO"
+[ "$S" = "$S0" ] && echo "$TAG STATE_STORE_EQUALS_P0=YES" || echo "$TAG STATE_STORE_EQUALS_P0=NO"

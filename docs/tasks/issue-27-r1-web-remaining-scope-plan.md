@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 3.3 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLAN NACHGEBESSERT, FIX VERIFICATION OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
+**2026-10-23 · PLAN-REVISION 3.3 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 DURCHGEFUEHRT/PARTIAL, UNABHAENGIGER REVIEW DER ERGEBNISSE OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -525,10 +525,10 @@ getrennte Hardware-/Flash-/Browserfreigabe. Kein Ready-/Merge-/Release-GO.
 Value-Intents `recovery-time-correction` und `sensor-selection` auf der exakten
 Plan-SHA dieser Revision. Bis dahin keine Produktaenderung, PR Draft/HOLD.
 
-**Q4-Ressourcen (§15):** Ownerrichtung zu `H-RAM-2` und `G-S` bestaetigt, **ausfuehrbare Freigaben
-stehen aus** (nach Fix Verification, auf der dann aktuellen Plan-SHA). Quellenbefund Boot-Schreibpfad:
+**Q4-Ressourcen (§15):** `H-RAM-2` (K0+K1) am 2026-10-24 auf HEAD `4afc6266` unter Ownerfreigabe
+ausgefuehrt (Ergebnisse §15.9, `PARTIAL`, unabhaengiger Review offen). Quellenbefund Boot-Schreibpfad:
 `P1_BOOT_WRITES_STATE_STORE=CONDITIONAL`, `K0_WITHOUT_G_S=NOT_ELIGIBLE` → `G-S` ist Voraussetzung
-bereits fuer den ersten Diagnoseflash/Boot (K0 **und** K1); ohne `G-S` `HOLD` vor dem Flash. Zusaetzlich `G-S` deckt `nvs` nicht ab; `SYSTEM_NVS_WRITE_AT_P1=EXCLUDED` laut `PRE_P1_REPORT` (P0-Preflight 2026-10-24, nur lesend). P1 bleibt `HOLD`, bis `G-F` und `G-S` ausdruecklich freigegeben sind.
+bereits fuer den ersten Diagnoseflash/Boot (K0 **und** K1); ohne `G-S` `HOLD` vor dem Flash. Zusaetzlich `G-S` deckt `nvs` nicht ab; `SYSTEM_NVS_WRITE_AT_P1=EXCLUDED` laut `PRE_P1_REPORT` (P0-Preflight 2026-10-24, nur lesend). `G-F`/`G-S` wurden am 2026-10-24 ausdruecklich freigegeben; P1 wurde ausgefuehrt (§15.9).
 `G-R7`/`G-RUN` nicht freigegeben. Bis dahin `C5_RESOURCE_GATE=HOLD`, keine Hardwareaktion.
 
 ## 11. Risiken
@@ -1577,18 +1577,20 @@ UI-Katalogumbau, weitere Run-Kopieroptimierungen, Pre-Ready/Merge, Aktor-/Hardwa
 ```text
 M_H1=CLOSED_GO              (Independent Review PASS/GO, M_H1_FIX_VERIFICATION=PASS,
                              M_H1_OPEN_BLOCKERS=0 auf HEAD 1c56b4d; Evidence PR209_Q4_MH1_20261024.md)
-H_RAM_2=PLAN_REVIEW_PENDING (dieser Abschnitt, nicht freigegeben)
+H_RAM_2=EXECUTED_PARTIAL    (K0+K1, Stack- und Heap-Profil ausgefuehrt auf HEAD 4afc626; Ergebnisse §15.9,
+                             Evidence PR209_Q4_HRAM2_RESULTS_20261024.md; unabhaengiger Review OFFEN)
+H_RAM_2_RESTORE=HASH_PASS   (state_store/Boot/App byteidentisch zu P0; Kontrollboot der Original-Firmware NOT_RUN)
 C5_RESOURCE_GATE=HOLD
 PR209_MERGE=HOLD            (M-H1-GO ist kein Merge-GO)
 ACTUATOR_RELEASE=NO
 ```
 
-Offen und unveraendert: `HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=FAIL` gegen den
-512-B-Planungsboden (432 B rechnerisch), `ESP32_HEAP_PEAK=NOT_PROVEN`,
-`ESP32_LARGEST_FREE_BLOCK=NOT_PROVEN`, `TARGET_OOM_BEHAVIOR=FAIL` (vorbestehend). Reihenfolge: (1)
-Planreview/Ownerentscheid zu §15.6; (2) erst danach die Diagnoseimages bauen und messen; (3) die
-Stackgroesse (8 192 vs. 8 704 B) wird erst mit dem belegten Heap-/Largest-Block-Effekt bewertet;
-kein praeventiver Stack-/Partitionsumbau, keine neue Optimierungsserie.
+Offen nach H-RAM-2 (§15.9): `HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=NOT_PROVEN`
+(statisch korrigiert 208 B Rest < 512-B-Planungsboden, gemessen 1 724 B Rest nur ohne den tiefsten
+Pfad), `ESP32_HEAP_PEAK=PARTIAL`, `ESP32_LARGEST_FREE_BLOCK=PARTIAL`, `TARGET_OOM_BEHAVIOR=FAIL`
+(vorbestehend). Reihenfolge: (1) unabhaengiger Review der H-RAM-2-Ergebnisse (§15.9); (2) Ownerentscheid zur
+Stackgroesse (8 192 vs. 8 704 B) auf Basis dieser Ergebnisse; kein praeventiver Stack-/Partitionsumbau,
+keine neue Optimierungsserie.
 
 ### 15.6 H-RAM-2: Messplan nach tatsaechlicher Abdeckung (Entwurf, nicht freigegeben)
 
@@ -1955,10 +1957,37 @@ Auf Plan-SHA `6a311d6174999e864c652e63a71f05271a49f5b3` umgesetzt (Produkt `80bf
 Statuswerte und `out`-Semantik gegen die Referenz `76cb4ce` identisch; groesste Einzelanforderung
 der Einzelprogrammkodierung 32 769 B → Dokumentgroesse + 1; Web-Mutationsfixtures (Host) groesste
 Anforderung 32 769 → 8 193 B (8-KiB-Run-Writer bleibt), Peak live 45 094 → 14 937 B. Stackbilanz
-unveraendert (Maximum 7 440 B, Rest 432 B). Heap-Gates `NOT_PROVEN`, `C5_RESOURCE_GATE=HOLD`.
+unveraendert (Maximum 7 440 B, Rest 432 B – Stand M-H1, durch das korrigierte Modell in §15.9 ueberholt: 7 664 B, Rest 208 B). Heap-Gates `NOT_PROVEN`, `C5_RESOURCE_GATE=HOLD`.
 Details und Korrektur der Plan-Zahlen (Maximum 1 255 B): [Evidence](../audits/PR209_Q4_MH1_20261024.md).
 Hardwaregate und Stackgroesse bleiben offen (§15.5/§15.6).
 
 **Reviewstatus M-H1:** `M_H1_FIX_VERIFICATION=PASS`, `M_H1_OPEN_BLOCKERS=0` (Independent Review auf
 HEAD `1c56b4de623ab22ae9ae31a1b805ba5cea4e6c4a`, Produktcommit `80bfb28`); keine Wiederholung des
 Full Reviews; kein Merge-GO.
+
+### 15.9 H-RAM-2 Ergebnis (ausgefuehrt, Teilnachweis)
+
+Ausgefuehrt am 2026-10-24 auf HEAD `4afc6266` unter der Ownerfreigabe in PR-Kommentar 6383231599
+(`G-F`, `G-S`, `G-U`, `G-R`, `G-B`; nicht `G-R7`/`G-RUN`). Rohdaten privat lokal; Hashes, bereinigte
+Messwerte und Skripte in
+[PR209_Q4_HRAM2_RESULTS_20261024](../audits/PR209_Q4_HRAM2_RESULTS_20261024.md).
+
+- **Stack (12 KiB, ein Boot je Pfadmenge):** B0 928 B, B1 3 668 B, B1u 3 256 B, B3 4 724 B, B2 5 940 B,
+  B4 5 940 B, B5b 6 004 B, B6 6 672 B (`M(B)` = 12 288 − HWM). Alle ausser **B3** innerhalb `R(B)`.
+- **B3-Abweichung:** 4 724 B gegen 4 112 B (+612 B). Ursache: Modelllucke (`-mlongcalls`: `l32r`+`callx8`-Kanten
+  fehlten in der ELF-Aufloesung). Modell korrigiert: Maximum **7 664 B** (statt 7 440 B), mit 320 B Zuschlag
+  7 984 B, Rest zu 8 192 B = **208 B**; zwei virtuelle Aufrufe bleiben unaufgeloest.
+- **Heap (8 KiB, authentifiziert, 15 min):** kleinster freier interner Heap 22 428 B, kleinster groesster Block
+  22 528 B, kleinster HTTPD-Stack-Rest 1 724 B (Nutzung 6 468 B); 120/120 Pollinggruppen gueltig, kein
+  `heap_alloc_failed`/Panic.
+- **Persistenz:** Boot-Bereich (`nvs`/`phy_init`) nach jedem Boot gleich `P0` → `SYSTEM_NVS_WRITE_AT_P1=EXCLUDED`
+  bestaetigt. `state_store` aenderte sich nur durch Login (`auth0`) und Namenscommit (Konfigurations-Records).
+  RB-2 und App-Rueckflash byteidentisch zu `P0`; **Kontrollboot der wiederhergestellten Firmware `NOT_RUN`**
+  (nur Byte-Gleichheit belegt, nicht die funktionale Startfaehigkeit).
+- **Nicht gelaufen:** erfolgreicher Run-Pfad, Run-Store, Checkpoint, Maximalkatalog (`NOT_RUN`); der statisch
+  tiefste Pfad ist damit nicht gemessen.
+
+Gates: `HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=NOT_PROVEN`, `ESP32_HEAP_PEAK=PARTIAL`,
+`ESP32_LARGEST_FREE_BLOCK=PARTIAL`, `C5_RESOURCE_GATE=HOLD`, `PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`.
+Eine Stackgroessen- oder Partitionsaenderung ist **nicht** vorgeschlagen und bleibt Ownerentscheid nach dem
+unabhaengigen Review.
