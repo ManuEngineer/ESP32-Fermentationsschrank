@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 2.7 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (WARTET AUF OWNERFREIGABE) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
+**2026-10-23 · PLAN-REVISION 2.8 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLANREVIEW OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -525,11 +525,10 @@ getrennte Hardware-/Flash-/Browserfreigabe. Kein Ready-/Merge-/Release-GO.
 Value-Intents `recovery-time-correction` und `sensor-selection` auf der exakten
 Plan-SHA dieser Revision. Bis dahin keine Produktaenderung, PR Draft/HOLD.
 
-**Q4-Ressourcen (§15):** Freigabe der exakten Plan-SHA dieser Revision fuer die
-**M-H1-Produktkorrektur** (Einzelprogramm-Writer nach exakter Nutzlastgroesse, §15.3). Das
-Hardwaregate `H-RAM-2` (§15.6) ist nur ein Entwurf und folgt als eigener Plan auf dem Stand nach
-M-H1; die Stackgroesse wird erst nach Gesamt-RAM-Pruefung entschieden. Bis dahin
-`C5_RESOURCE_GATE=HOLD`, keine Hardwareaktion.
+**Q4-Ressourcen (§15):** `H-RAM-2` (§15.6/§15.7): Freigabe der exakten Plan-SHA dieser Revision fuer
+Heap-Image + Stack-Diagnoseprofil und die Hardwareautorisierung (nur Teilnachweis). `G-R7`
+(Slice-7-Harness) und `G-RUN` (erfolgreicher Run-Pfad) sind getrennte, hier nicht erbetene Gates.
+Bis dahin `C5_RESOURCE_GATE=HOLD`, keine Hardwareaktion.
 
 ## 11. Risiken
 
@@ -1454,7 +1453,7 @@ Sensorselektion 6672 B (bekanntes Gesamtmaximum unveraendert 7216 B), alle Summe
 statische Ueberlast aus §13 ist beseitigt; Vollkettenobergrenze, ESP32-RAM/Largest-Free/OOM und
 D9/HWM bleiben offen (`C5_RESOURCE_GATE=HOLD`). Weiterer Stand und Gate: §15.
 
-## 15. Q4-Ressourcenqualifikation: Entscheidungsstand, M-H1 und Hardwaregate-Entwurf
+## 15. Q4-Ressourcenqualifikation: Entscheidungsstand, M-H1 (abgeschlossen) und Messplan H-RAM-2
 
 **Status: PLAN – keine Produkt-, Test-, Buildkonfigurations- oder Hardwareaktion ohne
 ausdrueckliche Freigabe der exakten Plan-SHA und der getrennten Flash-/Hardwareautorisierung.**
@@ -1572,62 +1571,159 @@ aus der Stackbilanz. Der Settings-Decode-/UI-Katalogumbau (Option B aus §13) bl
 Hardware nachgewiesenem Heap-Engpass die priorisierte naechste Option. Nicht Teil von §15: Option B,
 UI-Katalogumbau, weitere Run-Kopieroptimierungen, Pre-Ready/Merge, Aktor-/Hardware-Inbetriebnahme.
 
-### 15.5 Reihenfolge
+### 15.5 Status und Reihenfolge
 
-1. **M-H1** (§15.3) – benoetigt die Ownerfreigabe der exakten Plan-SHA dieser Revision.
-2. Erst danach ein Hardwaregate auf dem **nach M-H1 entstandenen HEAD** (der dann das
-   Produktkandidaten-Image ist); dafuer wird ein eigener Plan-Commit mit neuer SHA vorgelegt. Das
-   unten beschriebene Gate `H-RAM-2` ist bis dahin ein Entwurf ohne Freigabe.
+```text
+M_H1=CLOSED_GO              (Independent Review PASS/GO, M_H1_FIX_VERIFICATION=PASS,
+                             M_H1_OPEN_BLOCKERS=0 auf HEAD 1c56b4d; Evidence PR209_Q4_MH1_20261024.md)
+H_RAM_2=PLAN_REVIEW_PENDING (dieser Abschnitt, nicht freigegeben)
+C5_RESOURCE_GATE=HOLD
+PR209_MERGE=HOLD            (M-H1-GO ist kein Merge-GO)
+ACTUATOR_RELEASE=NO
+```
 
-### 15.6 Gate-Entwurf H-RAM-2 (nicht freigegeben; nur ein Teilnachweis)
+Offen und unveraendert: `HTTPD_FULL_CHAIN_STACK=NOT_PROVEN`, `HTTPD_STACK_RESERVE=FAIL` gegen den
+512-B-Planungsboden (432 B rechnerisch), `ESP32_HEAP_PEAK=NOT_PROVEN`,
+`ESP32_LARGEST_FREE_BLOCK=NOT_PROVEN`, `TARGET_OOM_BEHAVIOR=FAIL` (vorbestehend). Reihenfolge: (1)
+Planreview/Ownerentscheid zu §15.6; (2) erst danach die Diagnoseimages bauen und messen; (3) die
+Stackgroesse (8 192 vs. 8 704 B) wird erst mit dem belegten Heap-/Largest-Block-Effekt bewertet;
+kein praeventiver Stack-/Partitionsumbau, keine neue Optimierungsserie.
 
-**Reichweite – ausdruecklich begrenzt:** Standby, GET-Routen, fachlich **abgelehnte**
-Web-Mutationen aller neun Intents und der Geraetenamen-Commit (Settings-Pfad). Das ist hoechstens
-ein **Teilnachweis**. Nicht erreicht werden: der erfolgreiche Run-Store-/Readback-/GC-Pfad, ein
-aktiver Programmsnapshot mit gespeicherter Programmquelle (also auch nicht der Pfad, den M-H1
-betrifft), der Maximalkatalog, Fehlerinjektion und NVS-Pfade bei voller Seite
-(`requestNewPage`). Alle nicht beobachteten Pfade bleiben `NOT_PROVEN`; eine statische
-Obergrenze ersetzt dort keine Messung.
+### 15.6 H-RAM-2: Messplan nach tatsaechlicher Abdeckung (Entwurf, nicht freigegeben)
 
-**Messsemantik:** `uxTaskGetStackHighWaterMark(nullptr)` liefert das **seit Taskstart
-kumulative** Minimum an freiem Stack (in Bytes). Ein Wert ist nur dann einem Pfad/Szenario
-zuordenbar, wenn dieses Szenario **isoliert** und mit **dokumentiertem Startzustand** laeuft
-(frischer Boot bzw. Reset vor dem Szenario, davor keine tiefere Anfrage); sonst ist er nur der
-Task-Lebensdauer-HWM und fuehrt zu keiner pfadweisen PASS-/FAIL-Ableitung. Die Neufuellung des
-Taskstacks vor NVS-Schreibvorgaengen ist **gestrichen** (nicht erforderlich, veraendert die
-Messbasis). Die Tiefe der NVS-Teilkette wird nicht gemessen; der Run-Store-Pfad bleibt rein
-statisch (7 760 B inkl. 320 B).
+Grundlage: aktueller Code (HEAD `1c56b4d`), `main/app_main.cpp`, `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`
+(R1-RAM-Referenzbasis O4), vorhandene Hardware-Evidence
+([H-RAM-1](../audits/PR206_H_RAM_1_EVIDENCE_20261019.md),
+[PR #174 LVGL-48-KiB](../audits/R1_RAM_LVGL48_HW_EVIDENCE.md)) und das Issue-#90-Slice-7-Harness.
+Keine Aussage hier ersetzt eine Messung; Quellen fuer jede Zeile stehen in der Evidence
+([Coverage-Matrix](../audits/PR209_Q4_HRAM2_COVERAGE_20261024.md)).
 
-**Auswertungsregel:** nur fuer isolierte Szenarien mit bekanntem Startzustand wird
-`M(P) = Labor-Stack − HWM` mit dem **eigenen** statischen Wert `S(P) + 320 B` verglichen
-(`S` aus STACK.tsv). `M(P) > S(P) + 320` widerlegt das Modell fuer diesen Pfad und stoppt das
-Gate (`HTTPD_FULL_CHAIN_STACK=FAIL`). Ein bestandener Vergleich ist **kein** Beweis fuer
-nicht gemessene Pfade und aendert die offenen `__indirect_call`-Zielmengen (Schaetzung ≤ ~290 B)
-nicht: diese werden **nicht** in eine bewiesene Vollkettenobergrenze umgedeutet.
-`HTTPD_FULL_CHAIN_STACK` bleibt `NOT_PROVEN`, solange diese Restunsicherheit besteht.
-Eine Owner-Risikoakzeptanz wird getrennt vom technischen Status dokumentiert und ersetzt
-kein `PASS`.
+#### 15.6.1 Welche kritischen Pfade sind auf vorhandener Hardware erreichbar?
 
-**Diagnosevariante (nur Entwurf):** non-merge; HTTPD-Handler loggt vor/nach jeder Anfrage nur
-die Pfadklasse sowie Heap-Tripel (frei, Minimum, groesster Block, `INTERNAL|8BIT`) und den
-HWM; kein 2-s-Zyklus. Ein Labor-HTTPD-Stack von 12 288 B **veraendert den Heap** (−4 096 B
-gegenueber 8 192 B, kleinere freie Heap-Summe und kleinerer groesster Block) und gilt
-**nicht** als Produkt-Baseline: Heapwerte aus der Diagnosevariante sind nur mit dieser
-Einschraenkung auszuweisen; eine heaprelevante Baseline entsteht aus einem gesonderten
-Lauf mit 8 192 B. Szenarien und Abbruchkriterien (Reset/Panic/Watchdog, `heap_alloc_failed`,
-Geraet > 60 s nicht erreichbar, Modellwiderlegung) wie in der Evidence beschrieben; Autorisierung
-getrennt (Flash app-only mit Backup/Rueckflash, UART, Reset/BOOT, HTTP). **Vor dem Gate** werden
-die tatsaechlich erreichbaren, aktorfreien Tests und die nicht erreichbaren Run-Store-Pfade in
-einer Tabelle getrennt ausgewiesen.
+| # | Pfad | erforderlicher Zustand | ausloesbare Aktion | Aktor-/Safety-Voraussetzung | Messmittel | Abdeckung |
+|---|---|---|---|---|---|---|
+| 1 | HTTPD GET Shell/Status/Asset | Standby, Netz verbunden | GET | keine (aktorfrei) | HTTPD-HWM + Heap-Tripel (Diagnose-Logging) | **erreichbar** |
+| 2 | Login/Session (KDF) | Standby, Passwort gesetzt | POST login | keine | wie 1; Main-/HTTPD-HWM | **erreichbar** |
+| 3 | Prepare/Confirm aller neun Intents | Standby | POST, fachlich **abgelehnt** (`422`) | keine; kein Apply | wie 1 | **erreichbar, nur Ablehnung**; kein erfolgreicher Run-Store |
+| 4 | Ack/Mute (RAM-only Erfolg) | aktive Meldung noetig | POST | keine | wie 1 | **nicht auslösbar** (keine Meldung erzeugbar) → `NOT_RUN` |
+| 5 | Geraetenamen-Commit (Settings, Erfolg) | Standby | POST `set-device-name` | keine; Wirkung erst beim naechsten Netzwerkstart (Q1) | wie 1; Konfig-NVS-Kette | **erreichbar**; nur Konfig-Records, keine Mehrseiten-Programmblobs |
+| 6 | **Erfolgreicher** Run-Start → Run-Store/Write-Readback mit Programmsnapshot (Web) | Start verlangt gueltige Luft-/Kuehlsensor-Evidenz (`airSensorValid && coolingSensorValid`), lauffaehiges Programm, trusted UTC | POST `start-program` | **im Produktimage nicht erreichbar:** `real actuators: disabled`, `publishOwningRuntimeEvidence` hat keinen Aufrufer ausser Tests, DS18B20-Sampler ist budget-gesperrt (`kApprovedDs18b20TaskBudget` leer, #30/#35) | – | **`NOT_RUN/NOT_PROVEN`**; ein abgelehnter Standby-Start gilt **nicht** als Run-Store |
+| 7 | Periodischer Run-Checkpoint | aktiver Lauf | – | wie 6 | – | `NOT_RUN` |
+| 8 | RAM-only-Sensorentscheidung | aktiver Lauf | – | wie 6 | – | `NOT_RUN` |
+| 9 | Run-Store-/NVS-Teilkette real (Coordinator → NVS → Flash, Power-Cut, Readback) | Slice-7-Harness-Image, Testpartition `state_store_test` | UART-Befehle (`RUN_CONTROL_WRITE`, `ARM_RUN_WRITE_LOAD` …) | **destruktiv:** Harness-Partitionstabelle legt `state_store_test` auf dieselbe Flashregion `0x300000`/1 MiB wie den Produkt-`state_store`; Aktoren aus; synthetische Sensorgueltigkeit **nur im Harness** | Harness-`STATUS` (**kein** HWM-Feld heute) | **Teilabdeckung ohne HTTPD/Web-Prefix**, Manuallauf statt gespeichertem Programm; Diagnose-Ergaenzung (HWM-Feld) separat zu genehmigen |
+| 10 | NVS-Fehler-/Unknown-/GC-Varianten (`requestNewPage`, Erase) | volle Seiten, Fehlerinjektion | – | im Produktimage keine Injektionsnaht | – | Fehler: nur Harness-Power-Cuts (Zeile 9); GC nur durch viele Konfig-Commits (Flash-Verschleiss, optional, begrenzt) → sonst `NOT_RUN` |
+| 11 | Lokaler Maximalkatalog (16 Programme, Notizen 512 Zeichen) | lokaler Editor | Touch-Eingabe | keine | Heap-Tripel | technisch erreichbar (Notizfeld im lokalen Editor), manuell unrealistisch (12 × 512 Zeichen) → `NOT_RUN` ohne separat genehmigte Hilfe |
+| 12 | Boot → Netz → LVGL/Touch/Web gleichzeitig | Normalbetrieb | Owner-Touch + Browser | keine | `logResources()` (im Produkt), Failed-Alloc-Hook | **erreichbar** (Referenz: PR #174, andere Identitaet) |
 
-### 15.7 Ergebnisabbildung und Ownerentscheidung
+#### 15.6.2 Erfolgreicher Run-Pfad ohne unautorisierte Aktorwirkung
 
-Heap-Gates bleiben `NOT_PROVEN`; `HTTPD_STACK_RESERVE=FAIL` (432 B gegen 512-B-Planungsboden)
-bleibt, bis der Owner nach Gesamt-RAM-Pruefung entscheidet; `C5_RESOURCE_GATE=HOLD`.
+Befunde am Code: Das Produktimage startet mit `real actuators: disabled`; die Onboard-Ausgaenge sind
+nicht an den Planner angebunden (`main/app_main.cpp`); die Sensorevidenz erreicht die Anwendung nicht
+(`publishOwningRuntimeEvidence` ohne produktiven Aufrufer, Sampler budget-gesperrt). Ein
+erfolgreicher Web-Run-Start ist damit auf dem Produktimage **nicht herbeifuehrbar**, ohne die
+Sensor-/Safety-Voraussetzung zu umgehen. Das wird **nicht** umgangen (kein Safety-Bypass, keine
+Sensorsimulation im Produkt, keine neue Simulationsarchitektur).
 
-**Eine Ownerentscheidung jetzt:** Freigabe der exakten Plan-SHA dieser Revision fuer die
-**M-H1-Produktkorrektur** (§15.3). Hardwaregate und Stackgroesse folgen separat und sind
-hier nicht freigegeben.
+- **Bestehende sichere Moeglichkeit:** das Issue-#90-Slice-7-Harness (`APP_ISSUE_90_SLICE7_HARNESS`,
+  eigenes Image, eigene Testpartition `state_store_test`, reale NVS-/Power-Cut-Kette). Es
+  deckt die Coordinator-/NVS-/Flash-Teilkette des Run-Store ab (Zeile 9), **nicht** den
+  HTTPD-/Web-Prefix und nicht den Programmsnapshot (es startet einen Manuallauf mit synthetischer
+  Sensorgueltigkeit). Es ist ein **destruktives Charakterisierungs-Image**: seine
+  Partitionstabelle (`partitions/issue_90_state_store_test.csv`) belegt dieselbe Region wie der
+  Produktzustand; es braucht eine eigene Partitionstabelle sowie Backup/Restore des Zustands
+  (bestehender Runner) und ist deshalb von H-RAM-2 klar getrennt. Es besitzt kein HWM-Feld; eine kleine
+  Diagnoseergaenzung waere ein eigener Genehmigungsschritt (Gate `G-R7`).
+- **Vollabnahme** des erfolgreichen Web-Run-Store/Checkpoint/Sensorpfads: braucht die spaetere
+  Sensor-/Control-Komposition (#30/#35) und ein eigenes aktorrelevantes Gate (`G-RUN`).
+  H-RAM-2 erklaert diesen Teil **nicht** zur Vollabnahme; der Standby-Teiltest (Zeilen 1–3, 5)
+  ist ausdruecklich nur Teilnachweis.
+
+#### 15.6.3 Messmethode
+
+- **Stack-HWM ist seit Taskstart kumulativ.** Szenarien werden deshalb **je Szenario mit frischem
+  Boot** (EN-Reset) und dokumentiertem Startzustand gemessen; nur dann ist der HTTPD-HWM einem
+  Szenario zuordenbar. Mehrszenarienlaeufe liefern nur den Lebensdauer-HWM ohne pfadweise
+  PASS-/FAIL-Ableitung. Keine Stack-Neufuellung im laufenden Task.
+- **Zwei getrennte Diagnoseimages (non-merge):**
+  1. **Stack-Diagnoseprofil** (nur HTTPD-Stack 12 288 B, Log-Overlay): liefert Stackwerte;
+     seine Heapwerte gelten **nicht** als Produkt-Baseline (−4 096 B Heap gegenueber 8 192 B).
+  2. **Heap-Image** (unveraenderte produktive Stackkonfiguration 8 192 B / Main 24 576 B, nur
+     Log-Overlay): liefert alle Heapwerte.
+  Beide mit exakter Quell-/Build-/Image-Hash-Identitaet; Diagnose-Overhead (Log-Pfad ist
+  Geschwisterpfad zum Routenpfad, statisch weit unter dem Routenmaximum) wird dokumentiert.
+  Das Slice-7-Harness-Image (Zeile 9) ist ein drittes, getrennt genehmigungspflichtiges Image.
+- **Messgroessen:** freier interner 8-Bit-Heap, Low-Water-Mark, groesster freier
+  zusammenhaengender interner Block (`INTERNAL|8BIT`), HTTPD- und Main-HWM (in **Bytes**),
+  `heap_alloc_failed`, Resets/Watchdog/Brownout, statisches DRAM/IRAM (`size -A`), Firmware-/
+  Partitionsbelegung (Image gegen App-Partition `0x2F0000`).
+- **Trennung der Evidenzklassen:** Compiler (`.ci`), ELF/ROM-Aufloesung und offene indirekte
+  Restkanten (statisch, nicht gemessen) einerseits, HWM (gemessen) andererseits; ein
+  Compilerwert oder Host-Test ist kein Hardware-HWM.
+- **Auswertung je isoliertem Szenario:** `M(P) = Labor-Stack − HWM` gegen den **eigenen** statischen
+  Wert `S(P) + 320 B` (STACK.tsv). `M(P) > S(P) + 320` widerlegt das Modell und stoppt das Gate. Ein
+  bestandener Vergleich ist kein Beweis fuer nicht gemessene Pfade und laesst die
+  `__indirect_call`-Restunsicherheit unberuehrt.
+
+#### 15.6.4 Repraesentativer Lastzustand und Abbruch
+
+- **Heap-Lauf (8 KiB):** Boot → Netzwerk → LVGL → 5 min Idle → ein Browserclient mit 5-s-Polling
+  → Owner-Touch durch die vorhandenen Seiten (optional, wie PR #174) → neun abgelehnte Mutationen
+  → Geraetenamen-Commit zweimal → 5 min Erholung. Run-Persistenz/Checkpoint und Maximalkatalog
+  sind **nicht** Teil (Zeilen 6–8, 11).
+- **Stack-Lauf (12 KiB):** je ein frischer Boot fuer: GET/Login (S1), neun abgelehnte Intents (S2),
+  Geraetenamen-Commit (S3). 5 min je Szenario.
+- **Abbruch:** jeder Reset/Panic/Watchdog/Brownout, jedes `heap_alloc_failed` in der Idle-/
+  Polling-Phase, Geraet > 60 s nicht erreichbar, Modellwiderlegung; Originalimage laut
+  Backup/Restore wiederherstellen. Es werden keine Schwellen erfunden; berichtet werden Werte
+  mit Identitaet und Zeitpunkt.
+
+#### 15.6.5 Reserve fuer das noch unfertige R1 (keine Bytewerte)
+
+| Klasse | jetzt integriert | fuer R1 noch vorgesehen | zurueckgestellt (nach R1) |
+|---|---|---|---|
+| Tasks/Stacks | Main (24 576 B), HTTPD (8 192 B), WLAN/lwIP/Systemtasks | DS18B20-Sampling-Task (#30, Budget gesperrt), Regel-/Control-Komposition (#35) | – |
+| Residente Modelle | Konfig-/Programmkatalog, Run-State, Web-Sessions, LVGL-Pool 48 KiB (O4-Referenz) | Sensor-/Regelzustand, Diagnose-/Exportpuffer (#28), Journale/Protokolle/Backup (#19) | OTA, UART-Diagnose, Telegram/Push |
+| Temporaere Allokationen | Snapshot-/Katalog-/JSON-Kodierung (M-H1: Einzelprogramm nun exakt) | Export/Diagramme (#28), Backup-/Journalpfade (#19), Service-Funktionen | – |
+| Flash/Partitionen | Release-Image 1 774 368 B in der 3 080 192 B grossen App-Partition (HEAD `1c56b4d`), NVS/State-Store | Journale/Export (#19/#28) | zweiter OTA-Slot (nicht vorgebaut) |
+
+Fuer nicht implementierte Funktionen werden **keine Bytewerte erfunden, keine Reserve fiktiv
+reserviert und keine endgueltigen harten R1-Gesamtlimits** gesetzt (O4:
+`FINAL_HARD_SYSTEM_LIMITS=DEFERRED_TO_FINAL_R1_INTEGRATION_QUALIFICATION`). Die LVGL-48-KiB-
+Referenz und ihre Messgrenzen (Punktmessungen, kein kontinuierliches Minimum) bleiben
+massgeblich; nach wesentlichen spaeteren Integrationen (#35, #28, #19) wird die Ressourcenmessung
+mit RAM-Delta-Pruefung wiederholt.
+
+#### 15.6.6 Entscheidungsregeln
+
+Technischer `PASS` nur bei tatsaechlicher Pfadabdeckung **und** begruendeter Reserve; sonst
+`PARTIAL`, `NOT_PROVEN` oder `FAIL` mit Beleg.
+
+- `HTTPD_FULL_CHAIN_STACK`: aus H-RAM-2 hoechstens `PARTIAL`; die statisch ungeloesten indirekten
+  Aufrufe und der nicht messbare Run-Store-Pfad werden **nicht** per Schaetzung oder
+  Risikoakzeptanz zu `PASS` erklaert. Eine Owner-Risikoakzeptanz wird getrennt dokumentiert.
+- `HTTPD_STACK_RESERVE`: bleibt `FAIL` gegen den 512-B-Planungsboden, solange der aufgeloeste Rest
+  432 B betraegt; eine Aenderung des Planungsbodens waere eine eigene Ownerentscheidung.
+- Heap-Gates: `PASS` nur, wenn der Heap-Lauf fuer die erreichbaren Pfade ohne
+  `heap_alloc_failed` laeuft und das Minimum sowie der groesste Block nachvollziehbar gegen die
+  R1-Referenz (§15.6.5) begruendet sind; der nicht erreichbare Programmsnapshot-/Checkpoint-/
+  Maximalkatalogteil bleibt `NOT_RUN/NOT_PROVEN`.
+- **8 192 vs. 8 704 B** wird erst zusammen mit dem im Heap-Lauf belegten Effekt von −512 B auf
+  freien Heap und groessten Block bewertet; kein praeventiver Umbau.
+
+### 15.7 Ownerentscheidung
+
+**Eine Frage:** Genehmigt der Owner auf der exakten Plan-SHA dieser Revision das Hardwaregate
+`H-RAM-2` in genau diesem begrenzten Umfang?
+(a) Zwei non-merge Diagnoseimages auf dem Produktstand (`80bfb28`): Heap-Image (8 KiB, nur
+Log-Overlay) und Stack-Diagnoseprofil (12 KiB, Log-Overlay), mit Quell-/Hash-Identitaet;
+(b) Flash app-only ab `0x10000` auf dem H-RAM-1-Geraet mit zweifachem Backup und verifiziertem
+Rueckflash, UART-Mitschnitt, EN-/BOOT-Reset und HTTP-Zugriff; Szenarien gemaess §15.6.4 (aktorfrei,
+`ACTUATOR_RELEASE=NO`). Ergebnis hoechstens Teilnachweis (Matrix-Zeilen 1–3, 5, 12).
+
+**Nicht enthalten und separat auszuweisen:** `G-R7` (Slice-7-Harness-Image mit HWM-Feld,
+Testpartition, Power-Cut) fuer die Run-Store-NVS-Teilkette; `G-RUN` (erfolgreicher Run-Pfad,
+aktorrelevant, an #30/#35 gebunden); Maximalkatalog-Hilfe. Bis zur Freigabe keine Produkt-,
+Build-, Hardware- oder Flash-Aktion.
 
 ### 15.8 M-H1 Umsetzungsergebnis
 
@@ -1638,3 +1734,7 @@ Anforderung 32 769 → 8 193 B (8-KiB-Run-Writer bleibt), Peak live 45 094 → 1
 unveraendert (Maximum 7 440 B, Rest 432 B). Heap-Gates `NOT_PROVEN`, `C5_RESOURCE_GATE=HOLD`.
 Details und Korrektur der Plan-Zahlen (Maximum 1 255 B): [Evidence](../audits/PR209_Q4_MH1_20261024.md).
 Hardwaregate und Stackgroesse bleiben offen (§15.5/§15.6).
+
+**Reviewstatus M-H1:** `M_H1_FIX_VERIFICATION=PASS`, `M_H1_OPEN_BLOCKERS=0` (Independent Review auf
+HEAD `1c56b4de623ab22ae9ae31a1b805ba5cea4e6c4a`, Produktcommit `80bfb28`); keine Wiederholung des
+Full Reviews; kein Merge-GO.
