@@ -12,9 +12,11 @@ namespace {
 
 constexpr std::size_t kMaximumHttpBodyBytes = 4096U;
 // HTTPD_DEFAULT_CONFIG() uses 4096 bytes, which the web provisioning request
-// overflowed on hardware (stack overflow in task httpd). 8192 is the first
-// fix candidate; hardware verification decides whether it is sufficient.
-constexpr std::size_t kHttpServerTaskStackBytes = 8192U;
+// overflowed on hardware (stack overflow in task httpd). 8704 (8192 + 512)
+// restores the 512-byte planning floor against the corrected static stack
+// model (7664 + 320 bytes); hardware verification of the 8704-byte image is
+// still open (docs/tasks/issue-27-r1-web-remaining-scope-plan.md, 15.9/15.10).
+constexpr std::size_t kHttpServerTaskStackBytes = 8704U;
 
 const char* methodName(http_method method) {
     switch (method) {
