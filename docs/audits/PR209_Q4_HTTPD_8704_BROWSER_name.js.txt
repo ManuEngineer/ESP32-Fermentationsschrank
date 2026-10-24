@@ -1,0 +1,28 @@
+const { pw, open } = require('./common.js');
+(async () => {
+  const { b, p } = await open();
+  try {
+  const resp = []; p.on('response', async r => { const u = r.url(); if (u.includes('/internal/ui/run')) { let t = ''; try { t = (await r.text()).slice(0, 200); } catch {} resp.push(r.status() + ' ' + t); } });
+  const body = () => p.evaluate(() => document.body.innerText.replace(/\n+/g, ' | '));
+  await p.goto('http://<DEVICE_IP>/'); await p.waitForTimeout(800);
+  await p.fill('input[type=password]', pw); await p.click('button:has-text("Anmelden")'); await p.waitForTimeout(3500);
+  await p.locator('button:not([id])').nth(3).click(); await p.waitForTimeout(1200);
+  const inp = p.locator('input:visible').first();
+  const orig = await inp.inputValue(); console.log('orig length', orig.length);
+  const save = async (label, val) => {
+    resp.length = 0; await inp.fill(val); await p.locator('button:has-text("Speichern")').click(); await p.waitForTimeout(600); const t1=(await body()).slice(-120); console.log('   after-1st-click:', t1); const cf=p.locator('button:has-text("Sicher")'); if (await cf.count()) await cf.first().click(); await p.waitForTimeout(3000);
+    await p.screenshot({ path: `n_${label}.png` });
+    console.log('##', label, '| value now:', JSON.stringify(await inp.inputValue()).slice(0, 80), '| http:', JSON.stringify(resp), '| page:', (await body()).slice(-200));
+  };
+  await save('empty', '');
+  await save('toolong', 'x'.repeat(60));
+  await save('rename', orig + '-t');
+  await p.reload(); await p.waitForTimeout(1500); await p.locator('button:not([id])').nth(3).click(); await p.waitForTimeout(1200);
+  console.log('after reload value:', await p.locator('input:visible').first().inputValue());
+  await save('revert', orig);
+  await p.reload(); await p.waitForTimeout(1500); await p.locator('button:not([id])').nth(3).click(); await p.waitForTimeout(1200);
+  console.log('final equals orig:', (await p.locator('input:visible').first().inputValue()) === orig);
+  await p.click('#logout'); await p.waitForTimeout(1500); console.log('after logout:', (await body()).slice(0, 120));
+  console.log(p.logs.join('\n'));
+  } catch (e) { console.log('ERR', e.message.slice(0,200)); try { await p.click('#logout', {timeout:3000}); } catch {} } finally { await b.close(); }
+})();

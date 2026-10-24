@@ -1,0 +1,15 @@
+#!/bin/bash
+# RB-2 (G-S): byte-exact physical restore of ONLY the state_store partition (0x300000, 1 MiB) from the P0 backup A, with readback verification.
+set -e
+TAG="$1"
+export IDF_PATH=/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1
+export IDF_TOOLS_PATH=/var/lib/docker/data/engineering/home/manuel/.espressif
+. $IDF_PATH/export.sh >/dev/null 2>&1
+P="--port /dev/ttyUSB0 --baud 460800"
+sha256sum -c SHA256SUMS --ignore-missing 2>&1 | grep state_store
+esptool $P --before default-reset --after no-reset write-flash --flash-mode keep --flash-size keep 0x300000 state_store_A.bin
+mkdir -p restore_$TAG
+esptool $P --before default-reset --after no-reset read-flash 0x300000 0x100000 restore_$TAG/state_store_readback.bin
+esptool $P --before default-reset --after no-reset read-flash 0x0 0x10000 restore_$TAG/boot_readback.bin
+cmp state_store_A.bin restore_$TAG/state_store_readback.bin && echo STATE_STORE_RESTORED_EQUALS_P0=YES
+cmp boot_A.bin restore_$TAG/boot_readback.bin && echo BOOT_AREA_EQUALS_P0=YES

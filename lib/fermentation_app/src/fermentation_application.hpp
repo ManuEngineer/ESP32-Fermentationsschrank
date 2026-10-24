@@ -226,6 +226,19 @@ struct FermentationUiUserSettingsChange {
     std::optional<std::string> deviceName;
 };
 
+// The closed web configuration change contains exactly a device-name change.
+struct WebDeviceNameChange {
+    std::string name;
+};
+using WebConfigurationChange = std::variant<WebDeviceNameChange>;
+
+struct ApplicationWebSettingsSnapshot {
+    UserConfigurationRevision revision{0U};
+    std::string deviceName;
+    std::string timeZone;
+    bool nameEditable{false};
+};
+
 struct ApplicationConfigurationChangeResult {
     ConfigurationPreviewStatus preview{
         ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable};
@@ -303,12 +316,20 @@ class FermentationApplication {
         const std::string& languageId,
         const std::optional<UserConfigurationRevision>& expectedRevision);
     // Persists normal user settings (Issue #172 S10, D5/O4) through preview,
-    // revision validation and confirmation, surface-neutral like
-    // applyDisplayLanguage. The visible device name is validated by the
-    // configuration text rules before a preview slot is taken and is only
-    // changeable while no run is active; this is decided here, not by the UI.
-    // The network (hostname, SoftAP SSID, QR) is neither stopped nor
-    // restarted: derived names follow at the next normal network start.
+    // revision validation and confirmation; this entry is LocalDisplay.
+    // The separate typed web entry fixes WebInterface as its origin. The
+    // visible device name is validated by the configuration text rules before a
+    // preview slot is taken and is only changeable while no run is active; this
+    // is decided here, not by the UI. The network (hostname, SoftAP SSID, QR)
+    // is neither stopped nor restarted: derived names follow at the next normal
+    // network start.
+    [[nodiscard]] ApplicationConfigurationChangeResult
+    applyWebConfigurationChange(
+        const WebConfigurationChange& change,
+        const std::optional<UserConfigurationRevision>& expectedRevision);
+    [[nodiscard]] std::optional<ApplicationWebSettingsSnapshot> webSettings()
+        const;
+
     [[nodiscard]] ApplicationConfigurationChangeResult applyUserSettings(
         const FermentationUiUserSettingsChange& change,
         const std::optional<UserConfigurationRevision>& expectedRevision);
@@ -456,6 +477,8 @@ class FermentationApplication {
     // Confirmation reuses the already application-bound request.  It only
     // changes the existing envelope confirmation bit; it never allocates a
     // new CommandId or derives a replacement runId.
+    FermentationApplicationRequestStatus confirmPreparedInPlace(
+        FermentationApplicationRequestResult& prepared);
     [[nodiscard]] FermentationApplicationRequestResult confirmPrepared(
         const FermentationApplicationRequestResult& prepared);
     // The single confirmed envelope handoff for local and future UI
@@ -511,6 +534,17 @@ class FermentationApplication {
         const FermentationUiCommandContext& context);
 
    private:
+    [[nodiscard]] bool runCommandOperationActive() const;
+
+#ifdef APP_PROFILE_NATIVE
+    std::size_t webConfigurationCallsForTest_{0U};
+#endif
+    [[nodiscard]] ApplicationConfigurationChangeResult
+    applyUserConfigurationChange(
+        const ChangeOrigin& origin,
+        const FermentationUiUserSettingsChange& change,
+        const std::optional<UserConfigurationRevision>& expectedRevision);
+
     struct ApplicationRuntimeEvidence {
         CrossRolePlausibilityContext plausibility;
         bool safetyAllowsStart{false};
@@ -544,7 +578,7 @@ class FermentationApplication {
                                const FermentationUiCompleteRunIntent& intent);
     template <typename Request>
     [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
-        Request request,
+        Request&& request,
         std::optional<CrossRolePlausibilityContext> owningPlausibility =
             std::nullopt);
     template <typename Intent>

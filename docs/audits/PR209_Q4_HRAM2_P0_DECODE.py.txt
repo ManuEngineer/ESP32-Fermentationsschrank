@@ -1,0 +1,25 @@
+# Offline, read-only decode aids for the P0 state_store image (no device access).
+# Input: ss_blobs.txt = `nvs_tool.py -d blobs --color never state_store_0x300000.bin` (ESP-IDF v6.1).
+# Prints only structural status fields; credential/secret payload bytes are never printed.
+import re, struct, collections
+blobs, cur = {}, None
+for l in open('ss_blobs.txt'):
+    m = re.match(r'(\S+):(\S+) - Type: Blob', l)
+    if m: cur = m[2]; blobs[cur] = bytearray(); continue
+    m = re.match(r'\s*0x[0-9a-f]+\s+((?:[0-9a-f]{2} +){1,32})', l)
+    if m and cur: blobs[cur] += bytes.fromhex(m[1].replace(' ', ''))
+def env(b):
+    assert b[:4] == b'DPRF'
+    ver, rt, sch, ep, vv, plen = struct.unpack_from('>HHIQQI', b, 4)
+    o = 32; tag = b[o]; o += 1 + (8 if tag else 0) + 4   # utc tag [+utc], header CRC
+    return rt, sch, ep, vv, bytes(b[o:o + plen])
+for k in ('cb0', 'cb1'):
+    rt, sch, ep, vv, p = env(blobs[k])
+    fmt, st, ho = struct.unpack_from('>IBB', p, 0); prev, cu = struct.unpack_from('>QQ', p, 6); ah, seq = struct.unpack_from('>BQ', p, 22)
+    print(k, 'version', vv, 'schema', sch, 'state', st, '(2=Initialized)', 'runEpochHandoff', ho, '(3=Consumed)', 'epochs', prev, cu, 'authDomainHandoff', ah, '(3=Consumed)', 'authSeq', seq)
+rt, sch, ep, vv, p = env(blobs['authroot0']); print('authroot0 state', p[0], '(3=Provisioned)', 'domainGeneration', struct.unpack_from('>Q', p, 1)[0], 'binding', struct.unpack_from('>Q', p, 9)[0])
+rt, sch, ep, vv, p = env(blobs['cc0']); print('cc0 schema', sch, '(2=V2) recordSequence', vv)
+rt, sch, ep, vv, p = env(blobs['auth0']); print('auth0 recordSequence', vv, '(payload not printed)')
+b = blobs['rh0']; plen = struct.unpack_from('>I', b, 28)[0]; p = bytes(b[37:37 + plen]); print('rh0 head state', p[0], '(2=Committed)')
+for k in ('rc0', 'rc1'):
+    b = blobs[k]; plen = struct.unpack_from('>I', b, 28)[0]; print(k, 'checkpoint variant byte', b[37], '(3=NoActiveRun)')

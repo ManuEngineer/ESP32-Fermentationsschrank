@@ -67,6 +67,16 @@ FermentationApplicationRequestResult requestFailure(
     return {status, std::nullopt, std::nullopt};
 }
 
+// Exclusivity is unavailable before a decision/owning path is entered.
+// Keep the existing detail and wire category; do not report a persistence
+// outcome.
+FermentationUiCommandResult unavailableRunDecision() {
+    return {device_platform::DeviceUiCommandOutcomeCategory::Unavailable,
+            CommandStatus::ContextMissing,
+            FermentationUiCommandPhase::DecisionOnly, std::nullopt,
+            std::nullopt};
+}
+
 bool completeAuthorizedEpochHandoff(
     ConfigurationRecoveryService& configurationRecoveryService,
     RunPersistenceCoordinator& runPersistenceCoordinator,
@@ -145,17 +155,6 @@ ManualTimedRunSource makeManualTimedSource(const ManualTimedRunValues& values) {
     return source;
 }
 
-std::optional<ProgramDocument> findProgram(
-    const RuntimeConfigurationSnapshot& snapshot,
-    const std::string& programId) {
-    for (const auto& document : snapshot.programCatalog().programs) {
-        if (document.program.id == programId) {
-            return document;
-        }
-    }
-    return std::nullopt;
-}
-
 // O5 / #172 S9: the technical run limits of a manual run or a cooling plan
 // (qualification band/duration, maximum target reach, ...) come only from a
 // commissioning-released product/service owner (#34/#35). No such owner exists
@@ -220,15 +219,14 @@ ApplicationConfigurationChangeResult commitConfigurationChange(
     return {Preview::Success, committed.status};
 }
 
-// User configuration changes of the local surface (canonical wire values
-// {LocalDisplay,2U} / {NormalEdit,1U}).
+// Shared user-configuration commit; origin is fixed by the owning entry,
+// never by transport data. Operation remains {NormalEdit,1U}.
 template <typename Mutate>
 ApplicationConfigurationChangeResult commitUserConfigurationChange(
     ConfigurationService& service, const UserConfigurationRevision& expected,
-    Mutate&& mutate) {
+    const ChangeOrigin& origin, Mutate&& mutate) {
     return commitConfigurationChange(
-        service, expected, {ChangeOriginKind::LocalDisplay, 2U},
-        {ChangeOperationKind::NormalEdit, 1U},
+        service, expected, origin, {ChangeOperationKind::NormalEdit, 1U},
         [&mutate](ConfigurationPreviewBuildLease& lease) {
             mutate(lease.userConfiguration());
         });
@@ -239,14 +237,16 @@ ApplicationConfigurationChangeResult commitUserConfigurationChange(
 template <typename Request>
 FermentationApplicationRequestResult
 FermentationApplication::makePreparedRequest(
-    Request request,
+    Request&& request,
     std::optional<CrossRolePlausibilityContext> owningPlausibility) {
-    FermentationApplicationPreparedRequest prepared(
-        FermentationApplicationPreparedRequest::Storage{std::move(request)},
-        owningPlausibility);
-    const auto uiRequestId = prepared.commandEnvelope().id;
-    return {FermentationApplicationRequestStatus::Prepared, std::move(prepared),
-            device_platform::UiRequestId{uiRequestId}};
+    FermentationApplicationRequestResult result;
+    result.request.emplace(
+        FermentationApplicationPreparedRequest::ConstructionTag{},
+        std::forward<Request>(request), owningPlausibility);
+    result.status = FermentationApplicationRequestStatus::Prepared;
+    result.uiRequestId =
+        device_platform::UiRequestId{result.request->commandEnvelope().id};
+    return result;
 }
 
 FermentationApplication::FermentationApplication() noexcept = default;
@@ -284,12 +284,20 @@ FermentationApplication::prepareStartProgram(
             FermentationApplicationRequestStatus::StaleProgramCatalog);
     }
     const auto& candidate = intent.candidate;
-    std::optional<ProgramDocument> program =
-        findProgram(snapshot, candidate.programId);
-    if (!program.has_value() || !program->program.installed) {
+    const ProgramDocument* sourceProgram = nullptr;
+    for (const auto& item : snapshot.programCatalog().programs) {
+        if (item.program.id == candidate.programId) {
+            sourceProgram = &item;
+            break;
+        }
+    }
+    if (sourceProgram == nullptr || !sourceProgram->program.installed) {
         return requestFailure(
             FermentationApplicationRequestStatus::ProgramUnavailable);
     }
+    ProgramStartRequest request;
+    request.program = *sourceProgram;
+    auto* program = &std::get<ProgramDocument>(request.program);
     const bool nextRunOverride = hasStartCandidateOverride(candidate);
     const auto sensorMode = requestedProgramSensorMode(*program, candidate);
     if (!sensorMode.has_value()) {
@@ -318,11 +326,9 @@ FermentationApplication::prepareStartProgram(
         return requestFailure(
             FermentationApplicationRequestStatus::Unavailable);
     }
-    ProgramStartRequest request;
     request.envelope =
         FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
     request.runId = *runId;
-    request.program = std::move(*program);
     request.sourceProgramRevision = *sourceRevision;
     request.sensorMode = *sensorMode;
     request.safetyAllowsStart = evidence.safetyAllowsStart;
@@ -627,21 +633,40 @@ FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
         payload);
 }
 
+FermentationApplicationRequestStatus
+FermentationApplication::confirmPreparedInPlace(
+    FermentationApplicationRequestResult& prepared) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
+        !prepared.request) {
+        return FermentationApplicationRequestStatus::Unavailable;
+    }
+    if (!revalidatePreparedRequest(*prepared.request)) {
+        return FermentationApplicationRequestStatus::Unavailable;
+    }
+    prepared.request->confirm();
+    return FermentationApplicationRequestStatus::Prepared;
+}
 FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     const FermentationApplicationRequestResult& prepared) {
     const auto guard = applicationCallSerializer_.enter();
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
-        !prepared.request.has_value()) {
+        !prepared.request) {
         return requestFailure(
             FermentationApplicationRequestStatus::Unavailable);
     }
     auto confirmed = prepared;
-    if (!revalidatePreparedRequest(*confirmed.request)) {
+    if (confirmPreparedInPlace(confirmed) !=
+        FermentationApplicationRequestStatus::Prepared) {
         return requestFailure(
             FermentationApplicationRequestStatus::Unavailable);
     }
-    confirmed.request->confirm();
     return confirmed;
+}
+
+bool FermentationApplication::runCommandOperationActive() const {
+    return runPersistenceCoordinator_ != nullptr &&
+           runPersistenceCoordinator_->commandOperationActive();
 }
 
 FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
@@ -654,13 +679,23 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
     if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr) {
         // No owning path was entered. Keep this a decision-only result instead
         // of mislabelling an unavailable application as a persisted outcome.
-        return FermentationUiCommandBridge::fromCommandStatus(
-            CommandStatus::ContextMissing);
+        return unavailableRunDecision();
     }
 
-    CommandDecision decision;
-    auto decisionResult = FermentationUiCommandBridge::decidePrepared(
-        *runtimeRunState_, confirmed, std::nullopt, &decision);
+    if (runPersistenceCoordinator_->commandOperationActive()) {
+        return unavailableRunDecision();
+    }
+    auto operation = runPersistenceCoordinator_->beginCommandOperation();
+    if (!operation) {
+        return unavailableRunDecision();
+    }
+    auto* candidate = runPersistenceCoordinator_->commandCandidate(*operation);
+    if (candidate == nullptr) {
+        return unavailableRunDecision();
+    }
+    CommandDecisionView decision(*runtimeRunState_, *candidate);
+    auto decisionResult = FermentationUiCommandBridge::decidePreparedInto(
+        *runtimeRunState_, confirmed, std::nullopt, decision);
     if (!std::holds_alternative<CommandStatus>(decisionResult.detail) ||
         std::get<CommandStatus>(decisionResult.detail) !=
             CommandStatus::Proposed) {
@@ -693,12 +728,13 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
                     runtime.lease);
             }
         }
-        persisted = runPersistenceCoordinator_->persistFreshStartCommand(
-            *runtimeRunState_, decision, provenance, checkpointTime,
-            liveEvidence);
+        persisted = runPersistenceCoordinator_->persistBorrowedCommand(
+            *operation, *runtimeRunState_, decision, checkpointTime,
+            liveEvidence, &provenance);
     } else {
-        persisted = runPersistenceCoordinator_->persistCommand(
-            *runtimeRunState_, decision, checkpointTime, liveEvidence);
+        persisted = runPersistenceCoordinator_->persistBorrowedCommand(
+            *operation, *runtimeRunState_, decision, checkpointTime,
+            liveEvidence, nullptr);
     }
     return FermentationUiCommandBridge::fromRunPersistenceResult(
         persisted.status);
@@ -735,6 +771,9 @@ FermentationUiCommandResult FermentationApplication::confirmProductInserted(
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
     const device_platform::IResetCauseSource* resetCauseSource) {
+    if (runCommandOperationActive()) {
+        return false;
+    }
     if (!platformServices.ready()) {
         return false;
     }
@@ -763,6 +802,9 @@ bool FermentationApplication::begin(
     device_platform::IStateStore& store,
     const device_platform::ITimeZoneResolver& timeZoneResolver,
     const device_platform::IResetCauseSource* resetCauseSource) {
+    if (runCommandOperationActive()) {
+        return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver, nullptr,
                            resetCauseSource);
 }
@@ -773,6 +815,9 @@ bool FermentationApplication::begin(
     const device_platform::ITimeZoneResolver& timeZoneResolver,
     const device_platform::ITimeSource& timeSource,
     const device_platform::IResetCauseSource* resetCauseSource) {
+    if (runCommandOperationActive()) {
+        return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, nullptr, nullptr);
 }
@@ -786,6 +831,9 @@ bool FermentationApplication::begin(
     device_platform::IHttpServerLifecycle& httpServerLifecycle,
     device_platform::ISecureRandomSource& randomSource,
     const device_platform::IResetCauseSource* resetCauseSource) {
+    if (runCommandOperationActive()) {
+        return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
                            &httpServerLifecycle, &randomSource, nullptr,
@@ -802,6 +850,9 @@ bool FermentationApplication::begin(
     device_platform::ISecureRandomSource& randomSource,
     IAuthenticationKdf& authenticationKdf,
     const device_platform::IResetCauseSource* resetCauseSource) {
+    if (runCommandOperationActive()) {
+        return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
                            &httpServerLifecycle, &randomSource,
@@ -819,6 +870,9 @@ bool FermentationApplication::begin(
     IAuthenticationKdf& authenticationKdf,
     device_platform::IReplayDigest& replayDigest,
     const device_platform::IResetCauseSource* resetCauseSource) {
+    if (runCommandOperationActive()) {
+        return false;
+    }
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
                            &httpServerLifecycle, &randomSource,
@@ -1000,6 +1054,7 @@ FermentationApplication::applyDisplayLanguage(
     }
     return commitUserConfigurationChange(
         *configurationService_, *expectedRevision,
+        {ChangeOriginKind::LocalDisplay, 2U},
         [&languageId](UserConfiguration& configuration) {
             configuration.displayLanguageId = languageId;
         });
@@ -1009,6 +1064,49 @@ ApplicationConfigurationChangeResult FermentationApplication::applyUserSettings(
     const FermentationUiUserSettingsChange& change,
     const std::optional<UserConfigurationRevision>& expectedRevision) {
     const auto guard = applicationCallSerializer_.enter();
+    return applyUserConfigurationChange({ChangeOriginKind::LocalDisplay, 2U},
+                                        change, expectedRevision);
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applyWebConfigurationChange(
+    const WebConfigurationChange& change,
+    const std::optional<UserConfigurationRevision>& expectedRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+#ifdef APP_PROFILE_NATIVE
+    ++webConfigurationCallsForTest_;
+#endif
+    return applyUserConfigurationChange(
+        {ChangeOriginKind::WebInterface, 3U},
+        FermentationUiUserSettingsChange{
+            std::get<WebDeviceNameChange>(change).name},
+        expectedRevision);
+}
+
+std::optional<ApplicationWebSettingsSnapshot>
+FermentationApplication::webSettings() const {
+    const auto guard = applicationCallSerializer_.enter();
+    if (configurationService_ == nullptr) {
+        return std::nullopt;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return std::nullopt;
+    }
+    const auto& snapshot = runtime.lease.get();
+    return ApplicationWebSettingsSnapshot{
+        snapshot.userConfigurationRevision(),
+        snapshot.userConfiguration().deviceName,
+        snapshot.preparedTimeZone().canonicalIdentifier,
+        runtimeRunState_ != nullptr &&
+            !runtimeRunState_->activeProgramRun.has_value() &&
+            !runtimeRunState_->activeManualRun.has_value()};
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applyUserConfigurationChange(
+    const ChangeOrigin& origin, const FermentationUiUserSettingsChange& change,
+    const std::optional<UserConfigurationRevision>& expectedRevision) {
     using Preview = ConfigurationPreviewStatus;
     using Commit = ConfigurationCommitStatus;
     // Without the run state "no active run" cannot be proven (O4), and
@@ -1037,7 +1135,7 @@ ApplicationConfigurationChangeResult FermentationApplication::applyUserSettings(
         return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
     }
     return commitUserConfigurationChange(
-        *configurationService_, *expectedRevision,
+        *configurationService_, *expectedRevision, origin,
         [&change](UserConfiguration& configuration) {
             configuration.deviceName = *change.deviceName;
         });
@@ -2019,6 +2117,9 @@ bool FermentationApplication::beginPersistent(
     device_platform::ISecureRandomSource* randomSource,
     IAuthenticationKdf* authenticationKdf,
     device_platform::IReplayDigest* replayDigest) {
+    if (runCommandOperationActive()) {
+        return false;
+    }
     if (!platformServices.ready()) {
         return false;
     }
@@ -2530,6 +2631,9 @@ FermentationApplication::noRuntimeResetBootstrapEpochUnlocked() const {
 ConfigurationRecoveryResult
 FermentationApplication::beginAuthorizedFactoryReset() {
     const auto guard = applicationCallSerializer_.enter();
+    if (runCommandOperationActive()) {
+        return {ConfigurationRecoveryStatus::ConfigurationMutationBusy, {}};
+    }
     ConfigurationRecoveryResult unavailable{
         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
     const auto knownEpoch = factoryResetPreviousEpochUnlocked();

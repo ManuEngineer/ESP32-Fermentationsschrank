@@ -1,0 +1,8 @@
+case	fixture	count_before	count_after	bytes_before	bytes_after	largest_before	largest_after	peak_before	peak_after
+0	start/replay; 16 programs	174	174	60854	29337	32769	8193	45094	14937
+1	identity write fails before decision	94	94	52099	20582	32769	8193	45094	14937
+2	identity unknown write/readback failure	97	97	52406	20889	32769	8193	45094	14937
+3	settings name commit; 16 max-note programs	1159	1159	516410	516410	19890	19890	69724	69724
+4	first C++ allocation fails (native exception)	0	0	0	0	0	0	0	0
+5	first cJSON allocation fails (checked null)	22	22	1369	1369	193	193	684	684
+6	adjust/replay; 32 revisions	556	556	217808	186254	32769	8193	43698	15863

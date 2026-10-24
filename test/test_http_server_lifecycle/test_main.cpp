@@ -48,6 +48,11 @@ void test_response_metadata_is_bounded_and_ascii() {
     metadata.setCookie = "FSSESSION=x; HttpOnly; SameSite=Strict; Path=/";
     metadata.retryAfter = "30";
     TEST_ASSERT_TRUE(device_platform::validateHttpResponseMetadata(metadata));
+    metadata.cache = device_platform::HttpResponseCache::ImmutableAsset;
+    TEST_ASSERT_TRUE(device_platform::validateHttpResponseMetadata(metadata));
+    metadata.cache = static_cast<device_platform::HttpResponseCache>(255U);
+    TEST_ASSERT_FALSE(device_platform::validateHttpResponseMetadata(metadata));
+    metadata.cache = device_platform::HttpResponseCache::None;
     metadata.retryAfter = "3\n0";
     TEST_ASSERT_FALSE(device_platform::validateHttpResponseMetadata(metadata));
 }

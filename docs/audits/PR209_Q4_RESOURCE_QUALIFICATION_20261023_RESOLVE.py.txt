@@ -1,0 +1,246 @@
+# Reproduktion (nur Analyse, keine Produktaenderung); Eingaben, die vor dem Lauf erzeugt werden muessen:
+#   build/<profil>/esp32_fermentationsschrank.elf        aus scripts/build_esp_idf_profiles.py all --require-clean-source-tree
+#   <S>/<profil>.asm      = xtensa-esp32-elf-objdump -d <elf>
+#   <S>/<profil>.nm       = xtensa-esp32-elf-nm <elf>;   <S>/<profil>.nmS = xtensa-esp32-elf-nm -S <elf>
+#   <S>/<profil>{.flash.text,.iram0.text,.iram0.vectors}.bin = xtensa-esp32-elf-objcopy -O binary -j <section> <elf>
+#   <S>/<profil>.secs     = objdump -h Auszug "name VMA size" der drei Sektionen
+#   <S>/esp32_rev0_rom.asm, esp32_rev300_rom.asm = objdump -d der esp-rom-elfs 20241011
+#   /tmp/pr209-q4-value-delta/<profil>-{graph,paths}.json = Ausgabe von PR209_Q4_VALUE_DELTA_20261023_PATHS.py.txt
+#   (dessen SDK-.ci-Eingaben liegen in /tmp/pr209-q4-implementation/<profil>/, siehe PR209_Q4_IMPLEMENTATION_20261023_COMPILE.py.txt)
+# <S> ist hier der Scratchpad-Pfad der Analysesitzung; beim Wiederholen anpassen.
+import json,re,sys,collections
+sys.setrecursionlimit(200000)
+S='/tmp/claude-1000/-var-lib-docker-data-ESP32-Projekte-ESP32-Fermentationsschrank/613ddc29-041e-4a93-bdb8-f1fe1b1be107/scratchpad'
+hexdec=[]
+def parse_asm(path):
+    frames={};cur=None;have=False
+    for line in open(path,errors='replace'):
+        m=re.match(r'^([0-9a-f]+) <([^>]+)>:',line)
+        if m:
+            cur=int(m[1],16);have=False;frames.setdefault(cur,None);continue
+        if cur is not None and not have:
+            h=re.match(r'^[0-9a-f]+:\t([0-9a-f]{8})\s*$',line)
+            if h:
+                w=int(h[1],16);b0,b1,b2=w&255,(w>>8)&255,(w>>16)&255
+                if b0==0x36 and (b1&0xf)==1: frames[cur]=((b1>>4)|(b2<<4))*8;have=True;hexdec.append(cur)
+                continue
+            e=re.search(r'\bentry\s+a1,\s*(\d+)',line)
+            if e: frames[cur]=int(e[1]);have=True
+            elif re.search(r'\t(ret|ret\.n|retw|retw\.n)\b',line): frames[cur]=0;have=True
+    return frames
+rom=[parse_asm(f'{S}/esp32_rev0_rom.asm'),parse_asm(f'{S}/esp32_rev300_rom.asm')]
+def romframe(a):
+    v=[r.get(a) for r in rom]
+    if all(x is None for x in v): return None
+    return max(x for x in v if x is not None)
+res={}
+for prof in ['esp32_release','esp32_bringup']:
+    g=json.load(open(f'/tmp/pr209-q4-value-delta/{prof}-graph.json'))
+    paths=json.load(open(f'/tmp/pr209-q4-value-delta/{prof}-paths.json'))
+    nodes=g['nodes'];edges={k:set(v) for k,v in g['edges'].items()}
+    # indirect targets resolved from source (see §15): shared_ptr control blocks, alloc-failed hook
+    def lab(k): return nodes[k]['label']
+    disp=[k for k in nodes if '_Sp_counted' in lab(k) and ('_M_dispose' in lab(k) or '_M_destroy' in lab(k))]
+    for k in list(nodes):
+        if '_M_release_last_use' in lab(k) and '_Sp_counted_base' in lab(k):
+            edges.setdefault(k,set()).update(disp)
+    hook=[k for k in nodes if 'logFailedHeapAllocation' in lab(k)]
+    for k in nodes:
+        if lab(k)=='heap_caps_alloc_failed':
+            edges.setdefault(k,set()).update(hook)
+    for h in hook: edges.setdefault(h,set()).add('esp_rom_printf')
+    fw=parse_asm(f'{S}/{prof}.asm')
+    nm={}
+    for line in open(f'{S}/{prof}.nm'):
+        p=line.split()
+        if len(p)==3: nm.setdefault(p[2],[]).append(int(p[0],16))
+    def base(k): return k.split(':')[-1] if ':' in k and not k.startswith('_Z') else k
+    def lookup(t):
+        b=base(t)
+        for cand in (b,b.replace('C1E','C2E').replace('D1Ev','D2Ev')):
+            for a in nm.get(cand,[]):
+                if 0x40000000<=a<0x40070000:  # ROM
+                    f=romframe(a)
+                    if f is not None: return f,'rom'
+                f=fw.get(a)
+                if f is not None: return f,'elf'
+        return None,None
+    frame={};kind={}
+    targets=set(t for ts in edges.values() for t in ts)|set(edges)
+    for t in targets:
+        v=nodes.get(t,{}).get('frame')
+        if v is not None: frame[t]=v;kind[t]='ci';continue
+        f,k=lookup(t)
+        frame[t]=f;kind[t]=k or 'unresolved'
+    # lowest-level: frames of unresolved nodes treated as None
+
+    # ---- direct-call closure for functions resolved from the ELF (no .ci): raw Xtensa CALL/J decode
+    secs=[]
+    for line in open(f'{S}/{prof}.secs'):
+        n,sbase,ssize=line.split();secs.append((n,int(sbase,16),int(ssize,16),open(f'{S}/{prof}{n}.bin','rb').read()))
+    def getbytes(a,n):
+        for _,b,sz,data in secs:
+            if b<=a<b+sz: return data[a-b:a-b+n],b
+        return None,None
+    syms={}  # addr -> (name,size)
+    name2={}
+    for line in open(f'{S}/{prof}.nmS'):
+        p=line.split()
+        if len(p)==4 and p[2] in 'TtWwiI':
+            a=int(p[0],16);sz=int(p[1],16)
+            if a not in syms or sz>syms[a][1]: syms[a]=(p[3],sz)
+            name2.setdefault(p[3],a)
+    # prefer non-alias canonical name per address: the longest-size entry
+    # objdump ground truth for decodable functions (direct call/j-tail), linear sweep otherwise
+    truth={};decd={};cur_=None
+    for line in open(f'{S}/{prof}.asm',errors='replace'):
+        m_=re.match(r'^([0-9a-f]+) <([^>]+)>:',line)
+        if m_: cur_=int(m_[1],16);truth[cur_]=set();decd[cur_]=False;continue
+        if cur_ is None:continue
+        if re.search(r'\tentry\t',line): decd[cur_]=True
+        c_=re.search(r'\t(?:call0|call4|call8|call12)\t([0-9a-f]+) <',line)
+        j_=re.search(r'\tj\t([0-9a-f]+) <',line)
+        if c_: truth[cur_].add(int(c_[1],16));decd[cur_]=True
+        if j_:
+            t_=int(j_[1],16);sz_=syms.get(cur_,(None,0))[1]
+            if not(cur_<=t_<cur_+sz_): truth[cur_].add(t_)
+    def direct_calls(a):
+        size=syms.get(a,(None,0))[1]
+        if size==0: return set(),0
+        if decd.get(a):
+            return {t for t in truth[a] if t in syms and t!=a},0
+        data,b=getbytes(a,size)
+        if data is None: return set(),0
+        out=set();i=0
+        while i<len(data)-2:
+            b0=data[i];op0=b0&0xF
+            if op0>=8: i+=2;continue
+            w=data[i]|data[i+1]<<8|data[i+2]<<16
+            if op0==5:
+                off=w>>6
+                if off&0x20000: off-=0x40000
+                t=((((a+i)>>2)+1+off)<<2)
+                if t in syms and t!=a: out.add(t)
+            elif op0==6 and ((b0>>4)&3)==0:
+                off=w>>6
+                if off&0x20000: off-=0x40000
+                t=a+i+4+off
+                if t in syms and not(a<=t<a+size): out.add(t)
+            i+=3
+        return out,0
+    key_by_name={}
+    for k in nodes: key_by_name.setdefault(base(k),k)
+    work=[t for t in targets if kind.get(t)=='elf']
+    done=set(work);added=0
+    while work:
+        t=work.pop()
+        b=base(t)
+        a=name2.get(b)
+        if a is None: continue
+        calls,_=direct_calls(a)
+        for ta in calls:
+            tn=syms[ta][0]
+            if tn in key_by_name: tk=key_by_name[tn]
+            else:
+                tk=tn
+                if tk not in frame:
+                    f=fw.get(ta)
+                    frame[tk]=f;kind[tk]='elf' if f is not None else 'unresolved'
+            if tk not in edges.get(t,()):
+                edges.setdefault(t,set()).add(tk);added+=1
+            if tk not in done and kind.get(tk)=='elf':
+                done.add(tk);work.append(tk)
+    print(prof,'closure edges added',added,'new elf nodes',len(done)-len([t for t in targets if kind.get(t)=='elf']))
+
+    # terminal (fatal) targets: abort/assert/panic/exception-throw stubs end in a device reset; excluded from operational maxima
+    TERMINAL=('abort','__assert_func','esp_system_abort','panic_abort','__wrap___cxa_throw','__cxa_throw','_ZSt17__throw_bad_allocv','_ZSt28__throw_bad_array_new_lengthv','_ZSt20__throw_length_errorPKc','_ZSt19__throw_logic_errorPKc','_ZSt24__throw_out_of_range_fmtPKcz','_ZSt16__throw_bad_castv','__wrap___cxa_allocate_exception','__cxa_allocate_exception','esp_restart','xt_unhandled_exception','panicHandler','_ZSt9terminatev')
+    termkeys=set(k for k in set(edges)|set(t for ts in edges.values() for t in ts) if base(k) in TERMINAL)
+    cut=0
+    for k in list(edges):
+        before=len(edges[k]);edges[k]={y for y in edges[k] if y not in termkeys};cut+=before-len(edges[k])
+    for k in termkeys: edges.pop(k,None)
+    print(prof,'terminal edges cut',cut,'terminal nodes',len(termkeys))
+    active=set();memo={}
+    def walk(k,mode):  # mode 'ci' counts ci only; 'all' counts ci+elf+rom
+        key=(k,mode)
+        if key in memo:return memo[key]
+        active.add(k);best=(0,[])
+        for y in sorted(edges.get(k,())):
+            if y in active:continue
+            n,p=walk(y,mode)
+            if n>best[0]:best=(n,p)
+        active.discard(k)
+        f=frame.get(k)
+        if f is None or (mode=='ci' and kind[k]!='ci'): f=0
+        memo[key]=(f+best[0],[k]+best[1]);return memo[key]
+    rows=[]
+    extra=[]
+    for lbl,name in [('handleShell(','GET shell'),('handleReadOnly(','GET read-only'),('handleLogin(','POST login'),('handleAsset(','GET asset')]:
+        k=[x for x in nodes if 'WebRouteDispatcher::'+lbl in nodes[x]['label']][0]
+        extra.append({'phase':name,'overhead':1280+96-96,'path':[{'symbol':k}]})
+    for ph in paths+extra:
+        root=ph['path'][0]['symbol'];ov=ph['overhead']
+        tc,pc=walk(root,'ci');ta,pa=walk(root,'all')
+        seen=set();todo=[root]
+        while todo:
+            x=todo.pop()
+            if x in seen:continue
+            seen.add(x);todo.extend(edges.get(x,()))
+        unres=sorted(set(base(x) for x in seen if frame.get(x) is None))
+        onpath=[base(x) for x in pa if frame.get(x) is None]
+        rows.append(dict(phase=ph['phase'],overhead=ov,ci_only=ov+tc,resolved=ov+ta,unresolved_reachable=len(unres),unresolved_names=unres,unresolved_on_max_path=onpath,max_path=[(base(x),frame.get(x),kind.get(x)) for x in pa]))
+
+    # alloc-failure branch: deepest chain to heap_caps_alloc_failed + hook + ROM ets_printf chain (256 B, ROM call graph)
+    tgt=[k for k in nodes if nodes[k]['label']=='heap_caps_alloc_failed'][0]
+    hookf=[frame[k] for k in nodes if 'logFailedHeapAllocation' in nodes[k]['label']][0]
+    amemo={};aact=set()
+    def adepth(k):
+        if k in amemo:return amemo[k]
+        if k==tgt:return 0
+        aact.add(k);b=None
+        for y in edges.get(k,()):
+            if y in aact:continue
+            d=adepth(y)
+            if d is not None:
+                v=d+(frame.get(y) or 0)
+                if b is None or v>b:b=v
+        aact.discard(k);amemo[k]=b;return b
+    for ph in paths:
+        if ph['phase'] in('Run-store','Settings','Decision-all-nine','Prepare','Run-exact-write-readback'):
+            root=ph['path'][0]['symbol'];d=adepth(root)
+            tot=None if d is None else ph['overhead']+(frame.get(root) or 0)+d+hookf+256
+            print('ALLOCFAIL',prof,ph['phase'],tot)
+            for r_ in rows:
+                if r_['phase']==ph['phase']: r_['alloc_failure_branch']=tot
+
+    for nm_ in ['esp_log','esp_log_write','esp_log_writev','vprintf','_vfprintf_r','printf','__d_vfprintf']:
+        ks=[k for k in set(edges)|set(frame) if base(k)==nm_]
+        for k in ks[:1]:
+            memo.clear();t,p=walk(k,'all')
+            print('LOGCHAIN',prof,nm_,'frame',frame.get(k),'subtree',t,[(base(x)[:28],frame.get(x)) for x in p][:12])
+
+    wk=[k for k in nodes if 'NvsStateStore5write' in k][0]
+    memo.clear();wsub,wp=walk(wk,'all')
+    # longest path root->wk (excluding wk frame)
+    def lt(root,t):
+        mm={};ac=set()
+        def d(k):
+            if k==t:return 0
+            if k in mm:return mm[k]
+            ac.add(k);b=None
+            for y in edges.get(k,()):
+                if y in ac:continue
+                x=d(y)
+                if x is not None:
+                    v=x+(frame.get(y) or 0)
+                    if b is None or v>b:b=v
+            ac.discard(k);mm[k]=b;return b
+        return d(root)
+    for ph in paths:
+        if ph['phase'] in('Settings','Run-store','Run-exact-write-readback','Decision-all-nine'):
+            root=ph['path'][0]['symbol'];x=lt(root,wk)
+            print('NVSXFER',prof,ph['phase'],'prefix_to_write_call',None if x is None else ph['overhead']+(frame.get(root) or 0)+x,'nvs_write_subtree',wsub)
+    res[prof]=rows
+    cnt=collections.Counter(kind.values());print(prof,dict(cnt))
+    for r in rows: print(f"  {r['phase']:45s} ov={r['overhead']:5d} ci={r['ci_only']:5d} resolved={r['resolved']:5d} unresolvedReach={r['unresolved_reachable']:3d} onMaxPath={r['unresolved_on_max_path']}")
+json.dump(res,open(S+'/resolve6.json','w'),indent=1)

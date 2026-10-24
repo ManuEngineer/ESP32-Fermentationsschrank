@@ -308,6 +308,13 @@ class ConfigurationService {
 
     struct Preview;
     struct ResolutionContext;
+    struct CommitScratch {
+        LoadedConfigurationGraph current;
+        ConfigurationCommitPrepareResult prepared;
+    };
+    struct CommitScratchDeleter {
+        void operator()(CommitScratch* scratch) const noexcept;
+    };
     enum class TestPoint : std::uint8_t {
         PreviewCaptured,
         BeforeRetirementRelease,

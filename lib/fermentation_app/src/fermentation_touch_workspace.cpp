@@ -278,6 +278,8 @@ std::optional<std::optional<RunSensorMode>> nextSensorOverride(
 // (applyStartCandidateOverrides). The stage values follow the first stage; a
 // missing value stays absent (rendered as "--"), never 0. The display never
 // mutates the stored program.
+}  // namespace
+
 FermentationUiProgramSummaryView makeProgramSummary(
     const ProgramDocument& document,
     const FermentationUiStartCandidate* candidate, bool startable) {
@@ -356,6 +358,8 @@ FermentationUiProgramSummaryView makeProgramSummary(
         validateProgram(effective, ValidationPurpose::Runnable).valid();
     return summary;
 }
+
+namespace {
 
 // ---- S10: program editor and keyboard helpers
 // --------------------------------

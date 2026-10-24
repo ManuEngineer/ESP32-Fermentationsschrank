@@ -233,6 +233,10 @@ struct MigrationResult {
     std::optional<ProgramDocument> document;
 };
 
+// Mutates only an unpublished candidate. On failure the caller must discard it;
+// the owning Value API below preserves its input and uses the same steps.
+[[nodiscard]] MigrationStatus migrateProgramToCurrentSchemaInto(
+    ProgramDocument& current);
 [[nodiscard]] MigrationResult migrateProgramToCurrentSchema(
     const ProgramDocument& source);
 

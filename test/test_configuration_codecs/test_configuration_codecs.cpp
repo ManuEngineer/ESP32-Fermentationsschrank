@@ -3,16 +3,19 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <new>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "configuration_document_codec.hpp"
 #include "configuration_document_codec_internal.hpp"
 #include "configuration_limits.hpp"
 #include "configuration_migration.hpp"
+#include "program_document_codec.hpp"
 #include "configuration_storage_contract.hpp"
 #include "big_endian_codec.hpp"
 #include "byte_buffer.hpp"
@@ -23,6 +26,7 @@
 namespace {
 std::size_t gLiveAllocBytes = 0U;
 std::size_t gPeakAllocBytes = 0U;
+std::size_t gLargestAllocRequest = 0U;
 constexpr std::size_t kAllocHeader = alignof(std::max_align_t);
 }  // namespace
 
@@ -33,6 +37,9 @@ void* operator new(std::size_t size) {
     }
     *static_cast<std::size_t*>(raw) = size;
     gLiveAllocBytes += size;
+    if (size > gLargestAllocRequest) {
+        gLargestAllocRequest = size;
+    }
     if (gLiveAllocBytes > gPeakAllocBytes) {
         gPeakAllocBytes = gLiveAllocBytes;
     }
@@ -897,6 +904,29 @@ void test_schema_four_programs_migrate_to_schema_five_deterministically() {
     TEST_ASSERT_EQUAL_MEMORY(current.data(), reencoded.data(), current.size());
 }
 
+void test_schema_four_late_decode_failure_publishes_no_partially_migrated_catalog() {
+    const auto source = fermentation::makeFactoryProgramCatalog();
+    std::string current;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramCatalogPayload(
+                         source, current) == ConfigurationCodecStatus::Success);
+    const auto legacy = schemaFourCatalogFixture(current);
+    // First documents have already passed 4 -> 5 -> 6 when the last one fails.
+    for (std::size_t missing = 1U; missing <= 16U; ++missing) {
+        const auto partial = legacy.substr(0U, legacy.size() - missing);
+        const auto result =
+            fermentation::decodeProgramCatalogPayload(1U, partial);
+        TEST_ASSERT_TRUE(result.status != ConfigurationCodecStatus::Success);
+        TEST_ASSERT_FALSE(result.document.has_value());
+        TEST_ASSERT_TRUE(
+            fermentation::validateProgramCatalogPayload(1U, partial, &source) !=
+            ConfigurationCodecStatus::Success);
+    }
+    std::string after;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramCatalogPayload(source, after) ==
+                     ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_STRING(current.c_str(), after.c_str());
+}
+
 void test_invalid_catalog_encode_leaves_output_unchanged() {
     auto invalid = fermentation::makeFactoryProgramCatalog();
     invalid.programs.pop_back();
@@ -1056,8 +1086,243 @@ void test_large_catalog_copy_migration_keeps_only_source_and_candidate() {
 
 }  // namespace
 
+// ---- M-H1: single-program payload sized from its exact length -------------
+struct SingleProgramCase {
+    std::string name;
+    fermentation::ProgramDocument document;
+};
+
+std::uint64_t fnv1a64(const std::string& bytes) {
+    std::uint64_t hash = 14695981039346656037ULL;
+    for (const unsigned char byte : bytes) {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::vector<SingleProgramCase> singleProgramCases() {
+    std::vector<SingleProgramCase> cases;
+    const auto factory = fermentation::makeFactoryProgramCatalog();
+    for (std::size_t index = 0U; index < factory.programs.size(); ++index) {
+        cases.push_back(
+            {"factory" + std::to_string(index), factory.programs[index]});
+        auto maximized = factory.programs[index];
+        maximizeProgramPayload(maximized);
+        cases.push_back(
+            {"factory" + std::to_string(index) + "_max", std::move(maximized)});
+    }
+    cases.push_back({"user_min", userProgram(1U)});
+    const auto maximum = maximumValidCatalog();
+    for (std::size_t index = 0U; index < maximum.programs.size(); ++index) {
+        cases.push_back(
+            {"maxvalid" + std::to_string(index), maximum.programs[index]});
+    }
+    auto smallest = maximum.programs.front();
+    smallest.program.id = "a";
+    smallest.program.name = "n";
+    smallest.program.notes.clear();
+    cases.push_back({"min_runnable", std::move(smallest)});
+    std::size_t variant = 0U;
+    for (const auto preference :
+         {fermentation::SensorPreference::AirOnly,
+          fermentation::SensorPreference::ProductRequired}) {
+        for (const auto policy :
+             {fermentation::ProductSensorFailurePolicy::WaitForUser,
+              fermentation::ProductSensorFailurePolicy::StopToSafeState}) {
+            for (const auto mode :
+                 {fermentation::CompletionMode::FinishWithoutCooling,
+                  fermentation::CompletionMode::CoolThenFinish}) {
+                auto bare = maximum.programs.front();
+                bare.program.sensorPreference = preference;
+                bare.program.productSensorFailure.policy = policy;
+                bare.program.productSensorFailure.fallbackDelaySeconds.reset();
+                bare.program.completion.mode = mode;
+                bare.program.completion.coolingTargetCelsius.reset();
+                bare.program.completion.holdDurationMinutes.reset();
+                bare.program.maximumProductWaitMinutes.reset();
+                bare.program.preheat = false;
+                cases.push_back(
+                    {"bare" + std::to_string(variant++), std::move(bare)});
+            }
+        }
+    }
+    return cases;
+}
+
+// Reference values captured from encodeProgramDocumentPayload at 76cb4ce
+// (before M-H1): status 1 = InvalidDocument, 0 = Success. Raw factory
+// programs are not runnable and must keep reporting InvalidDocument.
+struct SingleProgramGolden {
+    const char* name;
+    int status;
+    std::size_t size;
+    std::uint64_t fnv;
+};
+
+constexpr SingleProgramGolden kSingleProgramGolden[] = {
+    {"factory0", 1, 0U, 0ULL},
+    {"factory0_max", 0, 1218U, 1035242935278900912ULL},
+    {"factory1", 1, 0U, 0ULL},
+    {"factory1_max", 0, 1218U, 12535976576220135718ULL},
+    {"factory2", 1, 0U, 0ULL},
+    {"factory2_max", 0, 1217U, 17279747287355055547ULL},
+    {"factory3", 1, 0U, 0ULL},
+    {"factory3_max", 0, 1218U, 17704284975757737540ULL},
+    {"user_min", 1, 0U, 0ULL},
+    {"maxvalid0", 0, 1218U, 1035242935278900912ULL},
+    {"maxvalid1", 0, 1218U, 12535976576220135718ULL},
+    {"maxvalid2", 0, 1217U, 17279747287355055547ULL},
+    {"maxvalid3", 0, 1218U, 17704284975757737540ULL},
+    {"maxvalid4", 0, 1255U, 13840307364542956325ULL},
+    {"maxvalid5", 0, 1255U, 15891398851159200728ULL},
+    {"maxvalid6", 0, 1255U, 15124028291048771283ULL},
+    {"maxvalid7", 0, 1255U, 3414023962981808870ULL},
+    {"maxvalid8", 0, 1255U, 8649763367216654913ULL},
+    {"maxvalid9", 0, 1255U, 1944929813609423044ULL},
+    {"maxvalid10", 0, 1255U, 5027189069098456639ULL},
+    {"maxvalid11", 0, 1255U, 2358814652219601858ULL},
+    {"maxvalid12", 0, 1255U, 1167037135635565805ULL},
+    {"maxvalid13", 0, 1255U, 3350140590563894208ULL},
+    {"maxvalid14", 0, 1255U, 4534533930825892501ULL},
+    {"maxvalid15", 0, 1255U, 4086458090020656264ULL},
+    {"min_runnable", 0, 89U, 5975182521821498679ULL},
+    {"bare0", 1, 0U, 0ULL},
+    {"bare1", 1, 0U, 0ULL},
+    {"bare2", 1, 0U, 0ULL},
+    {"bare3", 1, 0U, 0ULL},
+    {"bare4", 0, 1198U, 91159984341863428ULL},
+    {"bare5", 1, 0U, 0ULL},
+    {"bare6", 0, 1198U, 5757747247549920871ULL},
+    {"bare7", 1, 0U, 0ULL},
+};
+
+void test_single_program_payload_matches_reference_golden() {
+    const auto cases = singleProgramCases();
+    TEST_ASSERT_EQUAL_UINT32(
+        sizeof(kSingleProgramGolden) / sizeof(kSingleProgramGolden[0]),
+        cases.size());
+    for (std::size_t index = 0U; index < cases.size(); ++index) {
+        const auto& golden = kSingleProgramGolden[index];
+        TEST_ASSERT_EQUAL_STRING(golden.name, cases[index].name.c_str());
+        const std::string oldOutput("old\0payload", 11U);
+        std::string out = oldOutput;
+        const auto status = fermentation::encodeProgramDocumentPayload(
+            cases[index].document, out);
+        TEST_ASSERT_EQUAL_INT(golden.status, static_cast<int>(status));
+        if (golden.status == 0) {
+            TEST_ASSERT_EQUAL_UINT32(golden.size, out.size());
+            TEST_ASSERT_TRUE(golden.fnv == fnv1a64(out));
+        } else {
+            TEST_ASSERT_EQUAL_UINT32(oldOutput.size(), out.size());
+            TEST_ASSERT_EQUAL_MEMORY(oldOutput.data(), out.data(),
+                                     oldOutput.size());
+        }
+    }
+}
+
+void test_single_program_payload_concatenates_into_catalog_payload() {
+    // Independent of the single-program writer: the catalog payload is the
+    // count byte followed by the program documents.
+    const auto catalog = maximumValidCatalog();
+    std::string encodedCatalog;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeProgramCatalogPayload(catalog, encodedCatalog) ==
+        ConfigurationCodecStatus::Success);
+    std::string expected(1U, static_cast<char>(catalog.programs.size()));
+    for (const auto& document : catalog.programs) {
+        std::string single;
+        TEST_ASSERT_TRUE(
+            fermentation::encodeProgramDocumentPayload(document, single) ==
+            ConfigurationCodecStatus::Success);
+        expected += single;
+    }
+    TEST_ASSERT_EQUAL_UINT32(expected.size(), encodedCatalog.size());
+    TEST_ASSERT_TRUE(expected == encodedCatalog);
+}
+
+void test_single_program_invalid_inputs_keep_status_and_output() {
+    auto invalid = maximumValidCatalog().programs.front();
+    invalid.program.sensorPreference =
+        static_cast<fermentation::SensorPreference>(99U);
+    const std::string oldOutput("old\0payload", 11U);
+    std::string out = oldOutput;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramDocumentPayload(invalid, out) ==
+                     ConfigurationCodecStatus::InvalidDocument);
+    TEST_ASSERT_EQUAL_UINT32(oldOutput.size(), out.size());
+    TEST_ASSERT_EQUAL_MEMORY(oldOutput.data(), out.data(), oldOutput.size());
+
+    auto oversized = maximumValidCatalog().programs.front();
+    oversized.program.notes.assign(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        'x');
+    out = oldOutput;
+    // Reference (76cb4ce) and M-H1 both report CapacityExceeded here.
+    TEST_ASSERT_TRUE(
+        fermentation::encodeProgramDocumentPayload(oversized, out) ==
+        ConfigurationCodecStatus::CapacityExceeded);
+    TEST_ASSERT_EQUAL_UINT32(oldOutput.size(), out.size());
+    TEST_ASSERT_EQUAL_MEMORY(oldOutput.data(), out.data(), oldOutput.size());
+}
+
+void test_single_program_maximum_is_derived_from_model_limits() {
+    // Upper bound = payload of a maximal program with empty strings (all
+    // optionals present, production size function) + the string limits.
+    auto base = maximumValidCatalog().programs.back();
+    base.program.id.clear();
+    base.program.name.clear();
+    base.program.notes.clear();
+    fermentation::ProgramCatalog one;
+    one.programs.push_back(base);
+    const auto empty = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(one);
+    TEST_ASSERT_TRUE(empty.status == ConfigurationCodecStatus::Success);
+    const std::size_t bound =
+        (empty.payloadSize - 1U) +
+        fermentation::configuration_limits::kMaximumProgramIdBytes +
+        fermentation::configuration_limits::kMaximumVisibleNameBytes +
+        fermentation::configuration_limits::kMaximumNotesBytes;
+    std::size_t largest = 0U;
+    for (const auto& c : singleProgramCases()) {
+        std::string out;
+        if (fermentation::encodeProgramDocumentPayload(c.document, out) ==
+            ConfigurationCodecStatus::Success) {
+            TEST_ASSERT_TRUE(out.size() <= bound);
+            largest = std::max(largest, out.size());
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(bound, largest);
+    TEST_ASSERT_EQUAL_UINT32(1255U, bound);
+    TEST_ASSERT_TRUE(
+        bound <
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes);
+}
+
+void test_single_program_largest_allocation_follows_exact_size() {
+    // Native relative regression; not an ESP32 heap guarantee. Reference
+    // (76cb4ce) largest request for every valid case: 32769 B.
+    for (const auto& c : singleProgramCases()) {
+        std::string out;
+        gLargestAllocRequest = 0U;
+        const auto status =
+            fermentation::encodeProgramDocumentPayload(c.document, out);
+        if (status != ConfigurationCodecStatus::Success) {
+            continue;
+        }
+        TEST_ASSERT_TRUE(gLargestAllocRequest <= out.size() + 1U);
+        TEST_ASSERT_TRUE(gLargestAllocRequest < 4096U);
+    }
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_single_program_payload_matches_reference_golden);
+    RUN_TEST(test_single_program_payload_concatenates_into_catalog_payload);
+    RUN_TEST(test_single_program_invalid_inputs_keep_status_and_output);
+    RUN_TEST(test_single_program_maximum_is_derived_from_model_limits);
+    RUN_TEST(test_single_program_largest_allocation_follows_exact_size);
+    RUN_TEST(
+        test_schema_four_late_decode_failure_publishes_no_partially_migrated_catalog);
     RUN_TEST(test_sensor_preference_wire_ids_are_explicit_in_both_directions);
     RUN_TEST(test_failure_policy_wire_ids_are_explicit_in_both_directions);
     RUN_TEST(test_completion_mode_wire_ids_are_explicit_in_both_directions);

@@ -1,0 +1,817 @@
+profile	phase	order	prefix_bytes	frame	function	status
+esp32_bringup	Prepare	0	3056	48	fermentation::FermentationApplicationRequestResult fermentation::FermentationApplication::prepareEnvelope(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiEnvelopePayload&)	NOT_PROVEN
+esp32_bringup	Prepare	1	3056	32	) [with _Visitor = fermentation::FermentationApplication::prepareEnvelope(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiEnvelopePayload&)::<lambda(const auto:30&)>; _Variants = {const variant<fermentation::FermentationUiStartProgramIntent, fermentation::FermentationUiStartManualHoldingIntent, fermentation::FermentationUiStartManualTimedIntent, fermentation::FermentationUiStopRunIntent, fermentation::FermentationUiCompleteRunIntent, fermentation::FermentationUiAdjustRunIntent, fermentation::FermentationUiRecoveryTimeCorrectionIntent, fermentation::FermentationUiAcknowledgeMessageIntent, fermentation::FermentationUiMuteMessageIntent, fermentation::FermentationUiResetFaultIntent, fermentation::FermentationUiSensorSelectionIntent>&}]	NOT_PROVEN
+esp32_bringup	Prepare	2	3056	32	) [with _Result_type = __detail::__variant::__deduce_visit_result<fermentation::FermentationApplicationRequestResult>; _Visitor = fermentation::FermentationApplication::prepareEnvelope(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiEnvelopePayload&)::<lambda(const auto:30&)>; _Variants = {const variant<fermentation::FermentationUiStartProgramIntent, fermentation::FermentationUiStartManualHoldingIntent, fermentation::FermentationUiStartManualTimedIntent, fermentation::FermentationUiStopRunIntent, fermentation::FermentationUiCompleteRunIntent, fermentation::FermentationUiAdjustRunIntent, fermentation::FermentationUiRecoveryTimeCorrectionIntent, fermentation::FermentationUiAcknowledgeMessageIntent, fermentation::FermentationUiMuteMessageIntent, fermentation::FermentationUiResetFaultIntent, fermentation::FermentationUiSensorSelectionIntent>&}]	NOT_PROVEN
+esp32_bringup	Prepare	3	3056	2064	fermentation::FermentationApplicationRequestResult fermentation::FermentationApplication::prepareStartProgram(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiStartProgramIntent&)	NOT_PROVEN
+esp32_bringup	Prepare	4	3056	48	fermentation::FermentationApplicationRequestResult fermentation::FermentationApplication::makePreparedRequest(Request&&, std::optional<fermentation::CrossRolePlausibilityContext>) [with Request = fermentation::ProgramStartRequest]	NOT_PROVEN
+esp32_bringup	Prepare	5	3056	32	) [with _Args = {fermentation::FermentationApplicationPreparedRequest::ConstructionTag, fermentation::ProgramStartRequest, std::optional<fermentation::CrossRolePlausibilityContext>&}; _Tp = fermentation::FermentationApplicationPreparedRequest]	NOT_PROVEN
+esp32_bringup	Prepare	6	3056	528	) [with _Tp = fermentation::FermentationApplicationPreparedRequest; _Args = {fermentation::FermentationApplicationPreparedRequest::ConstructionTag, fermentation::ProgramStartRequest, optional<fermentation::CrossRolePlausibilityContext>&}]	NOT_PROVEN
+esp32_bringup	Prepare	7	3056	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/fermentation_application.cpp:_ZN12fermentation19ProgramStartRequestC1EOS0_	NOT_PROVEN
+esp32_bringup	Prepare	8	3056	32	fermentation::ProgramStartRequest::ProgramStartRequest(fermentation::ProgramStartRequest&&)	NOT_PROVEN
+esp32_bringup	Prepare	9	3056	48	std::__detail::__variant::_Move_ctor_base<<anonymous>, _Types>::_Move_ctor_base(std::__detail::__variant::_Move_ctor_base<<anonymous>, _Types>&&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Prepare	10	3056	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Move_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_Move_ctor_base(std::__detail::__variant::_Move_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&&)::<lambda(auto:5&&, auto:6)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>}]	NOT_PROVEN
+esp32_bringup	Prepare	11	3056	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/fermentation_application.cpp:_ZN12fermentation15ProgramDocumentC1EOS0_	NOT_PROVEN
+esp32_bringup	Prepare	12	3056	32	fermentation::ProgramDocument::ProgramDocument(fermentation::ProgramDocument&&)	NOT_PROVEN
+esp32_bringup	Prepare	13	3056	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/fermentation_application.cpp:_ZN12fermentation17ProgramDefinitionC1EOS0_	NOT_PROVEN
+esp32_bringup	Prepare	14	3056	32	fermentation::ProgramDefinition::ProgramDefinition(fermentation::ProgramDefinition&&)	NOT_PROVEN
+esp32_bringup	Confirm	0	3056	48	fermentation::FermentationApplicationRequestStatus fermentation::FermentationApplication::confirmPreparedInPlace(fermentation::FermentationApplicationRequestResult&)	NOT_PROVEN
+esp32_bringup	Confirm	1	3056	560	bool fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)	NOT_PROVEN
+esp32_bringup	Confirm	2	3056	32	) [with _Visitor = fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)::<lambda(auto:31&)>; _Variants = {variant<fermentation::ProgramStartRequest, fermentation::ManualStartRequest, fermentation::StopRequest, fermentation::CompletionRequest, fermentation::RunAdjustmentCommandRequest, fermentation::ApplyRecoveryTimeCorrectionRequest, fermentation::FermentationApplicationPreparedRequest::PreparedAcknowledgeMessage, fermentation::FermentationApplicationPreparedRequest::PreparedMuteMessage, fermentation::SensorSelectionCommandRequest>&}]	NOT_PROVEN
+esp32_bringup	Confirm	3	3056	32	) [with _Result_type = __detail::__variant::__deduce_visit_result<void>; _Visitor = fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)::<lambda(auto:31&)>; _Variants = {variant<fermentation::ProgramStartRequest, fermentation::ManualStartRequest, fermentation::StopRequest, fermentation::CompletionRequest, fermentation::RunAdjustmentCommandRequest, fermentation::ApplyRecoveryTimeCorrectionRequest, fermentation::FermentationApplicationPreparedRequest::PreparedAcknowledgeMessage, fermentation::FermentationApplicationPreparedRequest::PreparedMuteMessage, fermentation::SensorSelectionCommandRequest>&}]	NOT_PROVEN
+esp32_bringup	Confirm	4	3056	528	fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)::<lambda(auto:31&)> [with auto:31 = fermentation::SensorSelectionCommandRequest]	NOT_PROVEN
+esp32_bringup	Confirm	5	3056	32	std::enable_if_t<((bool)__and_v<std::__not_<std::is_same<std::optional<_Tp>, typename std::remove_cv<typename std::remove_reference<_Up>::type>::type> >, std::__not_<std::__and_<std::is_scalar<_Tp>, std::is_same<_Tp, typename std::decay<_Func>::type> > >, std::is_constructible<_T1, _U1>, std::is_assignable<_T1&, _U1> >), std::optional<_Tp>&> std::optional<_Tp>::operator=(_Up&&) [with _Up = const fermentation::CrossRolePlausibilityContext&; _Tp = fermentation::CrossRolePlausibilityContext]	NOT_PROVEN
+esp32_bringup	Decision-all-nine	0	3056	1312	fermentation::FermentationUiCommandResult fermentation::FermentationApplication::applyConfirmedPrepared(const fermentation::FermentationApplicationPreparedRequest&)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	1	3056	48	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::persistBorrowedCommand(CommandOperation&, fermentation::RunCommandState&, const fermentation::CommandDecisionView&, const fermentation::RunCheckpointTime&, const fermentation::CrossRolePlausibilityContext*, const fermentation::FreshStartSnapshotProvenance*)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	2	3056	512	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::persistCommandInternal(fermentation::RunCommandState&, const Decision&, const fermentation::RunCheckpointTime&, const fermentation::CrossRolePlausibilityContext*, const fermentation::FreshStartSnapshotProvenance*) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Decision-all-nine	3	3056	160	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshot(const fermentation::RunPersistenceSnapshot&, const fermentation::RunCheckpointTime&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	4	3056	160	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotCore(const fermentation::RunPersistenceSnapshot&, const fermentation::RunCheckpointTime&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>, std::optional<unsigned int>, const fermentation::RunPersistenceFallbackDirective&, fermentation::RunPersistenceCoordinatorState)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	5	3056	672	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotTransaction(const fermentation::RunPersistenceSnapshot&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>, const fermentation::RunPersistenceFallbackDirective&, fermentation::RunPersistenceCoordinatorState, std::size_t, std::optional<long long unsigned int>)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	6	3056	32	fermentation::RunPersistenceStoreWriteResult fermentation::RunPersistenceStore::writeHeadExact(const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	7	3056	64	fermentation::RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact(device_platform::IStateStore&, const device_platform::StateStoreKey&, const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	8	3056	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_bringup	Decision-all-nine	9	3056	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	10	3056	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	11	3056	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	12	3056	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	13	3056	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	14	3056	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	15	3056	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	16	3056	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	17	3056	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	18	3056	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	19	3056	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_bringup	Decision-all-nine	20	3056	32	esp_partition_write_raw	NOT_PROVEN
+esp32_bringup	Decision-all-nine	21	3056	96	esp_flash_write	NOT_PROVEN
+esp32_bringup	Decision-all-nine	22	3056	32	spiflash_start_prog	NOT_PROVEN
+esp32_bringup	Decision-all-nine	23	3056	64	spiflash_start_core	NOT_PROVEN
+esp32_bringup	Decision-all-nine	24	3056	32	spi1_start	NOT_PROVEN
+esp32_bringup	Decision-all-nine	25	3056	32	cache_disable	NOT_PROVEN
+esp32_bringup	Decision-all-nine	26	3056	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_bringup	Decision-all-nine	27	3056	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_bringup	Run-encode	0	5248	128	fermentation::RunPersistenceCoordinator::SnapshotRecordPreparation fermentation::RunPersistenceCoordinator::prepareSnapshotRecord(const fermentation::RunPersistenceSnapshot&, const fermentation::RunCheckpointTime&)	NOT_PROVEN
+esp32_bringup	Run-encode	1	5248	112	fermentation::RunPersistenceCodecStatus fermentation::encodeRunPersistenceSnapshot(const RunPersistenceSnapshot&, std::string&)	NOT_PROVEN
+esp32_bringup	Run-encode	2	5248	128	bool fermentation::validateRunPersistenceSnapshot(const RunPersistenceSnapshot&)	NOT_PROVEN
+esp32_bringup	Run-encode	3	5248	96	bool fermentation::validateRunProgramSnapshotInto(const RunProgramSnapshot&, const std::array<RunRevision, 32>&, std::size_t, EffectiveRunValues&)	NOT_PROVEN
+esp32_bringup	Run-encode	4	5248	384	bool fermentation::{anonymous}::validTargetTemperature(const fermentation::RunProgramSnapshot&, std::size_t, double)	NOT_PROVEN
+esp32_bringup	Run-encode	5	5248	48	fermentation::ValidationResult fermentation::validateProgram(const ProgramDocument&, ValidationPurpose)	NOT_PROVEN
+esp32_bringup	Run-encode	6	5248	32	void fermentation::{anonymous}::validateOptionalDouble(fermentation::ValidationResult&, const std::optional<double>&, const char*, double, double, fermentation::ValidationPurpose)	NOT_PROVEN
+esp32_bringup	Run-encode	7	5248	48	void fermentation::{anonymous}::addError(fermentation::ValidationResult&, fermentation::ValidationErrorCode, const char*)	NOT_PROVEN
+esp32_bringup	Run-encode	8	5248	32	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_bringup	Run-encode	9	5248	48	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_bringup	Run-encode	10	5248	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::ValidationError]	NOT_PROVEN
+esp32_bringup	Run-encode	11	5248	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Run-encode	12	5248	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Run-encode	13	5248	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Run-encode	14	5248	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Run-encode	15	5248	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Run-encode	16	5248	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Run-encode	17	5248	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Run-encode	18	5248	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Run-encode	19	5248	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Run-encode	20	5248	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Run-encode	21	5248	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Run-store	0	5248	672	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotTransaction(const fermentation::RunPersistenceSnapshot&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>, const fermentation::RunPersistenceFallbackDirective&, fermentation::RunPersistenceCoordinatorState, std::size_t, std::optional<long long unsigned int>)	NOT_PROVEN
+esp32_bringup	Run-store	1	5248	32	fermentation::RunPersistenceStoreWriteResult fermentation::RunPersistenceStore::writeHeadExact(const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_bringup	Run-store	2	5248	64	fermentation::RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact(device_platform::IStateStore&, const device_platform::StateStoreKey&, const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_bringup	Run-store	3	5248	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_bringup	Run-store	4	5248	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_bringup	Run-store	5	5248	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-store	6	5248	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-store	7	5248	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-store	8	5248	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	Run-store	9	5248	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_bringup	Run-store	10	5248	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	Run-store	11	5248	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_bringup	Run-store	12	5248	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_bringup	Run-store	13	5248	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_bringup	Run-store	14	5248	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-store	15	5248	32	esp_partition_write_raw	NOT_PROVEN
+esp32_bringup	Run-store	16	5248	96	esp_flash_write	NOT_PROVEN
+esp32_bringup	Run-store	17	5248	32	spiflash_start_prog	NOT_PROVEN
+esp32_bringup	Run-store	18	5248	64	spiflash_start_core	NOT_PROVEN
+esp32_bringup	Run-store	19	5248	32	spi1_start	NOT_PROVEN
+esp32_bringup	Run-store	20	5248	32	cache_disable	NOT_PROVEN
+esp32_bringup	Run-store	21	5248	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_bringup	Run-store	22	5248	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_bringup	Settings	0	1856	80	fermentation::ApplicationConfigurationChangeResult fermentation::FermentationApplication::applyWebConfigurationChange(const fermentation::WebConfigurationChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)	NOT_PROVEN
+esp32_bringup	Settings	1	1856	48	fermentation::ApplicationConfigurationChangeResult fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)	NOT_PROVEN
+esp32_bringup	Settings	2	1856	48	fermentation::ApplicationConfigurationChangeResult fermentation::{anonymous}::commitUserConfigurationChange(fermentation::ConfigurationService&, const fermentation::UserConfigurationRevision&, const fermentation::ChangeOrigin&, Mutate&&) [with Mutate = fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)::<lambda(fermentation::UserConfiguration&)>]	NOT_PROVEN
+esp32_bringup	Settings	3	1856	272	fermentation::ApplicationConfigurationChangeResult fermentation::{anonymous}::commitConfigurationChange(fermentation::ConfigurationService&, const fermentation::UserConfigurationRevision&, const fermentation::ChangeOrigin&, const fermentation::ChangeOperation&, Mutate&&) [with Mutate = commitUserConfigurationChange<fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)::<lambda(fermentation::UserConfiguration&)> >(fermentation::ConfigurationService&, const fermentation::UserConfigurationRevision&, const fermentation::ChangeOrigin&, fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)::<lambda(fermentation::UserConfiguration&)>&&)::<lambda(fermentation::ConfigurationPreviewBuildLease&)>]	NOT_PROVEN
+esp32_bringup	Settings	4	1856	368	fermentation::ConfigurationCommitResult fermentation::ConfigurationService::confirmPreview(uint64_t)	NOT_PROVEN
+esp32_bringup	Settings	5	1856	1040	void fermentation::ConfigurationGraphStore::prepareCommitInto(const fermentation::LoadedConfigurationGraph&, const fermentation::ConfigurationCommitCandidate&, fermentation::ChangeOrigin, fermentation::ChangeOperation, fermentation::ConfigurationCommitPrepareResult&) const	NOT_PROVEN
+esp32_bringup	Settings	6	1856	464	fermentation::ConfigurationValidationScanResult fermentation::ConfigurationGraphStore::validationScan(const fermentation::LoadedConfigurationGraph&) const	NOT_PROVEN
+esp32_bringup	Settings	7	1856	480	fermentation::{anonymous}::SemanticallyLoadedMetadataBranchResult fermentation::{anonymous}::loadMetadataBranchSemantically(const fermentation::ConfigurationManifestReference&, const device_platform::IStateStore&, const device_platform::ITimeZoneResolver&)	NOT_PROVEN
+esp32_bringup	Settings	8	1856	32	fermentation::ConfigurationScanStatus fermentation::{anonymous}::validateBranchSemantically(const device_platform::IStateStore&, const device_platform::ITimeZoneResolver&, const fermentation::ConfigurationGraphMetadataBranch&)	NOT_PROVEN
+esp32_bringup	Settings	9	1856	176	fermentation::ConfigurationScanStatus fermentation::{anonymous}::validateProgramReferenceSemantically(const device_platform::IStateStore&, const fermentation::ProgramCatalogReference&, const fermentation::ProgramCatalog*)	NOT_PROVEN
+esp32_bringup	Settings	10	1856	1088	fermentation::ConfigurationCodecStatus fermentation::validateProgramCatalogPayload(uint32_t, const std::string&, const ProgramCatalog*)	NOT_PROVEN
+esp32_bringup	Settings	11	1856	256	static std::array<fermentation::ProgramDocument, 4> fermentation::FactoryProgramCatalog::programs()	NOT_PROVEN
+esp32_bringup	Settings	12	1856	256	fermentation::ProgramDocument fermentation::{anonymous}::makeFactoryProgram(std::string, std::string, bool, fermentation::SensorPreference, fermentation::CompletionMode)	NOT_PROVEN
+esp32_bringup	Settings	13	1856	32	) [with _Args = {fermentation::FermentationStage}; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Settings	14	1856	64	) [with _Args = {fermentation::FermentationStage}; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Settings	15	1856	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_bringup	Settings	16	1856	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Settings	17	1856	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Settings	18	1856	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Settings	19	1856	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Settings	20	1856	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Settings	21	1856	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Settings	22	1856	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Settings	23	1856	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Settings	24	1856	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Settings	25	1856	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Settings	26	1856	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Run-postcheck	0	4928	32	fermentation::CommandStatus fermentation::validateRunCommand(const RunCommandState&, const CommandDecisionView&)	NOT_PROVEN
+esp32_bringup	Run-postcheck	1	4928	32	fermentation::CommandStatus fermentation::{anonymous}::validateRunCommandCore(const fermentation::RunCommandState&, const Decision&, const Before&) [with Decision = fermentation::CommandDecisionView; Before = fermentation::CommandApplyGuard]	NOT_PROVEN
+esp32_bringup	Run-postcheck	2	4928	32	bool fermentation::operator!=(const std::string&, const CommandApplyGuard::RunId&)	NOT_PROVEN
+esp32_bringup	Run-postcheck	3	4928	32	bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const char*, __cxx11::basic_string<char> >; _II2 = const char*]	NOT_PROVEN
+esp32_bringup	Run-postcheck	4	4928	32	static bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = char]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	0	4928	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(fermentation::RunCommandState&&)	NOT_PROVEN
+esp32_bringup	Run-RAM-move	1	4928	32	constexpr void std::_Optional_payload_base<_Tp>::_M_move_assign(std::_Optional_payload_base<_Tp>&&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	2	4928	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(fermentation::ActiveRun&&)	NOT_PROVEN
+esp32_bringup	Run-RAM-move	3	4928	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(fermentation::RunProgramSnapshot&&)	NOT_PROVEN
+esp32_bringup	Run-RAM-move	4	4928	48	std::__detail::__variant::_Move_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Move_assign_base<<anonymous>, _Types>::operator=(std::__detail::__variant::_Move_assign_base<<anonymous>, _Types>&&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	5	4928	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(std::__detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&&)::<lambda(auto:8&&, auto:9)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	6	4928	32	std::__detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(std::__detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&&)::<lambda(auto:8&&, auto:9)> mutable [with auto:8 = fermentation::ProgramDocument&; auto:9 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	7	4928	32	) [with unsigned int _Np = 0; bool _Triv = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}; _Args = {fermentation::ProgramDocument}]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	8	4928	48	>::_M_reset() [with _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	9	4928	32	) [with _Result_type = void; _Visitor = __detail::__variant::_Variant_storage<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_M_reset()::<lambda(auto:1&&)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Run-RAM-move	10	4928	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_commands.cpp:_ZN12fermentation17ProgramDefinitionD1Ev	NOT_PROVEN
+esp32_bringup	Run-RAM-move	11	4928	32	fermentation::ProgramDefinition::~ProgramDefinition()	NOT_PROVEN
+esp32_bringup	Run-RAM-move	12	4928	32	std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Run-release	0	4368	64	void fermentation::RunPersistenceCoordinator::releaseCommandOperation()	NOT_PROVEN
+esp32_bringup	Run-release	1	4368	112	void fermentation::clearActiveRunState(RunCommandState&)	NOT_PROVEN
+esp32_bringup	Run-release	2	4368	32	constexpr void std::_Optional_payload_base<_Tp>::_M_reset() [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_bringup	Run-release	3	4368	48	>::_M_reset() [with _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Run-release	4	4368	32	) [with _Result_type = void; _Visitor = __detail::__variant::_Variant_storage<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_M_reset()::<lambda(auto:1&&)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Run-release	5	4368	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_commands.cpp:_ZN12fermentation17ProgramDefinitionD1Ev	NOT_PROVEN
+esp32_bringup	Run-release	6	4368	32	fermentation::ProgramDefinition::~ProgramDefinition()	NOT_PROVEN
+esp32_bringup	Run-release	7	4368	32	std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Factory	0	0	96	static bool fermentation::ActiveRun::startInto(const fermentation::ProgramRunSource&, std::optional<device_platform::StrongId<fermentation::detail::RunProgramSourceRevisionTag, long long unsigned int> >, std::optional<fermentation::ActiveRun>&)	NOT_PROVEN
+esp32_bringup	Factory	1	0	64	) [with _Args = {fermentation::ActiveRun::StartConstructionTag, const std::variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&, std::optional<device_platform::StrongId<fermentation::detail::RunProgramSourceRevisionTag, long long unsigned int> >&, fermentation::EffectiveRunValues&}; _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_bringup	Factory	2	0	UNKNOWN	_ZN12fermentation9ActiveRunC1ENS0_20StartConstructionTagERKSt7variantIJNS_15ProgramDocumentENS_20ManualTimedRunSourceEEESt8optionalIN15device_platform8StrongIdINS_6detail27RunProgramSourceRevisionTagEyEEERKNS_18EffectiveRunValuesE	NOT_PROVEN
+esp32_bringup	Factory	3	0	32	fermentation::ActiveRun::ActiveRun(StartConstructionTag, const fermentation::ProgramRunSource&, std::optional<device_platform::StrongId<fermentation::detail::RunProgramSourceRevisionTag, long long unsigned int> >, const fermentation::EffectiveRunValues&)	NOT_PROVEN
+esp32_bringup	Factory	4	0	48	std::__detail::__variant::_Copy_ctor_base<<anonymous>, _Types>::_Copy_ctor_base(const std::__detail::__variant::_Copy_ctor_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Factory	5	0	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_Copy_ctor_base(const std::__detail::__variant::_Copy_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:2&&, auto:3)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Factory	6	0	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_snapshot.cpp:_ZN12fermentation15ProgramDocumentC1ERKS0_	NOT_PROVEN
+esp32_bringup	Factory	7	0	32	fermentation::ProgramDocument::ProgramDocument(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_bringup	Factory	8	0	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_snapshot.cpp:_ZN12fermentation17ProgramDefinitionC1ERKS0_	NOT_PROVEN
+esp32_bringup	Factory	9	0	32	fermentation::ProgramDefinition::ProgramDefinition(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_bringup	Factory	10	0	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_snapshot.cpp:_ZNSt6vectorIN12fermentation17FermentationStageESaIS1_EEC1ERKS3_	NOT_PROVEN
+esp32_bringup	Factory	11	0	32	std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Factory	12	0	32	void std::_Vector_base<_Tp, _Alloc>::_M_create_storage(std::size_t) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Factory	13	0	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_bringup	Factory	14	0	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Factory	15	0	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Factory	16	0	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Factory	17	0	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Factory	18	0	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Factory	19	0	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Factory	20	0	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Factory	21	0	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Factory	22	0	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Factory	23	0	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Factory	24	0	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	0	5952	64	fermentation::RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact(device_platform::IStateStore&, const device_platform::StateStoreKey&, const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	1	5952	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	2	5952	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	3	5952	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	4	5952	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	5	5952	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	6	5952	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	7	5952	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	8	5952	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	9	5952	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	10	5952	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	11	5952	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	12	5952	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	13	5952	32	esp_partition_write_raw	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	14	5952	96	esp_flash_write	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	15	5952	32	spiflash_start_prog	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	16	5952	64	spiflash_start_core	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	17	5952	32	spi1_start	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	18	5952	32	cache_disable	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	19	5952	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_bringup	Run-exact-write-readback	20	5952	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_bringup	NVS-write	0	0	32	virtual device_platform::StateStoreWriteStatus device_platform_esp_idf::NvsStateStore::write(const device_platform::StateStoreKey&, const std::string&)	NOT_PROVEN
+esp32_bringup	NVS-write	1	0	48	esp_err_t nvs_set_blob(nvs_handle_t, const char*, const void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-write	2	0	48	virtual esp_err_t nvs::NVSHandleSimple::set_blob(const char*, const void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-write	3	0	112	esp_err_t nvs::Storage::writeItem(uint8_t, nvs::ItemType, const char*, const void*, size_t, bool)	NOT_PROVEN
+esp32_bringup	NVS-write	4	0	112	esp_err_t nvs::Storage::cmpMultiPageBlob(uint8_t, const char*, const void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-write	5	0	144	esp_err_t nvs::Page::cmpItem(uint8_t, nvs::ItemType, const char*, const void*, size_t, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	NVS-write	6	0	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	NVS-write	7	0	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_bringup	NVS-write	8	0	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_bringup	NVS-write	9	0	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_bringup	NVS-write	10	0	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-write	11	0	32	esp_partition_write_raw	NOT_PROVEN
+esp32_bringup	NVS-write	12	0	96	esp_flash_write	NOT_PROVEN
+esp32_bringup	NVS-write	13	0	32	spiflash_start_prog	NOT_PROVEN
+esp32_bringup	NVS-write	14	0	64	spiflash_start_core	NOT_PROVEN
+esp32_bringup	NVS-write	15	0	32	spi1_start	NOT_PROVEN
+esp32_bringup	NVS-write	16	0	32	cache_disable	NOT_PROVEN
+esp32_bringup	NVS-write	17	0	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_bringup	NVS-write	18	0	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_bringup	NVS-read	0	0	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_bringup	NVS-read	1	0	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_bringup	NVS-read	2	0	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-read	3	0	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-read	4	0	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-read	5	0	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	NVS-read	6	0	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_bringup	NVS-read	7	0	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_bringup	NVS-read	8	0	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_bringup	NVS-read	9	0	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_bringup	NVS-read	10	0	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_bringup	NVS-read	11	0	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_bringup	NVS-read	12	0	32	esp_partition_write_raw	NOT_PROVEN
+esp32_bringup	NVS-read	13	0	96	esp_flash_write	NOT_PROVEN
+esp32_bringup	NVS-read	14	0	32	spiflash_start_prog	NOT_PROVEN
+esp32_bringup	NVS-read	15	0	64	spiflash_start_core	NOT_PROVEN
+esp32_bringup	NVS-read	16	0	32	spi1_start	NOT_PROVEN
+esp32_bringup	NVS-read	17	0	32	cache_disable	NOT_PROVEN
+esp32_bringup	NVS-read	18	0	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_bringup	NVS-read	19	0	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_bringup	Allocator	0	0	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Allocator	1	0	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Allocator	2	0	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Allocator	3	0	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Allocator	4	0	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Allocator	5	0	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Allocator	6	0	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Allocator	7	0	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Allocator	8	0	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	0	4576	64	void fermentation::{anonymous}::decideApplyRecoveryTimeCorrectionIntoCore(const fermentation::RunCommandState&, const fermentation::ApplyRecoveryTimeCorrectionRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	0	4576	976	void fermentation::{anonymous}::decideApplySensorSelectionActionIntoCore(const fermentation::RunCommandState&, const fermentation::SensorSelectionCommandRequest&, const fermentation::CrossRolePlausibilityContext&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Visitor-decideApplySensorSelectionAction	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	0	4576	288	void fermentation::{anonymous}::decideProgramStartIntoCore(const fermentation::RunCommandState&, const fermentation::ProgramStartRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	1	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	2	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	3	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	4	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	6	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideProgramStart	7	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	0	4576	320	void fermentation::{anonymous}::decideManualStartIntoCore(const fermentation::RunCommandState&, const fermentation::ManualStartRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	1	4576	80	bool fermentation::{anonymous}::installManualRun(fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::ManualRunPlan)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	2	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	3	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	4	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	6	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	7	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideManualStart	8	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	0	4576	256	void fermentation::{anonymous}::decideStopIntoCore(const fermentation::RunCommandState&, const fermentation::StopRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	1	4576	80	bool fermentation::{anonymous}::installManualRun(fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::ManualRunPlan)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	2	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	3	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	4	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	6	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	7	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideStop	8	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	0	4576	256	void fermentation::{anonymous}::decideCompletionIntoCore(const fermentation::RunCommandState&, const fermentation::CompletionRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	1	4576	80	bool fermentation::{anonymous}::installManualRun(fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::ManualRunPlan)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	2	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	3	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	4	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	6	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	7	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_bringup	Visitor-decideCompletion	8	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	0	4576	416	void fermentation::{anonymous}::decideRunAdjustmentIntoCore(const fermentation::RunCommandState&, const fermentation::RunAdjustmentCommandRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	1	4576	192	fermentation::RunAdjustmentDecision fermentation::ActiveRun::decideAdjustment(const fermentation::RunAdjustmentRequest&, const fermentation::RunAdjustmentContext&) const	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	2	4576	384	bool fermentation::{anonymous}::validTargetTemperature(const fermentation::RunProgramSnapshot&, std::size_t, double)	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	3	4576	48	fermentation::ValidationResult fermentation::validateProgram(const ProgramDocument&, ValidationPurpose)	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	4	4576	32	void fermentation::{anonymous}::validateOptionalDouble(fermentation::ValidationResult&, const std::optional<double>&, const char*, double, double, fermentation::ValidationPurpose)	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	5	4576	48	void fermentation::{anonymous}::addError(fermentation::ValidationResult&, fermentation::ValidationErrorCode, const char*)	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	6	4576	32	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	7	4576	48	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	8	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::ValidationError]	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	9	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	10	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	11	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	12	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	13	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	14	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	15	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	16	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	17	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	18	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Visitor-decideRunAdjustment	19	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	0	4576	48	void fermentation::{anonymous}::decideAcknowledgeMessageIntoCore(const fermentation::RunCommandState&, const fermentation::MessageCommandRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Visitor-decideAcknowledgeMessage	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	0	4576	48	void fermentation::{anonymous}::decideMuteMessageIntoCore(const fermentation::RunCommandState&, const fermentation::MessageCommandRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_bringup	Visitor-decideMuteMessage	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Prepare	0	3056	48	fermentation::FermentationApplicationRequestResult fermentation::FermentationApplication::prepareEnvelope(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiEnvelopePayload&)	NOT_PROVEN
+esp32_release	Prepare	1	3056	32	) [with _Visitor = fermentation::FermentationApplication::prepareEnvelope(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiEnvelopePayload&)::<lambda(const auto:30&)>; _Variants = {const variant<fermentation::FermentationUiStartProgramIntent, fermentation::FermentationUiStartManualHoldingIntent, fermentation::FermentationUiStartManualTimedIntent, fermentation::FermentationUiStopRunIntent, fermentation::FermentationUiCompleteRunIntent, fermentation::FermentationUiAdjustRunIntent, fermentation::FermentationUiRecoveryTimeCorrectionIntent, fermentation::FermentationUiAcknowledgeMessageIntent, fermentation::FermentationUiMuteMessageIntent, fermentation::FermentationUiResetFaultIntent, fermentation::FermentationUiSensorSelectionIntent>&}]	NOT_PROVEN
+esp32_release	Prepare	2	3056	32	) [with _Result_type = __detail::__variant::__deduce_visit_result<fermentation::FermentationApplicationRequestResult>; _Visitor = fermentation::FermentationApplication::prepareEnvelope(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiEnvelopePayload&)::<lambda(const auto:30&)>; _Variants = {const variant<fermentation::FermentationUiStartProgramIntent, fermentation::FermentationUiStartManualHoldingIntent, fermentation::FermentationUiStartManualTimedIntent, fermentation::FermentationUiStopRunIntent, fermentation::FermentationUiCompleteRunIntent, fermentation::FermentationUiAdjustRunIntent, fermentation::FermentationUiRecoveryTimeCorrectionIntent, fermentation::FermentationUiAcknowledgeMessageIntent, fermentation::FermentationUiMuteMessageIntent, fermentation::FermentationUiResetFaultIntent, fermentation::FermentationUiSensorSelectionIntent>&}]	NOT_PROVEN
+esp32_release	Prepare	3	3056	2064	fermentation::FermentationApplicationRequestResult fermentation::FermentationApplication::prepareStartProgram(const fermentation::FermentationUiCommandContext&, const fermentation::FermentationUiStartProgramIntent&)	NOT_PROVEN
+esp32_release	Prepare	4	3056	48	fermentation::FermentationApplicationRequestResult fermentation::FermentationApplication::makePreparedRequest(Request&&, std::optional<fermentation::CrossRolePlausibilityContext>) [with Request = fermentation::ProgramStartRequest]	NOT_PROVEN
+esp32_release	Prepare	5	3056	32	) [with _Args = {fermentation::FermentationApplicationPreparedRequest::ConstructionTag, fermentation::ProgramStartRequest, std::optional<fermentation::CrossRolePlausibilityContext>&}; _Tp = fermentation::FermentationApplicationPreparedRequest]	NOT_PROVEN
+esp32_release	Prepare	6	3056	528	) [with _Tp = fermentation::FermentationApplicationPreparedRequest; _Args = {fermentation::FermentationApplicationPreparedRequest::ConstructionTag, fermentation::ProgramStartRequest, optional<fermentation::CrossRolePlausibilityContext>&}]	NOT_PROVEN
+esp32_release	Prepare	7	3056	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/fermentation_application.cpp:_ZN12fermentation19ProgramStartRequestC1EOS0_	NOT_PROVEN
+esp32_release	Prepare	8	3056	32	fermentation::ProgramStartRequest::ProgramStartRequest(fermentation::ProgramStartRequest&&)	NOT_PROVEN
+esp32_release	Prepare	9	3056	48	std::__detail::__variant::_Move_ctor_base<<anonymous>, _Types>::_Move_ctor_base(std::__detail::__variant::_Move_ctor_base<<anonymous>, _Types>&&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Prepare	10	3056	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Move_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_Move_ctor_base(std::__detail::__variant::_Move_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&&)::<lambda(auto:5&&, auto:6)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>}]	NOT_PROVEN
+esp32_release	Prepare	11	3056	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/fermentation_application.cpp:_ZN12fermentation15ProgramDocumentC1EOS0_	NOT_PROVEN
+esp32_release	Prepare	12	3056	32	fermentation::ProgramDocument::ProgramDocument(fermentation::ProgramDocument&&)	NOT_PROVEN
+esp32_release	Prepare	13	3056	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/fermentation_application.cpp:_ZN12fermentation17ProgramDefinitionC1EOS0_	NOT_PROVEN
+esp32_release	Prepare	14	3056	32	fermentation::ProgramDefinition::ProgramDefinition(fermentation::ProgramDefinition&&)	NOT_PROVEN
+esp32_release	Confirm	0	3056	48	fermentation::FermentationApplicationRequestStatus fermentation::FermentationApplication::confirmPreparedInPlace(fermentation::FermentationApplicationRequestResult&)	NOT_PROVEN
+esp32_release	Confirm	1	3056	560	bool fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)	NOT_PROVEN
+esp32_release	Confirm	2	3056	32	) [with _Visitor = fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)::<lambda(auto:31&)>; _Variants = {variant<fermentation::ProgramStartRequest, fermentation::ManualStartRequest, fermentation::StopRequest, fermentation::CompletionRequest, fermentation::RunAdjustmentCommandRequest, fermentation::ApplyRecoveryTimeCorrectionRequest, fermentation::FermentationApplicationPreparedRequest::PreparedAcknowledgeMessage, fermentation::FermentationApplicationPreparedRequest::PreparedMuteMessage, fermentation::SensorSelectionCommandRequest>&}]	NOT_PROVEN
+esp32_release	Confirm	3	3056	32	) [with _Result_type = __detail::__variant::__deduce_visit_result<void>; _Visitor = fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)::<lambda(auto:31&)>; _Variants = {variant<fermentation::ProgramStartRequest, fermentation::ManualStartRequest, fermentation::StopRequest, fermentation::CompletionRequest, fermentation::RunAdjustmentCommandRequest, fermentation::ApplyRecoveryTimeCorrectionRequest, fermentation::FermentationApplicationPreparedRequest::PreparedAcknowledgeMessage, fermentation::FermentationApplicationPreparedRequest::PreparedMuteMessage, fermentation::SensorSelectionCommandRequest>&}]	NOT_PROVEN
+esp32_release	Confirm	4	3056	528	fermentation::FermentationApplication::revalidatePreparedRequest(fermentation::FermentationApplicationPreparedRequest&)::<lambda(auto:31&)> [with auto:31 = fermentation::SensorSelectionCommandRequest]	NOT_PROVEN
+esp32_release	Confirm	5	3056	32	std::enable_if_t<((bool)__and_v<std::__not_<std::is_same<std::optional<_Tp>, typename std::remove_cv<typename std::remove_reference<_Up>::type>::type> >, std::__not_<std::__and_<std::is_scalar<_Tp>, std::is_same<_Tp, typename std::decay<_Func>::type> > >, std::is_constructible<_T1, _U1>, std::is_assignable<_T1&, _U1> >), std::optional<_Tp>&> std::optional<_Tp>::operator=(_Up&&) [with _Up = const fermentation::CrossRolePlausibilityContext&; _Tp = fermentation::CrossRolePlausibilityContext]	NOT_PROVEN
+esp32_release	Decision-all-nine	0	3056	1312	fermentation::FermentationUiCommandResult fermentation::FermentationApplication::applyConfirmedPrepared(const fermentation::FermentationApplicationPreparedRequest&)	NOT_PROVEN
+esp32_release	Decision-all-nine	1	3056	48	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::persistBorrowedCommand(CommandOperation&, fermentation::RunCommandState&, const fermentation::CommandDecisionView&, const fermentation::RunCheckpointTime&, const fermentation::CrossRolePlausibilityContext*, const fermentation::FreshStartSnapshotProvenance*)	NOT_PROVEN
+esp32_release	Decision-all-nine	2	3056	512	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::persistCommandInternal(fermentation::RunCommandState&, const Decision&, const fermentation::RunCheckpointTime&, const fermentation::CrossRolePlausibilityContext*, const fermentation::FreshStartSnapshotProvenance*) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Decision-all-nine	3	3056	160	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshot(const fermentation::RunPersistenceSnapshot&, const fermentation::RunCheckpointTime&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>)	NOT_PROVEN
+esp32_release	Decision-all-nine	4	3056	160	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotCore(const fermentation::RunPersistenceSnapshot&, const fermentation::RunCheckpointTime&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>, std::optional<unsigned int>, const fermentation::RunPersistenceFallbackDirective&, fermentation::RunPersistenceCoordinatorState)	NOT_PROVEN
+esp32_release	Decision-all-nine	5	3056	672	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotTransaction(const fermentation::RunPersistenceSnapshot&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>, const fermentation::RunPersistenceFallbackDirective&, fermentation::RunPersistenceCoordinatorState, std::size_t, std::optional<long long unsigned int>)	NOT_PROVEN
+esp32_release	Decision-all-nine	6	3056	32	fermentation::RunPersistenceStoreWriteResult fermentation::RunPersistenceStore::writeHeadExact(const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	7	3056	64	fermentation::RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact(device_platform::IStateStore&, const device_platform::StateStoreKey&, const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	8	3056	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_release	Decision-all-nine	9	3056	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_release	Decision-all-nine	10	3056	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	11	3056	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	12	3056	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	13	3056	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_release	Decision-all-nine	14	3056	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_release	Decision-all-nine	15	3056	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_release	Decision-all-nine	16	3056	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_release	Decision-all-nine	17	3056	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	18	3056	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	19	3056	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_release	Decision-all-nine	20	3056	32	esp_partition_write_raw	NOT_PROVEN
+esp32_release	Decision-all-nine	21	3056	96	esp_flash_write	NOT_PROVEN
+esp32_release	Decision-all-nine	22	3056	32	spiflash_start_prog	NOT_PROVEN
+esp32_release	Decision-all-nine	23	3056	64	spiflash_start_core	NOT_PROVEN
+esp32_release	Decision-all-nine	24	3056	32	spi1_start	NOT_PROVEN
+esp32_release	Decision-all-nine	25	3056	32	cache_disable	NOT_PROVEN
+esp32_release	Decision-all-nine	26	3056	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_release	Decision-all-nine	27	3056	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_release	Run-encode	0	5248	128	fermentation::RunPersistenceCoordinator::SnapshotRecordPreparation fermentation::RunPersistenceCoordinator::prepareSnapshotRecord(const fermentation::RunPersistenceSnapshot&, const fermentation::RunCheckpointTime&)	NOT_PROVEN
+esp32_release	Run-encode	1	5248	112	fermentation::RunPersistenceCodecStatus fermentation::encodeRunPersistenceSnapshot(const RunPersistenceSnapshot&, std::string&)	NOT_PROVEN
+esp32_release	Run-encode	2	5248	128	bool fermentation::validateRunPersistenceSnapshot(const RunPersistenceSnapshot&)	NOT_PROVEN
+esp32_release	Run-encode	3	5248	96	bool fermentation::validateRunProgramSnapshotInto(const RunProgramSnapshot&, const std::array<RunRevision, 32>&, std::size_t, EffectiveRunValues&)	NOT_PROVEN
+esp32_release	Run-encode	4	5248	384	bool fermentation::{anonymous}::validTargetTemperature(const fermentation::RunProgramSnapshot&, std::size_t, double)	NOT_PROVEN
+esp32_release	Run-encode	5	5248	48	fermentation::ValidationResult fermentation::validateProgram(const ProgramDocument&, ValidationPurpose)	NOT_PROVEN
+esp32_release	Run-encode	6	5248	32	void fermentation::{anonymous}::validateOptionalDouble(fermentation::ValidationResult&, const std::optional<double>&, const char*, double, double, fermentation::ValidationPurpose)	NOT_PROVEN
+esp32_release	Run-encode	7	5248	48	void fermentation::{anonymous}::addError(fermentation::ValidationResult&, fermentation::ValidationErrorCode, const char*)	NOT_PROVEN
+esp32_release	Run-encode	8	5248	32	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_release	Run-encode	9	5248	48	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_release	Run-encode	10	5248	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::ValidationError]	NOT_PROVEN
+esp32_release	Run-encode	11	5248	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Run-encode	12	5248	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Run-encode	13	5248	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Run-encode	14	5248	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Run-encode	15	5248	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Run-encode	16	5248	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Run-encode	17	5248	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Run-encode	18	5248	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Run-encode	19	5248	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Run-encode	20	5248	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Run-encode	21	5248	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Run-store	0	5248	672	fermentation::RunPersistenceResult fermentation::RunPersistenceCoordinator::writeSnapshotTransaction(const fermentation::RunPersistenceSnapshot&, bool, const fermentation::RunPersistenceBefore&, fermentation::RunPersistenceMutationKind, std::optional<long long unsigned int>, const fermentation::RunPersistenceFallbackDirective&, fermentation::RunPersistenceCoordinatorState, std::size_t, std::optional<long long unsigned int>)	NOT_PROVEN
+esp32_release	Run-store	1	5248	32	fermentation::RunPersistenceStoreWriteResult fermentation::RunPersistenceStore::writeHeadExact(const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_release	Run-store	2	5248	64	fermentation::RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact(device_platform::IStateStore&, const device_platform::StateStoreKey&, const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_release	Run-store	3	5248	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_release	Run-store	4	5248	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_release	Run-store	5	5248	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Run-store	6	5248	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Run-store	7	5248	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Run-store	8	5248	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_release	Run-store	9	5248	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_release	Run-store	10	5248	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_release	Run-store	11	5248	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_release	Run-store	12	5248	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_release	Run-store	13	5248	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_release	Run-store	14	5248	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_release	Run-store	15	5248	32	esp_partition_write_raw	NOT_PROVEN
+esp32_release	Run-store	16	5248	96	esp_flash_write	NOT_PROVEN
+esp32_release	Run-store	17	5248	32	spiflash_start_prog	NOT_PROVEN
+esp32_release	Run-store	18	5248	64	spiflash_start_core	NOT_PROVEN
+esp32_release	Run-store	19	5248	32	spi1_start	NOT_PROVEN
+esp32_release	Run-store	20	5248	32	cache_disable	NOT_PROVEN
+esp32_release	Run-store	21	5248	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_release	Run-store	22	5248	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_release	Settings	0	1856	80	fermentation::ApplicationConfigurationChangeResult fermentation::FermentationApplication::applyWebConfigurationChange(const fermentation::WebConfigurationChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)	NOT_PROVEN
+esp32_release	Settings	1	1856	48	fermentation::ApplicationConfigurationChangeResult fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)	NOT_PROVEN
+esp32_release	Settings	2	1856	48	fermentation::ApplicationConfigurationChangeResult fermentation::{anonymous}::commitUserConfigurationChange(fermentation::ConfigurationService&, const fermentation::UserConfigurationRevision&, const fermentation::ChangeOrigin&, Mutate&&) [with Mutate = fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)::<lambda(fermentation::UserConfiguration&)>]	NOT_PROVEN
+esp32_release	Settings	3	1856	272	fermentation::ApplicationConfigurationChangeResult fermentation::{anonymous}::commitConfigurationChange(fermentation::ConfigurationService&, const fermentation::UserConfigurationRevision&, const fermentation::ChangeOrigin&, const fermentation::ChangeOperation&, Mutate&&) [with Mutate = commitUserConfigurationChange<fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)::<lambda(fermentation::UserConfiguration&)> >(fermentation::ConfigurationService&, const fermentation::UserConfigurationRevision&, const fermentation::ChangeOrigin&, fermentation::FermentationApplication::applyUserConfigurationChange(const fermentation::ChangeOrigin&, const fermentation::FermentationUiUserSettingsChange&, const std::optional<device_platform::StrongId<fermentation::detail::UserConfigurationRevisionTag, long long unsigned int> >&)::<lambda(fermentation::UserConfiguration&)>&&)::<lambda(fermentation::ConfigurationPreviewBuildLease&)>]	NOT_PROVEN
+esp32_release	Settings	4	1856	368	fermentation::ConfigurationCommitResult fermentation::ConfigurationService::confirmPreview(uint64_t)	NOT_PROVEN
+esp32_release	Settings	5	1856	1040	void fermentation::ConfigurationGraphStore::prepareCommitInto(const fermentation::LoadedConfigurationGraph&, const fermentation::ConfigurationCommitCandidate&, fermentation::ChangeOrigin, fermentation::ChangeOperation, fermentation::ConfigurationCommitPrepareResult&) const	NOT_PROVEN
+esp32_release	Settings	6	1856	464	fermentation::ConfigurationValidationScanResult fermentation::ConfigurationGraphStore::validationScan(const fermentation::LoadedConfigurationGraph&) const	NOT_PROVEN
+esp32_release	Settings	7	1856	480	fermentation::{anonymous}::SemanticallyLoadedMetadataBranchResult fermentation::{anonymous}::loadMetadataBranchSemantically(const fermentation::ConfigurationManifestReference&, const device_platform::IStateStore&, const device_platform::ITimeZoneResolver&)	NOT_PROVEN
+esp32_release	Settings	8	1856	32	fermentation::ConfigurationScanStatus fermentation::{anonymous}::validateBranchSemantically(const device_platform::IStateStore&, const device_platform::ITimeZoneResolver&, const fermentation::ConfigurationGraphMetadataBranch&)	NOT_PROVEN
+esp32_release	Settings	9	1856	176	fermentation::ConfigurationScanStatus fermentation::{anonymous}::validateProgramReferenceSemantically(const device_platform::IStateStore&, const fermentation::ProgramCatalogReference&, const fermentation::ProgramCatalog*)	NOT_PROVEN
+esp32_release	Settings	10	1856	1088	fermentation::ConfigurationCodecStatus fermentation::validateProgramCatalogPayload(uint32_t, const std::string&, const ProgramCatalog*)	NOT_PROVEN
+esp32_release	Settings	11	1856	256	static std::array<fermentation::ProgramDocument, 4> fermentation::FactoryProgramCatalog::programs()	NOT_PROVEN
+esp32_release	Settings	12	1856	256	fermentation::ProgramDocument fermentation::{anonymous}::makeFactoryProgram(std::string, std::string, bool, fermentation::SensorPreference, fermentation::CompletionMode)	NOT_PROVEN
+esp32_release	Settings	13	1856	32	) [with _Args = {fermentation::FermentationStage}; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Settings	14	1856	64	) [with _Args = {fermentation::FermentationStage}; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Settings	15	1856	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_release	Settings	16	1856	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Settings	17	1856	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Settings	18	1856	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Settings	19	1856	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Settings	20	1856	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Settings	21	1856	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Settings	22	1856	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Settings	23	1856	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Settings	24	1856	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Settings	25	1856	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Settings	26	1856	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Run-postcheck	0	4928	32	fermentation::CommandStatus fermentation::validateRunCommand(const RunCommandState&, const CommandDecisionView&)	NOT_PROVEN
+esp32_release	Run-postcheck	1	4928	32	fermentation::CommandStatus fermentation::{anonymous}::validateRunCommandCore(const fermentation::RunCommandState&, const Decision&, const Before&) [with Decision = fermentation::CommandDecisionView; Before = fermentation::CommandApplyGuard]	NOT_PROVEN
+esp32_release	Run-postcheck	2	4928	32	bool fermentation::operator!=(const std::string&, const CommandApplyGuard::RunId&)	NOT_PROVEN
+esp32_release	Run-postcheck	3	4928	32	bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const char*, __cxx11::basic_string<char> >; _II2 = const char*]	NOT_PROVEN
+esp32_release	Run-postcheck	4	4928	32	static bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = char]	NOT_PROVEN
+esp32_release	Run-RAM-move	0	4928	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(fermentation::RunCommandState&&)	NOT_PROVEN
+esp32_release	Run-RAM-move	1	4928	32	constexpr void std::_Optional_payload_base<_Tp>::_M_move_assign(std::_Optional_payload_base<_Tp>&&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_release	Run-RAM-move	2	4928	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(fermentation::ActiveRun&&)	NOT_PROVEN
+esp32_release	Run-RAM-move	3	4928	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(fermentation::RunProgramSnapshot&&)	NOT_PROVEN
+esp32_release	Run-RAM-move	4	4928	48	std::__detail::__variant::_Move_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Move_assign_base<<anonymous>, _Types>::operator=(std::__detail::__variant::_Move_assign_base<<anonymous>, _Types>&&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Run-RAM-move	5	4928	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(std::__detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&&)::<lambda(auto:8&&, auto:9)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Run-RAM-move	6	4928	32	std::__detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(std::__detail::__variant::_Move_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&&)::<lambda(auto:8&&, auto:9)> mutable [with auto:8 = fermentation::ProgramDocument&; auto:9 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_release	Run-RAM-move	7	4928	32	) [with unsigned int _Np = 0; bool _Triv = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}; _Args = {fermentation::ProgramDocument}]	NOT_PROVEN
+esp32_release	Run-RAM-move	8	4928	48	>::_M_reset() [with _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Run-RAM-move	9	4928	32	) [with _Result_type = void; _Visitor = __detail::__variant::_Variant_storage<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_M_reset()::<lambda(auto:1&&)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Run-RAM-move	10	4928	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_commands.cpp:_ZN12fermentation17ProgramDefinitionD1Ev	NOT_PROVEN
+esp32_release	Run-RAM-move	11	4928	32	fermentation::ProgramDefinition::~ProgramDefinition()	NOT_PROVEN
+esp32_release	Run-RAM-move	12	4928	32	std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Run-release	0	4368	64	void fermentation::RunPersistenceCoordinator::releaseCommandOperation()	NOT_PROVEN
+esp32_release	Run-release	1	4368	112	void fermentation::clearActiveRunState(RunCommandState&)	NOT_PROVEN
+esp32_release	Run-release	2	4368	32	constexpr void std::_Optional_payload_base<_Tp>::_M_reset() [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_release	Run-release	3	4368	48	>::_M_reset() [with _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Run-release	4	4368	32	) [with _Result_type = void; _Visitor = __detail::__variant::_Variant_storage<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_M_reset()::<lambda(auto:1&&)>; _Variants = {variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Run-release	5	4368	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_commands.cpp:_ZN12fermentation17ProgramDefinitionD1Ev	NOT_PROVEN
+esp32_release	Run-release	6	4368	32	fermentation::ProgramDefinition::~ProgramDefinition()	NOT_PROVEN
+esp32_release	Run-release	7	4368	32	std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Factory	0	0	96	static bool fermentation::ActiveRun::startInto(const fermentation::ProgramRunSource&, std::optional<device_platform::StrongId<fermentation::detail::RunProgramSourceRevisionTag, long long unsigned int> >, std::optional<fermentation::ActiveRun>&)	NOT_PROVEN
+esp32_release	Factory	1	0	64	) [with _Args = {fermentation::ActiveRun::StartConstructionTag, const std::variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&, std::optional<device_platform::StrongId<fermentation::detail::RunProgramSourceRevisionTag, long long unsigned int> >&, fermentation::EffectiveRunValues&}; _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_release	Factory	2	0	UNKNOWN	_ZN12fermentation9ActiveRunC1ENS0_20StartConstructionTagERKSt7variantIJNS_15ProgramDocumentENS_20ManualTimedRunSourceEEESt8optionalIN15device_platform8StrongIdINS_6detail27RunProgramSourceRevisionTagEyEEERKNS_18EffectiveRunValuesE	NOT_PROVEN
+esp32_release	Factory	3	0	32	fermentation::ActiveRun::ActiveRun(StartConstructionTag, const fermentation::ProgramRunSource&, std::optional<device_platform::StrongId<fermentation::detail::RunProgramSourceRevisionTag, long long unsigned int> >, const fermentation::EffectiveRunValues&)	NOT_PROVEN
+esp32_release	Factory	4	0	48	std::__detail::__variant::_Copy_ctor_base<<anonymous>, _Types>::_Copy_ctor_base(const std::__detail::__variant::_Copy_ctor_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Factory	5	0	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::_Copy_ctor_base(const std::__detail::__variant::_Copy_ctor_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:2&&, auto:3)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Factory	6	0	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_snapshot.cpp:_ZN12fermentation15ProgramDocumentC1ERKS0_	NOT_PROVEN
+esp32_release	Factory	7	0	32	fermentation::ProgramDocument::ProgramDocument(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_release	Factory	8	0	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_snapshot.cpp:_ZN12fermentation17ProgramDefinitionC1ERKS0_	NOT_PROVEN
+esp32_release	Factory	9	0	32	fermentation::ProgramDefinition::ProgramDefinition(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_release	Factory	10	0	UNKNOWN	/var/lib/docker/data/ESP32-Projekte/ESP32-Fermentationsschrank/lib/fermentation_app/src/run_snapshot.cpp:_ZNSt6vectorIN12fermentation17FermentationStageESaIS1_EEC1ERKS3_	NOT_PROVEN
+esp32_release	Factory	11	0	32	std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Factory	12	0	32	void std::_Vector_base<_Tp, _Alloc>::_M_create_storage(std::size_t) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Factory	13	0	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_release	Factory	14	0	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Factory	15	0	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Factory	16	0	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Factory	17	0	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Factory	18	0	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Factory	19	0	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Factory	20	0	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Factory	21	0	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Factory	22	0	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Factory	23	0	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Factory	24	0	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Run-exact-write-readback	0	5952	64	fermentation::RunPersistenceStoreWriteResult fermentation::{anonymous}::writeExact(device_platform::IStateStore&, const device_platform::StateStoreKey&, const std::string&, const std::optional<std::__cxx11::basic_string<char> >&, std::size_t)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	1	5952	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_release	Run-exact-write-readback	2	5952	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	3	5952	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	4	5952	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	5	5952	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	6	5952	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	7	5952	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	8	5952	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	9	5952	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	10	5952	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	11	5952	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	12	5952	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_release	Run-exact-write-readback	13	5952	32	esp_partition_write_raw	NOT_PROVEN
+esp32_release	Run-exact-write-readback	14	5952	96	esp_flash_write	NOT_PROVEN
+esp32_release	Run-exact-write-readback	15	5952	32	spiflash_start_prog	NOT_PROVEN
+esp32_release	Run-exact-write-readback	16	5952	64	spiflash_start_core	NOT_PROVEN
+esp32_release	Run-exact-write-readback	17	5952	32	spi1_start	NOT_PROVEN
+esp32_release	Run-exact-write-readback	18	5952	32	cache_disable	NOT_PROVEN
+esp32_release	Run-exact-write-readback	19	5952	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_release	Run-exact-write-readback	20	5952	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_release	NVS-write	0	0	32	virtual device_platform::StateStoreWriteStatus device_platform_esp_idf::NvsStateStore::write(const device_platform::StateStoreKey&, const std::string&)	NOT_PROVEN
+esp32_release	NVS-write	1	0	48	esp_err_t nvs_set_blob(nvs_handle_t, const char*, const void*, size_t)	NOT_PROVEN
+esp32_release	NVS-write	2	0	48	virtual esp_err_t nvs::NVSHandleSimple::set_blob(const char*, const void*, size_t)	NOT_PROVEN
+esp32_release	NVS-write	3	0	112	esp_err_t nvs::Storage::writeItem(uint8_t, nvs::ItemType, const char*, const void*, size_t, bool)	NOT_PROVEN
+esp32_release	NVS-write	4	0	112	esp_err_t nvs::Storage::cmpMultiPageBlob(uint8_t, const char*, const void*, size_t)	NOT_PROVEN
+esp32_release	NVS-write	5	0	144	esp_err_t nvs::Page::cmpItem(uint8_t, nvs::ItemType, const char*, const void*, size_t, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_release	NVS-write	6	0	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_release	NVS-write	7	0	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_release	NVS-write	8	0	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_release	NVS-write	9	0	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_release	NVS-write	10	0	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_release	NVS-write	11	0	32	esp_partition_write_raw	NOT_PROVEN
+esp32_release	NVS-write	12	0	96	esp_flash_write	NOT_PROVEN
+esp32_release	NVS-write	13	0	32	spiflash_start_prog	NOT_PROVEN
+esp32_release	NVS-write	14	0	64	spiflash_start_core	NOT_PROVEN
+esp32_release	NVS-write	15	0	32	spi1_start	NOT_PROVEN
+esp32_release	NVS-write	16	0	32	cache_disable	NOT_PROVEN
+esp32_release	NVS-write	17	0	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_release	NVS-write	18	0	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_release	NVS-read	0	0	64	virtual device_platform::StateStoreReadResult device_platform_esp_idf::NvsStateStore::read(const device_platform::StateStoreKey&, std::size_t) const	NOT_PROVEN
+esp32_release	NVS-read	1	0	32	esp_err_t nvs_get_blob(nvs_handle_t, const char*, void*, size_t*)	NOT_PROVEN
+esp32_release	NVS-read	2	0	32	virtual esp_err_t nvs::NVSHandleSimple::get_blob(const char*, void*, size_t)	NOT_PROVEN
+esp32_release	NVS-read	3	0	96	esp_err_t nvs::Storage::readItem(uint8_t, nvs::ItemType, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	NVS-read	4	0	112	esp_err_t nvs::Storage::readMultiPageBlob(uint8_t, const char*, void*, size_t)	NOT_PROVEN
+esp32_release	NVS-read	5	0	112	esp_err_t nvs::Storage::eraseMultiPageBlob(uint8_t, const char*, bool, nvs::VerOffset)	NOT_PROVEN
+esp32_release	NVS-read	6	0	80	esp_err_t nvs::Storage::findItem(uint8_t, nvs::ItemType, const char*, nvs::Page*&, nvs::Item&, uint8_t, nvs::VerOffset, size_t*)	NOT_PROVEN
+esp32_release	NVS-read	7	0	96	esp_err_t nvs::Page::findItem(uint8_t, nvs::ItemType, const char*, size_t&, nvs::Item&, uint8_t, nvs::VerOffset)	NOT_PROVEN
+esp32_release	NVS-read	8	0	80	esp_err_t nvs::Page::eraseEntryAndSpan(size_t, bool)	NOT_PROVEN
+esp32_release	NVS-read	9	0	32	esp_err_t nvs::Page::purgeEntry(size_t)	NOT_PROVEN
+esp32_release	NVS-read	10	0	80	esp_err_t nvs::Page::purgeEntryRange(size_t, size_t)	NOT_PROVEN
+esp32_release	NVS-read	11	0	32	virtual esp_err_t nvs::NVSPartition::write_raw(size_t, const void*, size_t)	NOT_PROVEN
+esp32_release	NVS-read	12	0	32	esp_partition_write_raw	NOT_PROVEN
+esp32_release	NVS-read	13	0	96	esp_flash_write	NOT_PROVEN
+esp32_release	NVS-read	14	0	32	spiflash_start_prog	NOT_PROVEN
+esp32_release	NVS-read	15	0	64	spiflash_start_core	NOT_PROVEN
+esp32_release	NVS-read	16	0	32	spi1_start	NOT_PROVEN
+esp32_release	NVS-read	17	0	32	cache_disable	NOT_PROVEN
+esp32_release	NVS-read	18	0	32	spi_flash_disable_interrupts_caches_and_other_cpu	NOT_PROVEN
+esp32_release	NVS-read	19	0	32	spi_flash_disable_cache	NOT_PROVEN
+esp32_release	Allocator	0	0	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Allocator	1	0	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Allocator	2	0	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Allocator	3	0	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Allocator	4	0	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Allocator	5	0	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Allocator	6	0	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Allocator	7	0	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Allocator	8	0	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	0	4576	64	void fermentation::{anonymous}::decideApplyRecoveryTimeCorrectionIntoCore(const fermentation::RunCommandState&, const fermentation::ApplyRecoveryTimeCorrectionRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	0	4576	976	void fermentation::{anonymous}::decideApplySensorSelectionActionIntoCore(const fermentation::RunCommandState&, const fermentation::SensorSelectionCommandRequest&, const fermentation::CrossRolePlausibilityContext&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Visitor-decideApplySensorSelectionAction	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	0	4576	288	void fermentation::{anonymous}::decideProgramStartIntoCore(const fermentation::RunCommandState&, const fermentation::ProgramStartRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	1	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	2	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	3	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	4	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	6	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideProgramStart	7	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	0	4576	320	void fermentation::{anonymous}::decideManualStartIntoCore(const fermentation::RunCommandState&, const fermentation::ManualStartRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	1	4576	80	bool fermentation::{anonymous}::installManualRun(fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::ManualRunPlan)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	2	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	3	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	4	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	6	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	7	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideManualStart	8	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_release	Visitor-decideStop	0	4576	256	void fermentation::{anonymous}::decideStopIntoCore(const fermentation::RunCommandState&, const fermentation::StopRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideStop	1	4576	80	bool fermentation::{anonymous}::installManualRun(fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::ManualRunPlan)	NOT_PROVEN
+esp32_release	Visitor-decideStop	2	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_release	Visitor-decideStop	3	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideStop	4	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideStop	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideStop	6	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_release	Visitor-decideStop	7	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideStop	8	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	0	4576	256	void fermentation::{anonymous}::decideCompletionIntoCore(const fermentation::RunCommandState&, const fermentation::CompletionRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	1	4576	80	bool fermentation::{anonymous}::installManualRun(fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::ManualRunPlan)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	2	4576	288	bool fermentation::{anonymous}::applyTransition(fermentation::RunCommandState&, fermentation::ProcessEvent, uint64_t, const fermentation::ProcessRunSnapshot*)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	3	4576	208	fermentation::TransitionDecision fermentation::decideProcessTransition(const ProcessRuntimeState&, const ProcessRunSnapshot*, const ProcessSignals&, const TransitionRequest&, uint64_t, const PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	4	4576	48	fermentation::TransitionDecision fermentation::{anonymous}::decideAutomatic(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot*, const fermentation::ProcessSignals&, uint64_t, const fermentation::PriorBootPhaseElapsed&)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	5	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualifyingTarget(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	6	4576	192	fermentation::TransitionDecision fermentation::{anonymous}::decideQualification(const fermentation::ProcessRuntimeState&, const fermentation::ProcessRunSnapshot&, const fermentation::ProcessSignals&, uint64_t, bool)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	7	4576	176	fermentation::TransitionDecision fermentation::propose(const ProcessRuntimeState&, ProcessState, TransitionReason, uint64_t)	NOT_PROVEN
+esp32_release	Visitor-decideCompletion	8	4576	32	bool fermentation::{anonymous}::stateHasTargetReachTimer(fermentation::ProcessState)	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	0	4576	416	void fermentation::{anonymous}::decideRunAdjustmentIntoCore(const fermentation::RunCommandState&, const fermentation::RunAdjustmentCommandRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	1	4576	192	fermentation::RunAdjustmentDecision fermentation::ActiveRun::decideAdjustment(const fermentation::RunAdjustmentRequest&, const fermentation::RunAdjustmentContext&) const	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	2	4576	384	bool fermentation::{anonymous}::validTargetTemperature(const fermentation::RunProgramSnapshot&, std::size_t, double)	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	3	4576	48	fermentation::ValidationResult fermentation::validateProgram(const ProgramDocument&, ValidationPurpose)	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	4	4576	32	void fermentation::{anonymous}::validateOptionalDouble(fermentation::ValidationResult&, const std::optional<double>&, const char*, double, double, fermentation::ValidationPurpose)	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	5	4576	48	void fermentation::{anonymous}::addError(fermentation::ValidationResult&, fermentation::ValidationErrorCode, const char*)	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	6	4576	32	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	7	4576	48	) [with _Args = {fermentation::ValidationError}; _Tp = fermentation::ValidationError; _Alloc = std::allocator<fermentation::ValidationError>]	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	8	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::ValidationError]	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	9	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	10	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	11	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	12	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	13	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	14	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	15	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	16	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	17	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	18	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Visitor-decideRunAdjustment	19	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	0	4576	48	void fermentation::{anonymous}::decideAcknowledgeMessageIntoCore(const fermentation::RunCommandState&, const fermentation::MessageCommandRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Visitor-decideAcknowledgeMessage	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	0	4576	48	void fermentation::{anonymous}::decideMuteMessageIntoCore(const fermentation::RunCommandState&, const fermentation::MessageCommandRequest&, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	1	4576	32	void fermentation::beginDecisionInto(const RunCommandState&, const CommandEnvelope&, CommandKind, CommandDecisionView&)	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	2	4576	32	void fermentation::{anonymous}::beginDecisionIntoCore(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	3	4576	32	void fermentation::{anonymous}::beginDecisionIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	4	4576	32	void fermentation::{anonymous}::resultIntoLocal(const fermentation::RunCommandState&, const fermentation::CommandEnvelope&, fermentation::CommandKind, fermentation::CommandStatus, Decision&) [with Decision = fermentation::CommandDecisionView]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	5	4576	32	fermentation::RunCommandState& fermentation::RunCommandState::operator=(const fermentation::RunCommandState&)	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	6	4576	32	constexpr void std::_Optional_payload_base<_Tp>::_M_copy_assign(const std::_Optional_payload_base<_Tp>&) [with _Tp = fermentation::ActiveRun]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	7	4576	32	fermentation::ActiveRun& fermentation::ActiveRun::operator=(const fermentation::ActiveRun&)	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	8	4576	32	fermentation::RunProgramSnapshot& fermentation::RunProgramSnapshot::operator=(const fermentation::RunProgramSnapshot&)	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	9	4576	48	std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>& std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>::operator=(const std::__detail::__variant::_Copy_assign_base<<anonymous>, _Types>&) [with bool <anonymous> = false; _Types = {fermentation::ProgramDocument, fermentation::ManualTimedRunSource}]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	10	4576	32	) [with _Result_type = __detail::__variant::__variant_idx_cookie; _Visitor = __detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)>; _Variants = {const variant<fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&}]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	11	4576	240	std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>::operator=(const std::__detail::__variant::_Copy_assign_base<false, fermentation::ProgramDocument, fermentation::ManualTimedRunSource>&)::<lambda(auto:6&&, auto:7)> mutable [with auto:6 = const fermentation::ProgramDocument&; auto:7 = std::integral_constant<unsigned int, 0>]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	12	4576	32	fermentation::ProgramDocument& fermentation::ProgramDocument::operator=(const fermentation::ProgramDocument&)	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	13	4576	32	fermentation::ProgramDefinition& fermentation::ProgramDefinition::operator=(const fermentation::ProgramDefinition&)	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	14	4576	32	std::vector<_Tp, _Alloc>& std::vector<_Tp, _Alloc>::operator=(const std::vector<_Tp, _Alloc>&) [with _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	15	4576	48	std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_M_allocate_and_copy(size_type, _ForwardIterator, _ForwardIterator) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const fermentation::FermentationStage*, std::vector<fermentation::FermentationStage> >; _Tp = fermentation::FermentationStage; _Alloc = std::allocator<fermentation::FermentationStage>]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	16	4576	32	_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = fermentation::FermentationStage]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	17	4576	32	_Znwj [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	18	4576	32	malloc [actual ELF entry]	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	19	4576	32	heap_caps_malloc_default	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	20	4576	32	heap_caps_malloc	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	21	4576	32	heap_caps_malloc_base	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	22	4576	48	heap_caps_aligned_alloc_base	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	23	4576	32	aligned_or_unaligned_alloc	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	24	4576	32	multi_heap_aligned_alloc_offs	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	25	4576	32	multi_heap_aligned_alloc_impl_offs	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	26	4576	32	multi_heap_internal_lock	NOT_PROVEN
+esp32_release	Visitor-decideMuteMessage	27	4576	32	xPortEnterCriticalTimeout	NOT_PROVEN

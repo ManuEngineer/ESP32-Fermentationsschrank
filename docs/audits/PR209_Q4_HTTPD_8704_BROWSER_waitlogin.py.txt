@@ -1,0 +1,16 @@
+import http.client,json,time,datetime
+pw=open('/var/lib/docker/data/ESP32-Projekte/hw-evidence-pr209-p0/.pw').read().strip()
+def go():
+    c=http.client.HTTPConnection('<DEVICE_IP>',80,timeout=30)
+    c.request('POST','/api/v1/login',json.dumps({'password':pw}),{'Content-Type':'application/json','Origin':'http://<DEVICE_IP>','Sec-Fetch-Site':'same-origin'})
+    r=c.getresponse(); b=json.loads(r.read()); ck=r.getheader('Set-Cookie')
+    if r.status==200:
+        h={'Cookie':ck.split(';',1)[0],'Origin':'http://<DEVICE_IP>','Sec-Fetch-Site':'same-origin','Content-Type':'application/json','X-CSRF-Token':b['csrfToken']}
+        c2=http.client.HTTPConnection('<DEVICE_IP>',80,timeout=30); c2.request('POST','/api/v1/logout','{}',h); c2.getresponse().read()
+    return r.status
+t0=time.time()
+while time.time()-t0<3000:
+    if datetime.datetime.now().strftime('%H:%M')>='17:33':
+        s=go(); print(datetime.datetime.now().strftime('%H:%M:%S'),s,flush=True)
+        if s==200: break
+    time.sleep(150)

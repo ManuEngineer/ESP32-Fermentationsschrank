@@ -56,6 +56,11 @@ enum class WebProvisionDecodeStatus : unsigned char {
 [[nodiscard]] WebRunMutationDecodeStatus decodeWebRunMutation(
     const std::string& exactBody, WebRunMutationDto& output);
 
+[[nodiscard]] WebRunMutationDecodeStatus decodeWebMutation(
+    const std::string& exactBody, WebMutationDto& output);
+[[nodiscard]] bool encodeWebApiSettings(
+    const ApplicationWebSettingsSnapshot& snapshot, std::string& output);
+
 [[nodiscard]] bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
                                       const FermentationDeviceInfoView& device,
                                       std::string& output);
@@ -68,5 +73,10 @@ enum class WebProvisionDecodeStatus : unsigned char {
 // catalog revision of the same source. False if the bounded body is exceeded.
 [[nodiscard]] bool encodeWebApiPrograms(
     const FermentationUiPresentationSource& source, std::string& output);
+
+// Installed, enabled entry from the same presentation-source lease.
+[[nodiscard]] bool encodeWebApiProgram(
+    const FermentationUiPresentationSource& source,
+    const ProgramDocument& program, std::string& output);
 
 }  // namespace fermentation

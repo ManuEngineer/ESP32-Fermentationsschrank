@@ -1,0 +1,195 @@
+# Experimental delta ONLY on PR209_Q4_OWNERSHIP_20261023.patch reconstructed source. Not product code.
+--- a/configuration_document_codec.cpp
++++ b/configuration_document_codec.cpp
+@@ -626,3 +626,2 @@
+-        auto migrated = migrateProgramToCurrentSchema(candidate);
+-        if (migrated.status != MigrationStatus::Migrated ||
+-            !migrated.document.has_value()) {
++        const auto migrated = migrateProgramToCurrentSchemaInto(candidate);
++        if (migrated != MigrationStatus::Migrated)
+@@ -630,2 +628,0 @@
+-        }
+-        candidate = std::move(*migrated.document);
+--- a/program_model.cpp
++++ b/program_model.cpp
+@@ -179 +179 @@
+-MigrationResult migrateProgramSchema4To5(const ProgramDocument& source) {
++MigrationStatus migrateProgramSchema4To5Into(ProgramDocument& source) {
+@@ -183,10 +183,9 @@
+-        return {MigrationStatus::InvalidSourceDocument, std::nullopt};
+-    }
+-    ProgramDocument migrated = source;
+-    migrated.schema.version = 5U;
+-    migrated.schema.presentFields = kSchema5RequiredProgramFields;
+-    migrated.program.maximumProductWaitMinutes = std::nullopt;
+-    return {MigrationStatus::Migrated, std::move(migrated)};
+-}
+-
+-MigrationResult migrateProgramSchema5To6(const ProgramDocument& source) {
++        return MigrationStatus::InvalidSourceDocument;
++    }
++    source.schema.version = 5U;
++    source.schema.presentFields = kSchema5RequiredProgramFields;
++    source.program.maximumProductWaitMinutes = std::nullopt;
++    return MigrationStatus::Migrated;
++}
++
++MigrationStatus migrateProgramSchema5To6Into(ProgramDocument& source) {
+@@ -196,6 +195,5 @@
+-        return {MigrationStatus::InvalidSourceDocument, std::nullopt};
+-    }
+-    ProgramDocument migrated = source;
+-    migrated.schema.version = 6U;
+-    migrated.schema.presentFields = kCurrentRequiredProgramFields;
+-    if (programHasFixedSensorFailure(migrated.program)) {
++        return MigrationStatus::InvalidSourceDocument;
++    }
++    source.schema.version = 6U;
++    source.schema.presentFields = kCurrentRequiredProgramFields;
++    if (programHasFixedSensorFailure(source.program)) {
+@@ -206 +204 @@
+-        applyAirOnlySensorFailure(migrated.program);
++        applyAirOnlySensorFailure(source.program);
+@@ -208 +206 @@
+-        migrated.program.productSensorFailure.returnStrategy =
++        source.program.productSensorFailure.returnStrategy =
+@@ -211 +209 @@
+-    return {MigrationStatus::Migrated, std::move(migrated)};
++    return MigrationStatus::Migrated;
+@@ -387,0 +386,14 @@
++MigrationStatus migrateProgramToCurrentSchemaInto(ProgramDocument& current) {
++    if (current.schema.version == kCurrentProgramSchemaVersion)
++        return MigrationStatus::NotRequired;
++    if (current.schema.version < kMinimumMigratableProgramSchemaVersion ||
++        current.schema.version > kCurrentProgramSchemaVersion)
++        return MigrationStatus::UnsupportedSourceVersion;
++    while (current.schema.version < kCurrentProgramSchemaVersion) {
++        const auto status = current.schema.version == 4U
++            ? migrateProgramSchema4To5Into(current)
++            : migrateProgramSchema5To6Into(current);
++        if (status != MigrationStatus::Migrated) return status;
++    }
++    return MigrationStatus::Migrated;
++}
+@@ -389,3 +400,0 @@
+-    if (source.schema.version == kCurrentProgramSchemaVersion) {
+-        return {MigrationStatus::NotRequired, source};
+-    }
+@@ -393 +402 @@
+-        source.schema.version > kCurrentProgramSchemaVersion) {
++        source.schema.version > kCurrentProgramSchemaVersion)
+@@ -395,5 +403,0 @@
+-    }
+-
+-    // Kanonische Copy-Migrationskette (docs/CONFIGURATION_PERSISTENCE.md):
+-    // jeder Schritt einzeln auf einer Kopie, exakt die zwei existierenden
+-    // Schritte 4->5 und 5->6 - kein generischer Schrittregistry-Mechanismus.
+@@ -401,11 +405,4 @@
+-    while (current.schema.version < kCurrentProgramSchemaVersion) {
+-        auto step = current.schema.version == 4U
+-                        ? migrateProgramSchema4To5(current)
+-                        : migrateProgramSchema5To6(current);
+-        if (step.status != MigrationStatus::Migrated ||
+-            !step.document.has_value()) {
+-            return step;
+-        }
+-        current = std::move(*step.document);
+-    }
+-    return {MigrationStatus::Migrated, std::move(current)};
++    const auto status = migrateProgramToCurrentSchemaInto(current);
++    if (status != MigrationStatus::Migrated && status != MigrationStatus::NotRequired)
++        return {status, std::nullopt};
++    return {status, std::move(current)};
+--- a/program_model.hpp
++++ b/program_model.hpp
+@@ -235,0 +236,2 @@
++// Probe: destination is an unpublished codec-owned candidate, partial failure is discarded.
++[[nodiscard]] MigrationStatus migrateProgramToCurrentSchemaInto(ProgramDocument&);
+--- a/run_persistence_coordinator.cpp
++++ b/run_persistence_coordinator.cpp
+@@ -2345,0 +2346,17 @@
++    const auto encoded = prepareSnapshotRecord(snapshot, time);
++    if (encoded != SnapshotRecordPreparation::Success) {
++        state_ = rollbackState;
++        return result(encoded == SnapshotRecordPreparation::InvalidSnapshot
++                          ? RunPersistenceResultStatus::InvalidDecision
++                          : RunPersistenceResultStatus::CapacityExceeded,
++                      RunPersistenceStep::CheckpointSlot,
++                      RunPersistenceTechnicalReason::CodecError);
++    }
++    return writeSnapshotTransaction(snapshot, time, periodic, before,
++        mutationKind, commandId, fallbackDirective, rollbackState, target,
++        previousCommandIdHighWater);
++}
++
++RunPersistenceCoordinator::SnapshotRecordPreparation
++RunPersistenceCoordinator::prepareSnapshotRecord(
++    const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time) {
+@@ -2349,4 +2366 @@
+-        state_ = rollbackState;
+-        return result(RunPersistenceResultStatus::InvalidDecision,
+-                      RunPersistenceStep::CheckpointSlot,
+-                      RunPersistenceTechnicalReason::CodecError);
++        return SnapshotRecordPreparation::InvalidSnapshot;
+@@ -2356,3 +2370,2 @@
+-        nextCheckpointRevision_, time.utcUnixSeconds,          payload};
+-    std::string targetBytes;
+-    if (device_platform::encodeEnvelope(env, targetBytes,
++        nextCheckpointRevision_, time.utcUnixSeconds,          std::move(payload)};
++    if (device_platform::encodeEnvelope(env, workingSet_.record.bytes,
+@@ -2361,6 +2374,2 @@
+-        state_ = rollbackState;
+-        return result(RunPersistenceResultStatus::CapacityExceeded,
+-                      RunPersistenceStep::CheckpointSlot,
+-                      RunPersistenceTechnicalReason::CodecError);
+-    }
+-    workingSet_.record.bytes = targetBytes;
++        return SnapshotRecordPreparation::CapacityExceeded;
++    }
+@@ -2369,0 +2379,10 @@
++    return SnapshotRecordPreparation::Success;
++}
++
++RunPersistenceResult RunPersistenceCoordinator::writeSnapshotTransaction(
++    const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
++    bool periodic, const RunPersistenceBefore& before,
++    RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId,
++    RunPersistenceFallbackDirective fallbackDirective,
++    RunPersistenceCoordinatorState rollbackState, std::size_t target,
++    std::optional<CommandId> previousCommandIdHighWater) {
+@@ -2447 +2466 @@
+-    const auto physicalTarget =
++    auto physicalTarget =
+@@ -2452 +2471 @@
+-        oldSlot = physicalTarget.value;
++        oldSlot = std::move(physicalTarget.value);
+@@ -2493 +2512 @@
+-            target, targetBytes, oldSlot, kMaximumCheckpointRecordBytes);
++            target, workingSet_.record.bytes, oldSlot, kMaximumCheckpointRecordBytes);
+@@ -2514 +2533 @@
+-        committed.bytes = *committedBytes;
++        committed.bytes = std::move(*committedBytes);
+@@ -2525 +2543,0 @@
+-        prepared.bytes = *preparedBytes;
+@@ -2527 +2545 @@
+-            target, targetBytes, oldSlot, kMaximumCheckpointRecordBytes);
++            target, workingSet_.record.bytes, oldSlot, kMaximumCheckpointRecordBytes);
+@@ -2540 +2558 @@
+-            *committedBytes, std::optional<std::string>{prepared.bytes},
++            *committedBytes, preparedBytes,
+@@ -2548 +2566 @@
+-        committed.bytes = *committedBytes;
++        committed.bytes = std::move(*committedBytes);
+@@ -2551 +2568,0 @@
+-    slots_[target] = workingSet_.record;
+--- a/run_persistence_coordinator.hpp
++++ b/run_persistence_coordinator.hpp
+@@ -356,0 +357,8 @@
++    enum class SnapshotRecordPreparation { Success, InvalidSnapshot, CapacityExceeded };
++    [[nodiscard]] SnapshotRecordPreparation prepareSnapshotRecord(
++        const RunPersistenceSnapshot&, const RunCheckpointTime&);
++    [[nodiscard]] RunPersistenceResult writeSnapshotTransaction(
++        const RunPersistenceSnapshot&, const RunCheckpointTime&, bool,
++        const RunPersistenceBefore&, RunPersistenceMutationKind,
++        std::optional<CommandId>, RunPersistenceFallbackDirective,
++        RunPersistenceCoordinatorState, std::size_t, std::optional<CommandId>);

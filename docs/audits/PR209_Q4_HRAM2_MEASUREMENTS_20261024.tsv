@@ -1,0 +1,1019 @@
+run	t_s	kind	detail
+stack_B0	33.183	app_main	resources: point=hram_30s free_heap_bytes=38404 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38404 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38404 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	33.183	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	62.723	app_main	resources: point=hram_30s free_heap_bytes=38548 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38548 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38548 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	62.723	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	92.762	app_main	resources: point=hram_30s free_heap_bytes=38548 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38548 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38548 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	92.763	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	122.799	app_main	resources: point=hram_30s free_heap_bytes=38548 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38548 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38548 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	122.799	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	152.835	app_main	resources: point=hram_30s free_heap_bytes=38568 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38568 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38568 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	152.835	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	182.870	app_main	resources: point=hram_30s free_heap_bytes=38568 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38568 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38568 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	182.871	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	212.907	app_main	resources: point=hram_30s free_heap_bytes=38568 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38568 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38568 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	212.907	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	242.943	app_main	resources: point=hram_30s free_heap_bytes=38568 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38568 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38568 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	242.943	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	272.976	app_main	resources: point=hram_30s free_heap_bytes=38568 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38568 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38568 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	272.976	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B0	303.012	app_main	resources: point=hram_30s free_heap_bytes=38568 minimum_free_heap_bytes=30292 largest_free_block_8bit_bytes=36864 stack_hwm_bytes=11272 internal_8bit_free_bytes=38568 internal_8bit_minimum_free_bytes=30292 internal_8bit_largest_free_block_bytes=36864 dma_free_bytes=38568 dma_minimum_free_bytes=30292 dma_largest_free_block_bytes=36864
+stack_B0	303.012	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B1	33.183	app_main	resources: point=hram_30s free_heap_bytes=38424 minimum_free_heap_bytes=30304 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38424 internal_8bit_minimum_free_bytes=30304 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38424 dma_minimum_free_bytes=30304 dma_largest_free_block_bytes=29696
+stack_B1	33.183	app_main	hram_httpd_task: present=1 hwm_bytes=11372
+stack_B1	61.220	hram_http	phase=pre method=GET path=shell result=0 internal_free=37924 internal_min=30304 internal_largest=29696 httpd_stack_hwm=10716
+stack_B1	61.220	hram_http	phase=sent method=GET path=shell result=0 internal_free=31280 internal_min=29024 internal_largest=26624 httpd_stack_hwm=8620
+stack_B1	61.220	hram_http	phase=pre method=GET path=asset result=0 internal_free=37408 internal_min=29024 internal_largest=29696 httpd_stack_hwm=8620
+stack_B1	61.220	hram_http	phase=sent method=GET path=asset result=0 internal_free=26684 internal_min=23120 internal_largest=20480 httpd_stack_hwm=8620
+stack_B1	62.721	app_main	resources: point=hram_30s free_heap_bytes=38424 minimum_free_heap_bytes=23120 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38424 internal_8bit_minimum_free_bytes=23120 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38424 dma_minimum_free_bytes=23120 dma_largest_free_block_bytes=29696
+stack_B1	62.721	app_main	hram_httpd_task: present=1 hwm_bytes=8620
+stack_B1	92.761	app_main	resources: point=hram_30s free_heap_bytes=38360 minimum_free_heap_bytes=23120 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38360 internal_8bit_minimum_free_bytes=23120 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38360 dma_minimum_free_bytes=23120 dma_largest_free_block_bytes=29696
+stack_B1	92.761	app_main	hram_httpd_task: present=1 hwm_bytes=8620
+stack_B1	122.800	app_main	resources: point=hram_30s free_heap_bytes=38388 minimum_free_heap_bytes=23120 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38388 internal_8bit_minimum_free_bytes=23120 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38388 dma_minimum_free_bytes=23120 dma_largest_free_block_bytes=29696
+stack_B1	122.800	app_main	hram_httpd_task: present=1 hwm_bytes=8620
+stack_B1u	33.193	app_main	resources: point=hram_30s free_heap_bytes=38540 minimum_free_heap_bytes=30212 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38540 internal_8bit_minimum_free_bytes=30212 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38540 dma_minimum_free_bytes=30212 dma_largest_free_block_bytes=29696
+stack_B1u	33.193	app_main	hram_httpd_task: present=1 hwm_bytes=11368
+stack_B1u	61.231	hram_http	phase=pre method=GET path=status result=0 internal_free=37936 internal_min=30212 internal_largest=29696 httpd_stack_hwm=10712
+stack_B1u	61.231	hram_http	phase=sent method=GET path=status result=0 internal_free=34496 internal_min=30212 internal_largest=29696 httpd_stack_hwm=9032
+stack_B1u	62.733	app_main	resources: point=hram_30s free_heap_bytes=38440 minimum_free_heap_bytes=30212 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38440 internal_8bit_minimum_free_bytes=30212 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38440 dma_minimum_free_bytes=30212 dma_largest_free_block_bytes=29696
+stack_B1u	62.733	app_main	hram_httpd_task: present=1 hwm_bytes=9032
+stack_B1u	92.771	app_main	resources: point=hram_30s free_heap_bytes=38564 minimum_free_heap_bytes=30212 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38564 internal_8bit_minimum_free_bytes=30212 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38564 dma_minimum_free_bytes=30212 dma_largest_free_block_bytes=29696
+stack_B1u	92.771	app_main	hram_httpd_task: present=1 hwm_bytes=9032
+stack_B1u	122.812	app_main	resources: point=hram_30s free_heap_bytes=38564 minimum_free_heap_bytes=30212 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38564 internal_8bit_minimum_free_bytes=30212 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38564 dma_minimum_free_bytes=30212 dma_largest_free_block_bytes=29696
+stack_B1u	122.812	app_main	hram_httpd_task: present=1 hwm_bytes=9032
+stack_B2	32.682	app_main	resources: point=hram_30s free_heap_bytes=38460 minimum_free_heap_bytes=29500 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38460 internal_8bit_minimum_free_bytes=29500 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38460 dma_minimum_free_bytes=29500 dma_largest_free_block_bytes=29696
+stack_B2	32.682	app_main	hram_httpd_task: present=1 hwm_bytes=11372
+stack_B2	61.208	hram_http	phase=pre method=POST path=login result=0 internal_free=37652 internal_min=29500 internal_largest=29696 httpd_stack_hwm=10716
+stack_B2	62.709	app_main	resources: point=hram_30s free_heap_bytes=37360 minimum_free_heap_bytes=29500 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=37360 internal_8bit_minimum_free_bytes=29500 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=37484 dma_minimum_free_bytes=29500 dma_largest_free_block_bytes=29696
+stack_B2	62.709	app_main	hram_httpd_task: present=1 hwm_bytes=7964
+stack_B2	63.710	hram_http	phase=sent method=POST path=login result=0 internal_free=34364 internal_min=29500 internal_largest=29696 httpd_stack_hwm=7564
+stack_B2	66.213	hram_http	phase=pre method=GET path=status result=0 internal_free=37412 internal_min=29500 internal_largest=29696 httpd_stack_hwm=7564
+stack_B2	66.213	hram_http	phase=sent method=GET path=status result=0 internal_free=33820 internal_min=29500 internal_largest=29696 httpd_stack_hwm=6348
+stack_B2	92.738	app_main	resources: point=hram_30s free_heap_bytes=38400 minimum_free_heap_bytes=29500 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38400 internal_8bit_minimum_free_bytes=29500 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38400 dma_minimum_free_bytes=29500 dma_largest_free_block_bytes=29696
+stack_B2	92.738	app_main	hram_httpd_task: present=1 hwm_bytes=6348
+stack_B2	122.766	app_main	resources: point=hram_30s free_heap_bytes=38400 minimum_free_heap_bytes=29500 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38400 internal_8bit_minimum_free_bytes=29500 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38400 dma_minimum_free_bytes=29500 dma_largest_free_block_bytes=29696
+stack_B2	122.766	app_main	hram_httpd_task: present=1 hwm_bytes=6348
+stack_B3	33.182	app_main	resources: point=hram_30s free_heap_bytes=38732 minimum_free_heap_bytes=30160 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38732 internal_8bit_minimum_free_bytes=30160 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38732 dma_minimum_free_bytes=30160 dma_largest_free_block_bytes=31744
+stack_B3	33.182	app_main	hram_httpd_task: present=1 hwm_bytes=11372
+stack_B3	61.217	hram_http	phase=pre method=POST path=login result=0 internal_free=37728 internal_min=30160 internal_largest=31744 httpd_stack_hwm=10716
+stack_B3	62.719	app_main	resources: point=hram_30s free_heap_bytes=37688 minimum_free_heap_bytes=30160 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=37688 internal_8bit_minimum_free_bytes=30160 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=37556 dma_minimum_free_bytes=30160 dma_largest_free_block_bytes=31744
+stack_B3	62.719	app_main	hram_httpd_task: present=1 hwm_bytes=7964
+stack_B3	63.721	hram_http	phase=sent method=POST path=login result=0 internal_free=34428 internal_min=30160 internal_largest=31744 httpd_stack_hwm=7564
+stack_B3	92.760	app_main	resources: point=hram_30s free_heap_bytes=38436 minimum_free_heap_bytes=30160 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38436 internal_8bit_minimum_free_bytes=30160 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38436 dma_minimum_free_bytes=30160 dma_largest_free_block_bytes=31744
+stack_B3	92.760	app_main	hram_httpd_task: present=1 hwm_bytes=7564
+stack_B3	122.801	app_main	resources: point=hram_30s free_heap_bytes=38464 minimum_free_heap_bytes=30160 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38464 internal_8bit_minimum_free_bytes=30160 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38464 dma_minimum_free_bytes=30160 dma_largest_free_block_bytes=31744
+stack_B3	122.801	app_main	hram_httpd_task: present=1 hwm_bytes=7564
+stack_B4	32.682	app_main	resources: point=hram_30s free_heap_bytes=38752 minimum_free_heap_bytes=30584 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38752 internal_8bit_minimum_free_bytes=30584 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38752 dma_minimum_free_bytes=30584 dma_largest_free_block_bytes=29696
+stack_B4	32.682	app_main	hram_httpd_task: present=1 hwm_bytes=11372
+stack_B4	61.210	hram_http	phase=pre method=POST path=login result=0 internal_free=37744 internal_min=30584 internal_largest=29696 httpd_stack_hwm=10716
+stack_B4	62.711	app_main	resources: point=hram_30s free_heap_bytes=37560 minimum_free_heap_bytes=30584 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=37436 internal_8bit_minimum_free_bytes=30584 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=37436 dma_minimum_free_bytes=30584 dma_largest_free_block_bytes=29696
+stack_B4	62.711	app_main	hram_httpd_task: present=1 hwm_bytes=7948
+stack_B4	63.712	hram_http	phase=sent method=POST path=login result=0 internal_free=34452 internal_min=30584 internal_largest=29696 httpd_stack_hwm=7564
+stack_B4	64.713	hram_http	phase=pre method=GET path=shell result=0 internal_free=37644 internal_min=30584 internal_largest=29696 httpd_stack_hwm=7564
+stack_B4	64.713	hram_http	phase=sent method=GET path=shell result=0 internal_free=31200 internal_min=28896 internal_largest=26624 httpd_stack_hwm=7564
+stack_B4	65.214	hram_http	phase=pre method=GET path=status result=0 internal_free=37848 internal_min=28896 internal_largest=29696 httpd_stack_hwm=7564
+stack_B4	65.214	hram_http	phase=sent method=GET path=status result=0 internal_free=34436 internal_min=28896 internal_largest=29696 httpd_stack_hwm=6348
+stack_B4	65.214	hram_http	phase=pre method=POST path=run result=0 internal_free=37124 internal_min=28896 internal_largest=29696 httpd_stack_hwm=6348
+stack_B4	65.214	hram_http	phase=sent method=POST path=run result=0 internal_free=34072 internal_min=28896 internal_largest=29696 httpd_stack_hwm=6348
+stack_B4	92.737	app_main	resources: point=hram_30s free_heap_bytes=38460 minimum_free_heap_bytes=28896 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38460 internal_8bit_minimum_free_bytes=28896 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38460 dma_minimum_free_bytes=28896 dma_largest_free_block_bytes=29696
+stack_B4	92.737	app_main	hram_httpd_task: present=1 hwm_bytes=6348
+stack_B4	122.770	app_main	resources: point=hram_30s free_heap_bytes=38460 minimum_free_heap_bytes=28896 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38460 internal_8bit_minimum_free_bytes=28896 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38460 dma_minimum_free_bytes=28896 dma_largest_free_block_bytes=29696
+stack_B4	122.770	app_main	hram_httpd_task: present=1 hwm_bytes=6348
+stack_B5	33.188	app_main	resources: point=hram_30s free_heap_bytes=38548 minimum_free_heap_bytes=30224 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38548 internal_8bit_minimum_free_bytes=30224 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38548 dma_minimum_free_bytes=30224 dma_largest_free_block_bytes=31744
+stack_B5	33.188	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B5	60.716	hram_http	phase=pre method=POST path=login result=0 internal_free=37736 internal_min=30224 internal_largest=31744 httpd_stack_hwm=10704
+stack_B5	62.718	app_main	resources: point=hram_30s free_heap_bytes=37420 minimum_free_heap_bytes=30224 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=37420 internal_8bit_minimum_free_bytes=30224 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=37544 dma_minimum_free_bytes=30224 dma_largest_free_block_bytes=31744
+stack_B5	63.218	app_main	hram_httpd_task: present=1 hwm_bytes=7952
+stack_B5	63.719	hram_http	phase=sent method=POST path=login result=0 internal_free=34440 internal_min=30224 internal_largest=31744 httpd_stack_hwm=7552
+stack_B5	63.719	hram_http	phase=pre method=GET path=shell result=0 internal_free=37508 internal_min=30224 internal_largest=31744 httpd_stack_hwm=7552
+stack_B5	63.719	hram_http	phase=sent method=GET path=shell result=0 internal_free=30872 internal_min=28564 internal_largest=26624 httpd_stack_hwm=7552
+stack_B5	63.719	hram_http	phase=pre method=GET path=status result=0 internal_free=37180 internal_min=28564 internal_largest=31744 httpd_stack_hwm=7552
+stack_B5	63.719	hram_http	phase=sent method=GET path=status result=0 internal_free=33572 internal_min=28564 internal_largest=29696 httpd_stack_hwm=6336
+stack_B5	63.719	hram_http	phase=pre method=GET path=programs result=0 internal_free=36852 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6336
+stack_B5	63.719	hram_http	phase=sent method=GET path=programs result=0 internal_free=33448 internal_min=28564 internal_largest=29696 httpd_stack_hwm=6336
+stack_B5	63.719	hram_http	phase=pre method=POST path=run result=0 internal_free=36148 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6336
+stack_B5	63.719	hram_http	phase=sent method=POST path=run result=0 internal_free=33292 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=pre method=POST path=run result=0 internal_free=35952 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=sent method=POST path=run result=0 internal_free=34296 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=pre method=POST path=run result=0 internal_free=37084 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=sent method=POST path=run result=0 internal_free=34292 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=pre method=POST path=run result=0 internal_free=35752 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=sent method=POST path=run result=0 internal_free=34288 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=pre method=POST path=run result=0 internal_free=37140 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.220	hram_http	phase=sent method=POST path=run result=0 internal_free=34280 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=pre method=POST path=run result=0 internal_free=37328 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=sent method=POST path=run result=0 internal_free=34268 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=pre method=POST path=run result=0 internal_free=36740 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=sent method=POST path=run result=0 internal_free=34276 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=pre method=POST path=run result=0 internal_free=37148 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=sent method=POST path=run result=0 internal_free=34300 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=pre method=POST path=run result=0 internal_free=37148 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=sent method=POST path=run result=0 internal_free=34292 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=pre method=POST path=run result=0 internal_free=37160 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	65.721	hram_http	phase=sent method=POST path=run result=0 internal_free=34092 internal_min=28564 internal_largest=31744 httpd_stack_hwm=6272
+stack_B5	92.745	app_main	resources: point=hram_30s free_heap_bytes=38488 minimum_free_heap_bytes=28564 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38488 internal_8bit_minimum_free_bytes=28564 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38488 dma_minimum_free_bytes=28564 dma_largest_free_block_bytes=31744
+stack_B5	92.746	app_main	hram_httpd_task: present=1 hwm_bytes=6272
+stack_B5	122.774	app_main	resources: point=hram_30s free_heap_bytes=38488 minimum_free_heap_bytes=28564 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38488 internal_8bit_minimum_free_bytes=28564 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38488 dma_minimum_free_bytes=28564 dma_largest_free_block_bytes=31744
+stack_B5	123.274	app_main	hram_httpd_task: present=1 hwm_bytes=6272
+stack_B5b	33.194	app_main	resources: point=hram_30s free_heap_bytes=38748 minimum_free_heap_bytes=30184 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38748 internal_8bit_minimum_free_bytes=30184 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38748 dma_minimum_free_bytes=30184 dma_largest_free_block_bytes=31744
+stack_B5b	33.194	app_main	hram_httpd_task: present=1 hwm_bytes=11372
+stack_B5b	61.232	hram_http	phase=pre method=POST path=login result=0 internal_free=37740 internal_min=30184 internal_largest=31744 httpd_stack_hwm=10716
+stack_B5b	62.733	app_main	resources: point=hram_30s free_heap_bytes=37568 minimum_free_heap_bytes=30184 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=37440 internal_8bit_minimum_free_bytes=30184 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=37568 dma_minimum_free_bytes=30184 dma_largest_free_block_bytes=31744
+stack_B5b	62.733	app_main	hram_httpd_task: present=1 hwm_bytes=7964
+stack_B5b	63.734	hram_http	phase=sent method=POST path=login result=0 internal_free=34432 internal_min=30184 internal_largest=31744 httpd_stack_hwm=7564
+stack_B5b	63.734	hram_http	phase=pre method=GET path=shell result=0 internal_free=37840 internal_min=30184 internal_largest=31744 httpd_stack_hwm=7564
+stack_B5b	63.734	hram_http	phase=sent method=GET path=shell result=0 internal_free=31204 internal_min=28892 internal_largest=26624 httpd_stack_hwm=7564
+stack_B5b	63.734	hram_http	phase=pre method=GET path=status result=0 internal_free=37848 internal_min=28892 internal_largest=31744 httpd_stack_hwm=7564
+stack_B5b	63.734	hram_http	phase=sent method=GET path=status result=0 internal_free=34448 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6348
+stack_B5b	63.734	hram_http	phase=pre method=GET path=programs result=0 internal_free=37848 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6348
+stack_B5b	63.734	hram_http	phase=sent method=GET path=programs result=0 internal_free=34440 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6348
+stack_B5b	63.734	hram_http	phase=pre method=POST path=run result=0 internal_free=36740 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6348
+stack_B5b	63.734	hram_http	phase=sent method=POST path=run result=0 internal_free=34272 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	63.734	hram_http	phase=pre method=POST path=run result=0 internal_free=37048 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	63.734	hram_http	phase=sent method=POST path=run result=0 internal_free=34304 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=pre method=POST path=run result=0 internal_free=37096 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=sent method=POST path=run result=0 internal_free=34120 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=pre method=POST path=run result=0 internal_free=37144 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=sent method=POST path=run result=0 internal_free=34284 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=pre method=POST path=run result=0 internal_free=37160 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=sent method=POST path=run result=0 internal_free=34288 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=pre method=POST path=run result=0 internal_free=37132 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=sent method=POST path=run result=0 internal_free=34280 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=pre method=POST path=run result=0 internal_free=36612 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=sent method=POST path=run result=0 internal_free=33572 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=pre method=POST path=run result=0 internal_free=37160 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=sent method=POST path=run result=0 internal_free=34316 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.234	hram_http	phase=pre method=POST path=run result=0 internal_free=37148 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.735	hram_http	phase=sent method=POST path=run result=0 internal_free=34296 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.735	hram_http	phase=pre method=POST path=run result=0 internal_free=37168 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	64.735	hram_http	phase=sent method=POST path=run result=0 internal_free=34296 internal_min=28892 internal_largest=31744 httpd_stack_hwm=6284
+stack_B5b	92.773	app_main	resources: point=hram_30s free_heap_bytes=38464 minimum_free_heap_bytes=28892 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38464 internal_8bit_minimum_free_bytes=28892 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38464 dma_minimum_free_bytes=28892 dma_largest_free_block_bytes=31744
+stack_B5b	92.773	app_main	hram_httpd_task: present=1 hwm_bytes=6284
+stack_B5b	122.812	app_main	resources: point=hram_30s free_heap_bytes=38492 minimum_free_heap_bytes=28892 largest_free_block_8bit_bytes=31744 stack_hwm_bytes=11272 internal_8bit_free_bytes=38492 internal_8bit_minimum_free_bytes=28892 internal_8bit_largest_free_block_bytes=31744 dma_free_bytes=38492 dma_minimum_free_bytes=28892 dma_largest_free_block_bytes=31744
+stack_B5b	122.812	app_main	hram_httpd_task: present=1 hwm_bytes=6284
+stack_B6	33.183	app_main	resources: point=hram_30s free_heap_bytes=38728 minimum_free_heap_bytes=30284 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=38728 internal_8bit_minimum_free_bytes=30284 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=38728 dma_minimum_free_bytes=30284 dma_largest_free_block_bytes=29696
+stack_B6	33.183	app_main	hram_httpd_task: present=1 hwm_bytes=11360
+stack_B6	61.222	hram_http	phase=pre method=POST path=login result=0 internal_free=37664 internal_min=30284 internal_largest=29696 httpd_stack_hwm=10704
+stack_B6	62.723	app_main	resources: point=hram_30s free_heap_bytes=37368 minimum_free_heap_bytes=30284 largest_free_block_8bit_bytes=29696 stack_hwm_bytes=11272 internal_8bit_free_bytes=37368 internal_8bit_minimum_free_bytes=30284 internal_8bit_largest_free_block_bytes=29696 dma_free_bytes=37492 dma_minimum_free_bytes=30284 dma_largest_free_block_bytes=29696
+stack_B6	62.724	app_main	hram_httpd_task: present=1 hwm_bytes=7952
+stack_B6	63.724	hram_http	phase=sent method=POST path=login result=0 internal_free=34364 internal_min=30284 internal_largest=29696 httpd_stack_hwm=7552
+stack_B6	63.724	hram_http	phase=pre method=GET path=shell result=0 internal_free=37432 internal_min=30284 internal_largest=29696 httpd_stack_hwm=7552
+stack_B6	63.724	hram_http	phase=sent method=GET path=shell result=0 internal_free=30792 internal_min=28480 internal_largest=26624 httpd_stack_hwm=7552
+stack_B6	63.724	hram_http	phase=pre method=GET path=status result=0 internal_free=37448 internal_min=28480 internal_largest=29696 httpd_stack_hwm=7552
+stack_B6	63.724	hram_http	phase=sent method=GET path=status result=0 internal_free=34048 internal_min=28480 internal_largest=29696 httpd_stack_hwm=6336
+stack_B6	63.724	hram_http	phase=pre method=GET path=settings result=0 internal_free=37448 internal_min=28480 internal_largest=29696 httpd_stack_hwm=6336
+stack_B6	63.724	hram_http	phase=sent method=GET path=settings result=0 internal_free=34044 internal_min=28480 internal_largest=29696 httpd_stack_hwm=6272
+stack_B6	63.724	hram_http	phase=pre method=POST path=run result=0 internal_free=36768 internal_min=28480 internal_largest=29696 httpd_stack_hwm=6272
+stack_B6	64.224	hram_http	phase=sent method=POST path=run result=0 internal_free=32904 internal_min=27044 internal_largest=28672 httpd_stack_hwm=5808
+stack_B6	64.725	hram_http	phase=pre method=GET path=settings result=0 internal_free=37392 internal_min=24672 internal_largest=29696 httpd_stack_hwm=5808
+stack_B6	64.725	hram_http	phase=sent method=GET path=settings result=0 internal_free=33968 internal_min=24672 internal_largest=28672 httpd_stack_hwm=5808
+stack_B6	64.725	hram_http	phase=pre method=POST path=run result=0 internal_free=36600 internal_min=24672 internal_largest=29696 httpd_stack_hwm=5808
+stack_B6	64.725	hram_http	phase=sent method=POST path=run result=0 internal_free=33032 internal_min=24672 internal_largest=28672 httpd_stack_hwm=5616
+stack_B6	65.225	hram_http	phase=pre method=GET path=settings result=0 internal_free=37432 internal_min=24432 internal_largest=28672 httpd_stack_hwm=5616
+stack_B6	65.225	hram_http	phase=sent method=GET path=settings result=0 internal_free=34032 internal_min=24432 internal_largest=28672 httpd_stack_hwm=5616
+stack_B6	92.756	app_main	resources: point=hram_30s free_heap_bytes=38380 minimum_free_heap_bytes=24432 largest_free_block_8bit_bytes=28672 stack_hwm_bytes=11272 internal_8bit_free_bytes=38380 internal_8bit_minimum_free_bytes=24432 internal_8bit_largest_free_block_bytes=28672 dma_free_bytes=38380 dma_minimum_free_bytes=24432 dma_largest_free_block_bytes=28672
+stack_B6	92.756	app_main	hram_httpd_task: present=1 hwm_bytes=5616
+stack_B6	122.788	app_main	resources: point=hram_30s free_heap_bytes=38380 minimum_free_heap_bytes=24432 largest_free_block_8bit_bytes=28672 stack_hwm_bytes=11272 internal_8bit_free_bytes=38380 internal_8bit_minimum_free_bytes=24432 internal_8bit_largest_free_block_bytes=28672 dma_free_bytes=38380 dma_minimum_free_bytes=24432 dma_largest_free_block_bytes=28672
+stack_B6	122.788	app_main	hram_httpd_task: present=1 hwm_bytes=5616
+heap_run	33.179	app_main	resources: point=hram_30s free_heap_bytes=42692 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42692 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42692 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	33.179	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	62.717	app_main	resources: point=hram_30s free_heap_bytes=42820 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42820 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42820 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	62.717	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	92.754	app_main	resources: point=hram_30s free_heap_bytes=42600 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42600 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42600 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	92.754	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	122.794	app_main	resources: point=hram_30s free_heap_bytes=42600 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42600 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42600 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	122.794	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	152.833	app_main	resources: point=hram_30s free_heap_bytes=42620 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42620 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42620 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	152.833	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	182.873	app_main	resources: point=hram_30s free_heap_bytes=42620 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42620 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42620 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	182.873	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	212.912	app_main	resources: point=hram_30s free_heap_bytes=42620 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42620 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42620 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	212.912	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	242.950	app_main	resources: point=hram_30s free_heap_bytes=42620 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42620 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42620 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	242.950	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	272.989	app_main	resources: point=hram_30s free_heap_bytes=42620 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42620 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42620 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	272.989	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	303.028	app_main	resources: point=hram_30s free_heap_bytes=42620 minimum_free_heap_bytes=34400 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42620 internal_8bit_minimum_free_bytes=34400 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42620 dma_minimum_free_bytes=34400 dma_largest_free_block_bytes=32768
+heap_run	303.028	app_main	hram_httpd_task: present=1 hwm_bytes=7276
+heap_run	311.039	hram_http	phase=pre method=POST path=login result=0 internal_free=41808 internal_min=34400 internal_largest=32768 httpd_stack_hwm=6620
+heap_run	313.542	hram_http	phase=sent method=POST path=login result=0 internal_free=38512 internal_min=34400 internal_largest=32768 httpd_stack_hwm=3468
+heap_run	313.542	hram_http	phase=pre method=GET path=shell result=0 internal_free=41896 internal_min=34400 internal_largest=32768 httpd_stack_hwm=3468
+heap_run	313.542	hram_http	phase=sent method=GET path=shell result=0 internal_free=35268 internal_min=32964 internal_largest=30720 httpd_stack_hwm=3468
+heap_run	313.542	hram_http	phase=pre method=GET path=status result=0 internal_free=40212 internal_min=32964 internal_largest=32768 httpd_stack_hwm=3468
+heap_run	313.542	hram_http	phase=sent method=GET path=status result=0 internal_free=36816 internal_min=32964 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	313.542	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37296 internal_min=32964 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	313.542	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33884 internal_min=32964 internal_largest=30720 httpd_stack_hwm=2252
+heap_run	313.542	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34344 internal_min=32964 internal_largest=30720 httpd_stack_hwm=2252
+heap_run	314.042	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33588 internal_min=31316 internal_largest=30720 httpd_stack_hwm=2252
+heap_run	319.049	hram_http	phase=pre method=GET path=status result=0 internal_free=38908 internal_min=31316 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	319.049	hram_http	phase=sent method=GET path=status result=0 internal_free=35512 internal_min=31316 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	319.049	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35980 internal_min=31316 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	319.049	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33836 internal_min=31316 internal_largest=30720 httpd_stack_hwm=2252
+heap_run	319.049	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35600 internal_min=31316 internal_largest=30720 httpd_stack_hwm=2252
+heap_run	319.049	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32192 internal_min=31316 internal_largest=29696 httpd_stack_hwm=2252
+heap_run	324.056	hram_http	phase=pre method=GET path=status result=0 internal_free=40520 internal_min=29312 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	324.056	hram_http	phase=sent method=GET path=status result=0 internal_free=35492 internal_min=29312 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	324.056	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35976 internal_min=29312 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	324.056	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32568 internal_min=29312 internal_largest=29696 httpd_stack_hwm=2252
+heap_run	324.056	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34316 internal_min=29312 internal_largest=29696 httpd_stack_hwm=2252
+heap_run	324.056	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30900 internal_min=29312 internal_largest=27648 httpd_stack_hwm=2252
+heap_run	328.562	hram_http	phase=pre method=GET path=status result=0 internal_free=40204 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	328.562	hram_http	phase=sent method=GET path=status result=0 internal_free=36808 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	328.562	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37284 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	328.562	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35140 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2252
+heap_run	328.562	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35608 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2252
+heap_run	329.063	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37356 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	333.067	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=27876 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=27876 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=27876 dma_largest_free_block_bytes=32768
+heap_run	333.067	app_main	hram_httpd_task: present=1 hwm_bytes=2252
+heap_run	333.568	hram_http	phase=pre method=GET path=status result=0 internal_free=40216 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	333.568	hram_http	phase=sent method=GET path=status result=0 internal_free=36820 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	333.568	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37296 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2252
+heap_run	333.568	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35156 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	334.068	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37408 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	334.068	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34012 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	338.574	hram_http	phase=pre method=GET path=status result=0 internal_free=40528 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	338.574	hram_http	phase=sent method=GET path=status result=0 internal_free=35516 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	338.574	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35988 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	338.574	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32588 internal_min=27876 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	338.574	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34344 internal_min=27876 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	339.075	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30932 internal_min=27876 internal_largest=27648 httpd_stack_hwm=2172
+heap_run	343.580	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40856 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	343.580	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35648 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	343.580	hram_http	phase=pre method=GET path=status result=0 internal_free=37600 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	343.580	hram_http	phase=sent method=GET path=status result=0 internal_free=33680 internal_min=27876 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	344.081	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35720 internal_min=27876 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	344.081	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32312 internal_min=27876 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	349.086	hram_http	phase=pre method=GET path=status result=0 internal_free=38920 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	349.086	hram_http	phase=sent method=GET path=status result=0 internal_free=35504 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	349.086	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=36272 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	349.086	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33844 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	349.086	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35604 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	349.086	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32204 internal_min=27876 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	353.592	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38928 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	353.592	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35532 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	353.592	hram_http	phase=pre method=GET path=status result=0 internal_free=38668 internal_min=27876 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	354.093	hram_http	phase=sent method=GET path=status result=0 internal_free=35272 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	354.093	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35740 internal_min=27876 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	354.093	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32344 internal_min=27876 internal_largest=27648 httpd_stack_hwm=2172
+heap_run	359.098	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40536 internal_min=27828 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	359.098	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37136 internal_min=27828 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	359.098	hram_http	phase=pre method=GET path=status result=0 internal_free=37600 internal_min=27828 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	359.098	hram_http	phase=sent method=GET path=status result=0 internal_free=37072 internal_min=27828 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	359.098	hram_http	phase=pre method=GET path=alerts result=0 internal_free=30524 internal_min=27828 internal_largest=27648 httpd_stack_hwm=2172
+heap_run	359.098	hram_http	phase=sent method=GET path=alerts result=0 internal_free=27312 internal_min=27124 internal_largest=24576 httpd_stack_hwm=2172
+heap_run	363.103	app_main	resources: point=hram_30s free_heap_bytes=42412 minimum_free_heap_bytes=25080 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42412 internal_8bit_minimum_free_bytes=25080 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42412 dma_minimum_free_bytes=25080 dma_largest_free_block_bytes=32768
+heap_run	363.103	app_main	hram_httpd_task: present=1 hwm_bytes=2172
+heap_run	363.604	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40224 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	363.604	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36824 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	364.104	hram_http	phase=pre method=GET path=status result=0 internal_free=38668 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	364.104	hram_http	phase=sent method=GET path=status result=0 internal_free=37284 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	364.104	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37604 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	364.105	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35188 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	368.610	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40844 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	368.610	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37436 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	369.110	hram_http	phase=pre method=GET path=status result=0 internal_free=37352 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	369.110	hram_http	phase=sent method=GET path=status result=0 internal_free=33956 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	369.110	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35724 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	369.110	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35408 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	373.616	hram_http	phase=pre method=GET path=status result=0 internal_free=40848 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	373.616	hram_http	phase=sent method=GET path=status result=0 internal_free=36788 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	373.616	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37280 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	373.616	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33884 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	373.616	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35608 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	373.616	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32196 internal_min=25080 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	378.622	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40212 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	378.622	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36816 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	378.622	hram_http	phase=pre method=GET path=status result=0 internal_free=37268 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	378.622	hram_http	phase=sent method=GET path=status result=0 internal_free=35256 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	378.622	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37544 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	378.622	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34136 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	383.628	hram_http	phase=pre method=GET path=status result=0 internal_free=40508 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	383.628	hram_http	phase=sent method=GET path=status result=0 internal_free=35500 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	383.628	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35984 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	383.628	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33844 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	383.628	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35592 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	383.628	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32180 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	389.135	hram_http	phase=pre method=GET path=status result=0 internal_free=38896 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	389.135	hram_http	phase=sent method=GET path=status result=0 internal_free=35500 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	389.135	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35976 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	389.135	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35768 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	389.135	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37372 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	389.135	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33960 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	393.141	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=25080 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=25080 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=25080 dma_largest_free_block_bytes=32768
+heap_run	393.141	app_main	hram_httpd_task: present=1 hwm_bytes=2172
+heap_run	394.142	hram_http	phase=pre method=GET path=status result=0 internal_free=40852 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	394.142	hram_http	phase=sent method=GET path=status result=0 internal_free=36400 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	394.142	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=36880 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	394.142	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37272 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	394.142	hram_http	phase=pre method=GET path=alerts result=0 internal_free=38976 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	394.142	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37284 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	398.648	hram_http	phase=pre method=GET path=alerts result=0 internal_free=40208 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	398.648	hram_http	phase=sent method=GET path=alerts result=0 internal_free=36796 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	398.648	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37284 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	398.648	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33888 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	399.149	hram_http	phase=pre method=GET path=status result=0 internal_free=34352 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2172
+heap_run	399.149	hram_http	phase=sent method=GET path=status result=0 internal_free=32560 internal_min=25080 internal_largest=29696 httpd_stack_hwm=2172
+heap_run	403.655	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40856 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2172
+heap_run	403.655	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35512 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	403.655	hram_http	phase=pre method=GET path=status result=0 internal_free=37364 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	403.655	hram_http	phase=sent method=GET path=status result=0 internal_free=35784 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	404.155	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37392 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	404.155	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33972 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	408.661	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38928 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	408.661	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35532 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	408.661	hram_http	phase=pre method=GET path=status result=0 internal_free=37104 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	408.661	hram_http	phase=sent method=GET path=status result=0 internal_free=35348 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	408.661	hram_http	phase=pre method=GET path=alerts result=0 internal_free=36960 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	408.661	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33544 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	413.667	hram_http	phase=pre method=GET path=status result=0 internal_free=40528 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	413.667	hram_http	phase=sent method=GET path=status result=0 internal_free=35512 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	413.667	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35980 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	414.168	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33840 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	414.168	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37548 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	414.168	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35536 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	418.673	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40216 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	418.673	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36820 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	418.673	hram_http	phase=pre method=GET path=status result=0 internal_free=37272 internal_min=25080 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	419.174	hram_http	phase=sent method=GET path=status result=0 internal_free=35256 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	419.174	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35724 internal_min=25080 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	419.174	hram_http	phase=sent method=GET path=alerts result=0 internal_free=25460 internal_min=25080 internal_largest=22528 httpd_stack_hwm=2124
+heap_run	422.678	app_main	resources: point=hram_30s free_heap_bytes=42412 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42412 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42412 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	423.179	app_main	hram_httpd_task: present=1 hwm_bytes=2124
+heap_run	423.679	hram_http	phase=pre method=GET path=status result=0 internal_free=38880 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	423.679	hram_http	phase=sent method=GET path=status result=0 internal_free=35484 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	423.679	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35968 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	423.679	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33828 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	423.679	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35588 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	423.679	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35520 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	428.686	hram_http	phase=pre method=GET path=status result=0 internal_free=41040 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	428.686	hram_http	phase=sent method=GET path=status result=0 internal_free=37644 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	428.686	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38076 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	428.686	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35120 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2124
+heap_run	428.686	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35612 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2124
+heap_run	428.686	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35544 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2124
+heap_run	433.692	hram_http	phase=pre method=GET path=status result=0 internal_free=40844 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	433.692	hram_http	phase=sent method=GET path=status result=0 internal_free=36608 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	433.692	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38552 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	433.692	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37092 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	433.692	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37588 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	433.692	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35576 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	438.698	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40228 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	438.698	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36832 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	438.698	hram_http	phase=pre method=GET path=status result=0 internal_free=37292 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	438.698	hram_http	phase=sent method=GET path=status result=0 internal_free=33888 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	438.698	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34356 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	438.698	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30944 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2124
+heap_run	443.703	hram_http	phase=pre method=GET path=status result=0 internal_free=40204 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	443.703	hram_http	phase=sent method=GET path=status result=0 internal_free=36808 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	443.703	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	443.703	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35136 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	443.703	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35604 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	443.703	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32204 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	448.709	hram_http	phase=pre method=GET path=status result=0 internal_free=40524 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	448.709	hram_http	phase=sent method=GET path=status result=0 internal_free=35500 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	448.709	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37240 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	448.709	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35788 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	448.709	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37392 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	449.210	hram_http	phase=sent method=GET path=alerts result=0 internal_free=36104 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	452.714	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	452.715	app_main	hram_httpd_task: present=1 hwm_bytes=2124
+heap_run	453.715	hram_http	phase=pre method=GET path=status result=0 internal_free=40196 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	454.216	hram_http	phase=sent method=GET path=status result=0 internal_free=36800 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	454.216	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	454.216	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35132 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	454.216	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37392 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	454.216	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37592 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	458.721	hram_http	phase=pre method=GET path=status result=0 internal_free=38904 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	458.721	hram_http	phase=sent method=GET path=status result=0 internal_free=35508 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	458.721	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35992 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	458.721	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32588 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	458.721	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34336 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	459.222	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30916 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2124
+heap_run	463.727	hram_http	phase=pre method=GET path=status result=0 internal_free=38920 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	463.727	hram_http	phase=sent method=GET path=status result=0 internal_free=35524 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	463.727	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37296 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	463.727	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35156 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	463.727	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35616 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	463.727	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33576 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	468.734	hram_http	phase=pre method=GET path=status result=0 internal_free=38924 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	468.734	hram_http	phase=sent method=GET path=status result=0 internal_free=35528 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	468.734	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=36004 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	468.734	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32600 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	468.734	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35588 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	468.734	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32216 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	473.741	hram_http	phase=pre method=GET path=alerts result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	473.741	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37444 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	473.741	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37608 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	473.741	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	473.741	hram_http	phase=pre method=GET path=status result=0 internal_free=35960 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	473.741	hram_http	phase=sent method=GET path=status result=0 internal_free=32552 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	478.748	hram_http	phase=pre method=GET path=status result=0 internal_free=38916 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	478.748	hram_http	phase=sent method=GET path=status result=0 internal_free=35520 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	478.748	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35996 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	478.748	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33856 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	478.748	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35612 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	478.748	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32200 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	482.753	app_main	resources: point=hram_30s free_heap_bytes=42412 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42412 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42412 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	482.753	app_main	hram_httpd_task: present=1 hwm_bytes=2124
+heap_run	483.754	hram_http	phase=pre method=GET path=status result=0 internal_free=38916 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	483.754	hram_http	phase=sent method=GET path=status result=0 internal_free=35520 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	483.754	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37292 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	483.754	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35132 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	483.754	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35612 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	483.754	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32212 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2124
+heap_run	488.761	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	488.761	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	488.761	hram_http	phase=pre method=GET path=alerts result=0 internal_free=38660 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	488.761	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37080 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	488.761	hram_http	phase=pre method=GET path=status result=0 internal_free=37396 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	488.761	hram_http	phase=sent method=GET path=status result=0 internal_free=34000 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	493.767	hram_http	phase=pre method=GET path=status result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	493.767	hram_http	phase=sent method=GET path=status result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	493.767	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38548 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	493.767	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37096 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	493.767	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	493.767	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34200 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	498.773	hram_http	phase=pre method=GET path=status result=0 internal_free=40844 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	498.773	hram_http	phase=sent method=GET path=status result=0 internal_free=35824 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	498.773	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35976 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	498.773	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33832 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	498.773	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35592 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	498.773	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32184 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	503.779	hram_http	phase=pre method=GET path=status result=0 internal_free=38912 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	503.779	hram_http	phase=sent method=GET path=status result=0 internal_free=35512 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	503.779	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=36968 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	503.779	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35988 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	503.779	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37604 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	503.779	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35592 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	508.786	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	508.786	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36812 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	508.786	hram_http	phase=pre method=GET path=status result=0 internal_free=37272 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	508.786	hram_http	phase=sent method=GET path=status result=0 internal_free=35256 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	508.786	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35724 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	508.786	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35400 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	512.791	app_main	resources: point=hram_30s free_heap_bytes=42412 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42412 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42412 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	512.791	app_main	hram_httpd_task: present=1 hwm_bytes=2124
+heap_run	513.792	hram_http	phase=pre method=GET path=status result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	513.792	hram_http	phase=sent method=GET path=status result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	513.792	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37292 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	513.792	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37096 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	513.792	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37404 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	513.792	hram_http	phase=sent method=GET path=alerts result=0 internal_free=36112 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	518.798	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38932 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	518.798	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35536 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	518.798	hram_http	phase=pre method=GET path=status result=0 internal_free=36000 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	518.798	hram_http	phase=sent method=GET path=status result=0 internal_free=32600 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	518.798	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34364 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	518.798	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33612 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	523.804	hram_http	phase=pre method=GET path=status result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	523.804	hram_http	phase=sent method=GET path=status result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	523.804	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38548 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	523.804	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37292 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	523.804	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	523.804	hram_http	phase=sent method=GET path=alerts result=0 internal_free=36112 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	528.810	hram_http	phase=pre method=GET path=status result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	528.810	hram_http	phase=sent method=GET path=status result=0 internal_free=35504 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	528.811	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35984 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	528.811	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33844 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	528.811	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35600 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	528.811	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32204 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	533.817	hram_http	phase=pre method=GET path=status result=0 internal_free=40204 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	533.817	hram_http	phase=sent method=GET path=status result=0 internal_free=36808 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	533.817	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	533.817	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33860 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	533.817	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35308 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2124
+heap_run	533.817	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32188 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2124
+heap_run	538.824	hram_http	phase=pre method=GET path=status result=0 internal_free=40540 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2124
+heap_run	538.824	hram_http	phase=sent method=GET path=status result=0 internal_free=37144 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	538.824	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37620 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	538.824	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33580 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	538.824	hram_http	phase=pre method=GET path=alerts result=0 internal_free=36720 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	538.824	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33596 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	542.829	app_main	resources: point=hram_30s free_heap_bytes=42412 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42412 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42412 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	542.830	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	543.831	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40548 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	543.831	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37136 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	543.831	hram_http	phase=pre method=GET path=status result=0 internal_free=38668 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	543.831	hram_http	phase=sent method=GET path=status result=0 internal_free=35268 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	543.831	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35732 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	543.831	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32328 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	548.837	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38908 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	548.837	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35512 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	548.837	hram_http	phase=pre method=GET path=status result=0 internal_free=35972 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	548.837	hram_http	phase=sent method=GET path=status result=0 internal_free=33952 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	548.837	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35724 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	548.837	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34144 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	553.844	hram_http	phase=pre method=GET path=status result=0 internal_free=40856 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	553.844	hram_http	phase=sent method=GET path=status result=0 internal_free=35840 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	553.844	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35988 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	553.844	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33848 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	553.844	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35608 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	553.844	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32212 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	558.851	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40540 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	558.851	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35512 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	558.851	hram_http	phase=pre method=GET path=status result=0 internal_free=39032 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	558.851	hram_http	phase=sent method=GET path=status result=0 internal_free=36356 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	558.851	hram_http	phase=pre method=GET path=alerts result=0 internal_free=38128 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	558.851	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34720 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	563.857	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40148 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	563.857	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37144 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	563.857	hram_http	phase=pre method=GET path=status result=0 internal_free=37604 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	563.857	hram_http	phase=sent method=GET path=status result=0 internal_free=34184 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	563.857	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35716 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	563.857	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33576 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	568.863	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40544 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	568.863	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33564 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	568.863	hram_http	phase=pre method=GET path=status result=0 internal_free=37364 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	568.863	hram_http	phase=sent method=GET path=status result=0 internal_free=35784 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	568.863	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37380 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	568.863	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33968 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	572.868	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	572.868	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	573.869	hram_http	phase=pre method=GET path=status result=0 internal_free=40136 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	573.869	hram_http	phase=sent method=GET path=status result=0 internal_free=36740 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	573.869	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37616 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	573.869	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32584 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	573.869	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35596 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	573.869	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32176 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	578.875	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	578.875	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	578.875	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	578.875	hram_http	phase=sent method=GET path=alerts result=0 internal_free=36628 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	578.875	hram_http	phase=pre method=GET path=status result=0 internal_free=37396 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	578.875	hram_http	phase=sent method=GET path=status result=0 internal_free=36008 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	583.882	hram_http	phase=pre method=GET path=status result=0 internal_free=38896 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	583.882	hram_http	phase=sent method=GET path=status result=0 internal_free=35500 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	583.882	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35984 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	583.882	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35200 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	583.882	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37396 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	583.882	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34000 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	588.888	hram_http	phase=pre method=GET path=status result=0 internal_free=40196 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	588.888	hram_http	phase=sent method=GET path=status result=0 internal_free=36800 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	588.888	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	588.888	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33872 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	588.888	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34332 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	588.888	hram_http	phase=sent method=GET path=alerts result=0 internal_free=31916 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	593.895	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	593.895	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	593.895	hram_http	phase=pre method=GET path=status result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	593.895	hram_http	phase=sent method=GET path=status result=0 internal_free=35256 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	593.895	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35724 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	593.895	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32328 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	598.901	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40544 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	598.901	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35532 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	598.901	hram_http	phase=pre method=GET path=status result=0 internal_free=35996 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	598.901	hram_http	phase=sent method=GET path=status result=0 internal_free=35800 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	598.901	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37412 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	598.901	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35992 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	602.906	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	602.907	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	603.908	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40540 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	603.908	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35328 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	603.908	hram_http	phase=pre method=GET path=status result=0 internal_free=35984 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	603.908	hram_http	phase=sent method=GET path=status result=0 internal_free=35336 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2108
+heap_run	603.908	hram_http	phase=pre method=GET path=alerts result=0 internal_free=36964 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2108
+heap_run	603.908	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34008 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2108
+heap_run	608.915	hram_http	phase=pre method=GET path=status result=0 internal_free=40532 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	608.915	hram_http	phase=sent method=GET path=status result=0 internal_free=35508 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	608.915	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37228 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	608.915	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35972 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	608.915	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=39208 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	608.915	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35812 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	613.921	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37628 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	613.921	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34232 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	613.921	hram_http	phase=pre method=GET path=status result=0 internal_free=35988 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	613.921	hram_http	phase=sent method=GET path=status result=0 internal_free=33972 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	613.921	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35736 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	613.921	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32328 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	618.929	hram_http	phase=pre method=GET path=status result=0 internal_free=38904 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	618.929	hram_http	phase=sent method=GET path=status result=0 internal_free=35504 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	618.929	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35988 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	618.929	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35792 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	618.929	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37580 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	618.929	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34172 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	623.935	hram_http	phase=pre method=GET path=status result=0 internal_free=39232 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	623.935	hram_http	phase=sent method=GET path=status result=0 internal_free=32688 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	623.935	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37232 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	623.935	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35780 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	623.935	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37584 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	623.936	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34160 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	628.942	hram_http	phase=pre method=GET path=status result=0 internal_free=40844 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	628.942	hram_http	phase=sent method=GET path=status result=0 internal_free=37448 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	628.942	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37268 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	628.942	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33872 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	628.942	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34336 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	628.942	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32196 internal_min=22428 internal_largest=28672 httpd_stack_hwm=2108
+heap_run	632.948	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	632.948	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	633.949	hram_http	phase=pre method=GET path=status result=0 internal_free=38908 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	633.949	hram_http	phase=sent method=GET path=status result=0 internal_free=35512 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	633.949	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37240 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	633.949	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33844 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	633.949	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37548 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	633.949	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34148 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	638.955	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40844 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	638.956	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35504 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	638.956	hram_http	phase=pre method=GET path=status result=0 internal_free=37080 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	638.956	hram_http	phase=sent method=GET path=status result=0 internal_free=35768 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	638.956	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37396 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	638.956	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34192 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	643.962	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=41048 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	643.962	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36808 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	643.962	hram_http	phase=pre method=GET path=status result=0 internal_free=37272 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	643.962	hram_http	phase=sent method=GET path=status result=0 internal_free=33856 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	643.962	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34340 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	643.962	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33588 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	648.968	hram_http	phase=pre method=GET path=status result=0 internal_free=40524 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	648.968	hram_http	phase=sent method=GET path=status result=0 internal_free=35504 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	648.968	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37244 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	648.968	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35792 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	648.968	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37392 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	648.968	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35764 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	653.974	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	653.974	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	653.974	hram_http	phase=pre method=GET path=alerts result=0 internal_free=38660 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	653.974	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35260 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	653.974	hram_http	phase=pre method=GET path=status result=0 internal_free=35728 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	653.974	hram_http	phase=sent method=GET path=status result=0 internal_free=35764 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	658.981	hram_http	phase=pre method=GET path=status result=0 internal_free=39244 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	658.981	hram_http	phase=sent method=GET path=status result=0 internal_free=34208 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	658.981	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37236 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	658.981	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33652 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	658.981	hram_http	phase=pre method=GET path=alerts result=0 internal_free=30512 internal_min=22428 internal_largest=25600 httpd_stack_hwm=2108
+heap_run	658.981	hram_http	phase=sent method=GET path=alerts result=0 internal_free=28496 internal_min=22428 internal_largest=25600 httpd_stack_hwm=2108
+heap_run	662.986	app_main	resources: point=hram_30s free_heap_bytes=42404 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42404 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42404 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	662.986	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	663.988	hram_http	phase=pre method=GET path=status result=0 internal_free=39632 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	663.988	hram_http	phase=sent method=GET path=status result=0 internal_free=36824 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	663.988	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37288 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	663.988	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37092 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	663.988	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37420 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	663.988	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34012 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	668.994	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40860 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	668.994	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	668.994	hram_http	phase=pre method=GET path=alerts result=0 internal_free=38656 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	668.994	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37284 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	668.994	hram_http	phase=pre method=GET path=status result=0 internal_free=39228 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	668.994	hram_http	phase=sent method=GET path=status result=0 internal_free=38136 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	674.001	hram_http	phase=pre method=GET path=status result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	674.001	hram_http	phase=sent method=GET path=status result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	674.001	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37292 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	674.001	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35148 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	674.001	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35596 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	674.001	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35528 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	679.007	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40204 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	679.007	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36804 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	679.007	hram_http	phase=pre method=GET path=status result=0 internal_free=37268 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	679.007	hram_http	phase=sent method=GET path=status result=0 internal_free=35248 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	679.007	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35716 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	679.007	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32320 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	684.013	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38900 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	684.013	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35504 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	684.013	hram_http	phase=pre method=GET path=status result=0 internal_free=35968 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	684.013	hram_http	phase=sent method=GET path=status result=0 internal_free=33940 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	684.013	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35704 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	684.013	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35380 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	689.019	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40540 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	689.019	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35524 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	689.019	hram_http	phase=pre method=GET path=status result=0 internal_free=35984 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	689.019	hram_http	phase=sent method=GET path=status result=0 internal_free=33972 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	689.019	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35736 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	689.019	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35408 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	693.024	app_main	resources: point=hram_30s free_heap_bytes=42408 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42408 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42408 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	693.024	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	694.025	hram_http	phase=pre method=GET path=status result=0 internal_free=38908 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	694.025	hram_http	phase=sent method=GET path=status result=0 internal_free=35512 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	694.025	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37296 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	694.025	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35136 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	694.025	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35612 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	694.025	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35540 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	699.032	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40856 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	699.032	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34224 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	699.032	hram_http	phase=pre method=GET path=status result=0 internal_free=37380 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	699.032	hram_http	phase=sent method=GET path=status result=0 internal_free=33976 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	699.032	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35740 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	699.032	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32336 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	704.038	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=41056 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	704.038	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37648 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	704.038	hram_http	phase=pre method=GET path=status result=0 internal_free=37268 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	704.038	hram_http	phase=sent method=GET path=status result=0 internal_free=33868 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	704.038	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34336 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	704.038	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30924 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	709.044	hram_http	phase=pre method=GET path=alerts result=0 internal_free=38520 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	709.044	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35516 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	709.044	hram_http	phase=pre method=GET path=status result=0 internal_free=37596 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	709.044	hram_http	phase=sent method=GET path=status result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	709.044	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35984 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	709.044	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37372 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	714.050	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40220 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	714.050	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36820 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	714.050	hram_http	phase=pre method=GET path=status result=0 internal_free=37288 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	714.050	hram_http	phase=sent method=GET path=status result=0 internal_free=33884 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	714.050	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34352 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	714.050	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30956 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	718.555	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	718.555	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	718.555	hram_http	phase=pre method=GET path=status result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	718.555	hram_http	phase=sent method=GET path=status result=0 internal_free=35248 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	719.056	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35716 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	719.056	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35380 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	723.060	app_main	resources: point=hram_30s free_heap_bytes=42412 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42412 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42412 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	723.060	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	724.061	hram_http	phase=pre method=GET path=status result=0 internal_free=40836 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	724.061	hram_http	phase=sent method=GET path=status result=0 internal_free=36808 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	724.061	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37284 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	724.061	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33888 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	724.061	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34352 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	724.061	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30952 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	729.066	hram_http	phase=pre method=GET path=status result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	729.066	hram_http	phase=sent method=GET path=status result=0 internal_free=37456 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	729.066	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37300 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	729.066	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37104 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	729.066	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37608 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	729.066	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37480 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	734.072	hram_http	phase=pre method=GET path=status result=0 internal_free=40216 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	734.072	hram_http	phase=sent method=GET path=status result=0 internal_free=36820 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	734.072	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37288 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	734.072	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35148 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	734.072	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35624 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	734.072	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32212 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	739.077	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40216 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	739.077	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36820 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	739.077	hram_http	phase=pre method=GET path=status result=0 internal_free=37280 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	739.077	hram_http	phase=sent method=GET path=status result=0 internal_free=35264 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	739.077	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35724 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	739.077	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32320 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	744.082	hram_http	phase=pre method=GET path=status result=0 internal_free=40220 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	744.082	hram_http	phase=sent method=GET path=status result=0 internal_free=36824 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	744.082	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37296 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	744.082	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33896 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	744.082	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34356 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	744.082	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30952 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	749.088	hram_http	phase=pre method=GET path=status result=0 internal_free=40196 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	749.088	hram_http	phase=sent method=GET path=status result=0 internal_free=36800 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	749.088	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37268 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	749.088	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33864 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	749.088	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=34352 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	749.088	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33824 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	753.092	app_main	resources: point=hram_30s free_heap_bytes=42408 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42408 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42408 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	753.092	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	753.592	hram_http	phase=pre method=GET path=status result=0 internal_free=40152 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	753.592	hram_http	phase=sent method=GET path=status result=0 internal_free=37148 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	753.592	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37620 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	753.592	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34208 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	753.592	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35608 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	753.592	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35544 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	758.597	hram_http	phase=pre method=GET path=status result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	758.597	hram_http	phase=sent method=GET path=status result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	758.597	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37284 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	758.597	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35140 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	758.597	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35608 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	758.597	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=32188 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	763.602	hram_http	phase=pre method=GET path=status result=0 internal_free=40204 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	763.602	hram_http	phase=sent method=GET path=status result=0 internal_free=36808 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	763.602	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=38540 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	763.602	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37072 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	763.602	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37400 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	764.103	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35584 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	769.107	hram_http	phase=pre method=GET path=status result=0 internal_free=40204 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	769.107	hram_http	phase=sent method=GET path=status result=0 internal_free=36808 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	769.107	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	769.107	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33864 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	769.107	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34336 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	769.107	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33580 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	774.112	hram_http	phase=pre method=GET path=status result=0 internal_free=40200 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	774.112	hram_http	phase=sent method=GET path=status result=0 internal_free=36800 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	774.112	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37268 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	774.112	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35124 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	774.112	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=35592 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	774.112	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35756 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2108
+heap_run	779.117	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40200 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	779.117	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36792 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	779.117	hram_http	phase=pre method=GET path=status result=0 internal_free=37264 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	779.118	hram_http	phase=sent method=GET path=status result=0 internal_free=33864 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	779.118	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34332 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	779.118	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33584 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	783.121	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	783.121	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	783.621	hram_http	phase=pre method=GET path=status result=0 internal_free=40216 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	783.621	hram_http	phase=sent method=GET path=status result=0 internal_free=36820 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	783.621	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37292 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	783.621	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35152 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	784.121	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35616 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	784.121	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32216 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	788.625	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	788.625	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=36816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	788.625	hram_http	phase=pre method=GET path=status result=0 internal_free=37276 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	789.126	hram_http	phase=sent method=GET path=status result=0 internal_free=35264 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	789.126	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35732 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	789.126	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32312 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	793.630	hram_http	phase=pre method=GET path=status result=0 internal_free=40212 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	793.630	hram_http	phase=sent method=GET path=status result=0 internal_free=36800 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	794.130	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37292 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	794.131	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33892 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	794.131	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34352 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	794.131	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33600 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	798.636	hram_http	phase=pre method=GET path=status result=0 internal_free=40204 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	799.137	hram_http	phase=sent method=GET path=status result=0 internal_free=36808 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	799.137	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37284 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	799.137	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=33872 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	799.137	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34332 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	799.137	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30912 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	803.642	hram_http	phase=pre method=GET path=status result=0 internal_free=40220 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	804.142	hram_http	phase=sent method=GET path=status result=0 internal_free=36824 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	804.143	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37300 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	804.143	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35160 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	804.143	hram_http	phase=pre method=GET path=alerts result=0 internal_free=35620 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	804.143	hram_http	phase=sent method=GET path=alerts result=0 internal_free=35548 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	808.649	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40856 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	808.649	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37460 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	808.649	hram_http	phase=pre method=GET path=status result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	808.649	hram_http	phase=sent method=GET path=status result=0 internal_free=34196 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	809.149	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34332 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	809.149	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30924 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	813.152	app_main	resources: point=hram_30s free_heap_bytes=42412 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42412 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42412 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	813.152	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	813.652	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	813.652	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=35844 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2108
+heap_run	813.652	hram_http	phase=pre method=GET path=status result=0 internal_free=37600 internal_min=22428 internal_largest=31744 httpd_stack_hwm=2108
+heap_run	813.652	hram_http	phase=sent method=GET path=status result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	814.152	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34348 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	814.152	hram_http	phase=sent method=GET path=alerts result=0 internal_free=32336 internal_min=22428 internal_largest=28672 httpd_stack_hwm=2108
+heap_run	818.656	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40848 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	818.656	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	819.156	hram_http	phase=pre method=GET path=status result=0 internal_free=37588 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	819.156	hram_http	phase=sent method=GET path=status result=0 internal_free=34168 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	819.156	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34316 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	819.156	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30916 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	823.661	hram_http	phase=pre method=GET path=alerts result=0 internal_free=40848 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	823.661	hram_http	phase=sent method=GET path=alerts result=0 internal_free=37444 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	823.661	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	823.661	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	823.661	hram_http	phase=pre method=GET path=status result=0 internal_free=34356 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	823.661	hram_http	phase=sent method=GET path=status result=0 internal_free=30952 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	828.667	hram_http	phase=pre method=GET path=status result=0 internal_free=40848 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	828.667	hram_http	phase=sent method=GET path=status result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	829.168	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37612 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	829.168	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34204 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	829.168	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34356 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	829.168	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30952 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	833.672	hram_http	phase=pre method=GET path=status result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	834.172	hram_http	phase=sent method=GET path=status result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	834.172	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	834.172	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34188 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	834.172	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34124 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	834.172	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30716 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	838.676	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	838.676	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	839.176	hram_http	phase=pre method=GET path=status result=0 internal_free=37592 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	839.176	hram_http	phase=sent method=GET path=status result=0 internal_free=34184 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	839.677	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34320 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	839.677	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30924 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	842.680	app_main	resources: point=hram_30s free_heap_bytes=42404 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42404 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42404 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	843.180	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	843.680	hram_http	phase=pre method=GET path=status result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	844.181	hram_http	phase=sent method=GET path=status result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	844.181	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37608 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	844.181	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34188 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	844.181	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34128 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	844.181	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30732 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	848.686	hram_http	phase=pre method=GET path=status result=0 internal_free=40860 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	849.187	hram_http	phase=sent method=GET path=status result=0 internal_free=37460 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	849.187	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37616 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	849.187	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34204 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	849.187	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34348 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	849.187	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30748 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	853.693	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40848 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	853.693	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	853.693	hram_http	phase=pre method=GET path=status result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	854.193	hram_http	phase=sent method=GET path=status result=0 internal_free=34192 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	854.193	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34348 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	854.193	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30748 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	859.199	hram_http	phase=pre method=GET path=status result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	859.199	hram_http	phase=sent method=GET path=status result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	859.199	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37608 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	859.199	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	859.199	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34340 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	859.199	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30936 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	863.705	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40864 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	863.705	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37456 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	863.705	hram_http	phase=pre method=GET path=status result=0 internal_free=37588 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	863.705	hram_http	phase=sent method=GET path=status result=0 internal_free=34188 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	863.705	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34136 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	864.206	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30740 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	868.711	hram_http	phase=pre method=GET path=status result=0 internal_free=40844 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	868.711	hram_http	phase=sent method=GET path=status result=0 internal_free=37448 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	868.711	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37604 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	868.711	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	868.711	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34344 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	868.711	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30940 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	872.716	app_main	resources: point=hram_30s free_heap_bytes=42404 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42404 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42404 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	872.716	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	873.717	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=39380 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	874.218	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34220 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	874.218	hram_http	phase=pre method=GET path=status result=0 internal_free=35980 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	874.218	hram_http	phase=sent method=GET path=status result=0 internal_free=32572 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	874.218	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34336 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	874.218	hram_http	phase=sent method=GET path=alerts result=0 internal_free=33572 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	878.724	hram_http	phase=pre method=GET path=status result=0 internal_free=40840 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	878.724	hram_http	phase=sent method=GET path=status result=0 internal_free=37436 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	878.724	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37592 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	878.724	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34184 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	878.724	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34320 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	878.724	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30924 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	883.730	hram_http	phase=pre method=GET path=status result=0 internal_free=40860 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	883.730	hram_http	phase=sent method=GET path=status result=0 internal_free=37460 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	884.230	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37616 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	884.230	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34204 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	884.230	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34348 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	884.230	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30944 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	888.736	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40860 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	888.736	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37460 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	889.236	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	889.236	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	889.236	hram_http	phase=pre method=GET path=status result=0 internal_free=34348 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	889.236	hram_http	phase=sent method=GET path=status result=0 internal_free=30948 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	893.742	hram_http	phase=pre method=GET path=status result=0 internal_free=40860 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	893.742	hram_http	phase=sent method=GET path=status result=0 internal_free=37460 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	893.742	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	893.742	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34196 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	894.242	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34340 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	894.242	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30740 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	898.748	hram_http	phase=pre method=GET path=status result=0 internal_free=40848 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	898.748	hram_http	phase=sent method=GET path=status result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	898.748	hram_http	phase=pre method=GET path=alerts result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	898.748	hram_http	phase=sent method=GET path=alerts result=0 internal_free=34196 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	899.248	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=34352 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	899.248	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=30940 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	902.752	app_main	resources: point=hram_30s free_heap_bytes=42416 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42416 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42416 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	902.753	app_main	hram_httpd_task: present=1 hwm_bytes=2108
+heap_run	903.753	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	903.753	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=37456 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	903.753	hram_http	phase=pre method=GET path=status result=0 internal_free=37600 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	903.753	hram_http	phase=sent method=GET path=status result=0 internal_free=34192 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	904.254	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34348 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	904.254	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30940 internal_min=22428 internal_largest=27648 httpd_stack_hwm=2108
+heap_run	908.760	hram_http	phase=pre method=GET path=status result=0 internal_free=40852 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	908.760	hram_http	phase=sent method=GET path=status result=0 internal_free=37452 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	908.760	hram_http	phase=pre method=GET path=temperatures result=0 internal_free=37608 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	908.760	hram_http	phase=sent method=GET path=temperatures result=0 internal_free=34200 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	908.760	hram_http	phase=pre method=GET path=alerts result=0 internal_free=34340 internal_min=22428 internal_largest=30720 httpd_stack_hwm=2108
+heap_run	908.760	hram_http	phase=sent method=GET path=alerts result=0 internal_free=30740 internal_min=22428 internal_largest=29696 httpd_stack_hwm=2108
+heap_run	913.767	hram_http	phase=pre method=GET path=status result=0 internal_free=41920 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	913.767	hram_http	phase=sent method=GET path=status result=0 internal_free=38524 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	914.267	hram_http	phase=pre method=GET path=programs result=0 internal_free=41908 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	914.267	hram_http	phase=sent method=GET path=programs result=0 internal_free=38500 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	914.267	hram_http	phase=pre method=POST path=run result=0 internal_free=39304 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	914.267	hram_http	phase=sent method=POST path=run result=0 internal_free=37640 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	914.767	hram_http	phase=pre method=POST path=run result=0 internal_free=39224 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	914.767	hram_http	phase=sent method=POST path=run result=0 internal_free=37560 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	914.767	hram_http	phase=pre method=POST path=run result=0 internal_free=39304 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	915.268	hram_http	phase=sent method=POST path=run result=0 internal_free=37656 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	915.268	hram_http	phase=pre method=POST path=run result=0 internal_free=39816 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	915.268	hram_http	phase=sent method=POST path=run result=0 internal_free=38168 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	915.768	hram_http	phase=pre method=POST path=run result=0 internal_free=39300 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	915.768	hram_http	phase=sent method=POST path=run result=0 internal_free=37636 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	915.768	hram_http	phase=pre method=POST path=run result=0 internal_free=39300 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	915.768	hram_http	phase=sent method=POST path=run result=0 internal_free=37628 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	916.268	hram_http	phase=pre method=POST path=run result=0 internal_free=39304 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	916.268	hram_http	phase=sent method=POST path=run result=0 internal_free=37628 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	916.769	hram_http	phase=pre method=POST path=run result=0 internal_free=40976 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	916.769	hram_http	phase=sent method=POST path=run result=0 internal_free=37548 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	917.269	hram_http	phase=pre method=POST path=run result=0 internal_free=39824 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	917.269	hram_http	phase=sent method=POST path=run result=0 internal_free=38176 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	917.269	hram_http	phase=pre method=POST path=run result=0 internal_free=39300 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	917.269	hram_http	phase=sent method=POST path=run result=0 internal_free=37652 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	917.770	hram_http	phase=pre method=POST path=run result=0 internal_free=39300 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	917.770	hram_http	phase=sent method=POST path=run result=0 internal_free=37656 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	918.270	hram_http	phase=pre method=GET path=settings result=0 internal_free=41384 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	918.270	hram_http	phase=sent method=GET path=settings result=0 internal_free=37800 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	918.770	hram_http	phase=pre method=POST path=run result=0 internal_free=39304 internal_min=22428 internal_largest=32768 httpd_stack_hwm=2108
+heap_run	918.770	hram_http	phase=sent method=POST path=run result=0 internal_free=36652 internal_min=22428 internal_largest=31744 httpd_stack_hwm=1724
+heap_run	919.772	hram_http	phase=pre method=GET path=settings result=0 internal_free=41880 internal_min=22428 internal_largest=32768 httpd_stack_hwm=1724
+heap_run	919.772	hram_http	phase=sent method=GET path=settings result=0 internal_free=38476 internal_min=22428 internal_largest=31744 httpd_stack_hwm=1724
+heap_run	920.272	hram_http	phase=pre method=POST path=run result=0 internal_free=39796 internal_min=22428 internal_largest=31744 httpd_stack_hwm=1724
+heap_run	920.272	hram_http	phase=sent method=POST path=run result=0 internal_free=38148 internal_min=22428 internal_largest=32768 httpd_stack_hwm=1724
+heap_run	920.773	hram_http	phase=pre method=GET path=settings result=0 internal_free=41316 internal_min=22428 internal_largest=32768 httpd_stack_hwm=1724
+heap_run	920.773	hram_http	phase=sent method=GET path=settings result=0 internal_free=37920 internal_min=22428 internal_largest=32768 httpd_stack_hwm=1724
+heap_run	932.789	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	932.789	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	962.825	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	962.825	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	992.865	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	992.865	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1022.905	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1022.905	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1052.942	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1052.942	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1082.983	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1082.983	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1113.024	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1113.024	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1143.065	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1143.065	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1173.105	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1173.105	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1203.146	app_main	resources: point=hram_30s free_heap_bytes=42472 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42472 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42472 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1203.146	app_main	hram_httpd_task: present=1 hwm_bytes=1724
+heap_run	1232.687	app_main	resources: point=hram_30s free_heap_bytes=42284 minimum_free_heap_bytes=22428 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11272 internal_8bit_free_bytes=42284 internal_8bit_minimum_free_bytes=22428 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42284 dma_minimum_free_bytes=22428 dma_largest_free_block_bytes=32768
+heap_run	1233.188	app_main	hram_httpd_task: present=1 hwm_bytes=1724

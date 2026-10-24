@@ -12,6 +12,13 @@ struct WebRunMutationDto {
     FermentationUiEnvelopePayload intent;
 };
 
+struct WebConfigurationMutationDto {
+    UserConfigurationRevision expected{0U};
+    WebConfigurationChange change;
+};
+using WebMutationDto =
+    std::variant<WebRunMutationDto, WebConfigurationMutationDto>;
+
 // Narrow, synchronous application handler for POST /internal/ui/run. It decodes
 // the bounded DTO from the exact request body whose bytes are replay-bound.
 // The Application serializes its public calls itself; the dispatcher gates the
@@ -32,6 +39,10 @@ class WebRunMutationHandler final {
    private:
     friend struct WebRunMutationHandlerTestAccess;
 
+    [[nodiscard]] ReplayOutcomeCode applyRunMutation(
+        const WebRunMutationDto& dto, std::uint64_t nowMs);
+    [[nodiscard]] static ReplayOutcomeCode projectConfigurationResult(
+        const ApplicationConfigurationChangeResult& result);
     [[nodiscard]] static ReplayOutcomeCode projectCommandResult(
         const FermentationUiCommandResult& result);
     [[nodiscard]] static ReplayOutcomeCode projectRequestStatus(
@@ -79,7 +90,10 @@ class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
 #ifdef APP_PROFILE_NATIVE
     friend struct WebRouteDispatcherTestAccess;
     inline static std::size_t extraShellBytesForTest_{0U};
+    inline static std::size_t extraAssetBytesForTest_{0U};
 #endif
+    [[nodiscard]] bool handleAsset(const device_platform::HttpRequest& request,
+                                   device_platform::HttpResponse& response);
     [[nodiscard]] bool handleShell(const device_platform::HttpRequest& request,
                                    device_platform::HttpResponse& response);
     [[nodiscard]] bool handleLogin(const device_platform::HttpRequest& request,

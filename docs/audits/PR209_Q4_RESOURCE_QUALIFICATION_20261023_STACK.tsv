@@ -1,0 +1,55 @@
+profile	phase	prefix_bytes	resolved_bytes_ci_elf_rom	isr_frame	cpsa_tls_canary	total	reserve_to_8192	alloc_failure_branch_bytes	unresolved_reachable	unresolved_names
+esp32_release	Prepare	3056	6352	192	128	6672	1520	6368	2	__indirect_call;block_absorb_post_hook
+esp32_release	Confirm	3056	4784	192	128	5104	3088		2	__indirect_call;block_absorb_post_hook
+esp32_release	Decision-all-nine	3056	7440	192	128	7760	432	7104	2	__indirect_call;block_absorb_post_hook
+esp32_release	Run-encode	5248	6784	192	128	7104	1088		1	__indirect_call
+esp32_release	Run-store	5248	7440	192	128	7760	432	7104	2	__indirect_call;block_absorb_post_hook
+esp32_release	Settings	1856	7024	192	128	7344	848	7040	2	__indirect_call;block_absorb_post_hook
+esp32_release	Run-postcheck	4928	5120	192	128	5440	2752		0	
+esp32_release	Run-RAM-move	4928	5440	192	128	5760	2432		0	
+esp32_release	Run-release	4368	4816	192	128	5136	3056		0	
+esp32_release	Factory	0	992	192	128	1312	6880		1	__indirect_call
+esp32_release	Run-exact-write-readback	5952	7440	192	128	7760	432	6960	2	__indirect_call;block_absorb_post_hook
+esp32_release	NVS-write	0	1392	192	128	1712	6480		2	__indirect_call;block_absorb_post_hook
+esp32_release	NVS-read	0	1424	192	128	1744	6448		2	__indirect_call;block_absorb_post_hook
+esp32_release	Allocator	0	368	192	128	688	7504		1	__indirect_call
+esp32_release	Visitor-decideApplyRecoveryTimeCorrection	4576	5904	192	128	6224	1968		1	__indirect_call
+esp32_release	Visitor-decideApplySensorSelectionAction	4576	6816	192	128	7136	1056		1	__indirect_call
+esp32_release	Visitor-decideProgramStart	4576	6128	192	128	6448	1744		1	__indirect_call
+esp32_release	Visitor-decideManualStart	4576	6160	192	128	6480	1712		1	__indirect_call
+esp32_release	Visitor-decideStop	4576	6096	192	128	6416	1776		1	__indirect_call
+esp32_release	Visitor-decideCompletion	4576	6096	192	128	6416	1776		1	__indirect_call
+esp32_release	Visitor-decideRunAdjustment	4576	6256	192	128	6576	1616		1	__indirect_call
+esp32_release	Visitor-decideAcknowledgeMessage	4576	5888	192	128	6208	1984		1	__indirect_call
+esp32_release	Visitor-decideMuteMessage	4576	5888	192	128	6208	1984		1	__indirect_call
+esp32_release	GET shell	1280	3808	192	128	4128	4064		2	__indirect_call;block_absorb_post_hook
+esp32_release	GET read-only	1280	5952	192	128	6272	1920		2	__indirect_call;block_absorb_post_hook
+esp32_release	POST login	1280	3792	192	128	4112	4080		2	__indirect_call;block_absorb_post_hook
+esp32_release	GET asset	1280	2144	192	128	2464	5728		1	__indirect_call
+esp32_bringup	Prepare	3056	6352	192	128	6672	1520	6368	2	__indirect_call;block_absorb_post_hook
+esp32_bringup	Confirm	3056	4784	192	128	5104	3088		2	__indirect_call;block_absorb_post_hook
+esp32_bringup	Decision-all-nine	3056	7440	192	128	7760	432	7104	2	__indirect_call;block_absorb_post_hook
+esp32_bringup	Run-encode	5248	6784	192	128	7104	1088		1	__indirect_call
+esp32_bringup	Run-store	5248	7440	192	128	7760	432	7104	2	__indirect_call;block_absorb_post_hook
+esp32_bringup	Settings	1856	7024	192	128	7344	848	7040	2	__indirect_call;block_absorb_post_hook
+esp32_bringup	Run-postcheck	4928	5120	192	128	5440	2752		0	
+esp32_bringup	Run-RAM-move	4928	5440	192	128	5760	2432		0	
+esp32_bringup	Run-release	4368	4816	192	128	5136	3056		0	
+esp32_bringup	Factory	0	992	192	128	1312	6880		1	__indirect_call
+esp32_bringup	Run-exact-write-readback	5952	7440	192	128	7760	432	6960	2	__indirect_call;block_absorb_post_hook
+esp32_bringup	NVS-write	0	1392	192	128	1712	6480		2	__indirect_call;block_absorb_post_hook
+esp32_bringup	NVS-read	0	1424	192	128	1744	6448		2	__indirect_call;block_absorb_post_hook
+esp32_bringup	Allocator	0	368	192	128	688	7504		1	__indirect_call
+esp32_bringup	Visitor-decideApplyRecoveryTimeCorrection	4576	5904	192	128	6224	1968		1	__indirect_call
+esp32_bringup	Visitor-decideApplySensorSelectionAction	4576	6816	192	128	7136	1056		1	__indirect_call
+esp32_bringup	Visitor-decideProgramStart	4576	6128	192	128	6448	1744		1	__indirect_call
+esp32_bringup	Visitor-decideManualStart	4576	6160	192	128	6480	1712		1	__indirect_call
+esp32_bringup	Visitor-decideStop	4576	6096	192	128	6416	1776		1	__indirect_call
+esp32_bringup	Visitor-decideCompletion	4576	6096	192	128	6416	1776		1	__indirect_call
+esp32_bringup	Visitor-decideRunAdjustment	4576	6256	192	128	6576	1616		1	__indirect_call
+esp32_bringup	Visitor-decideAcknowledgeMessage	4576	5888	192	128	6208	1984		1	__indirect_call
+esp32_bringup	Visitor-decideMuteMessage	4576	5888	192	128	6208	1984		1	__indirect_call
+esp32_bringup	GET shell	1280	3808	192	128	4128	4064		2	__indirect_call;block_absorb_post_hook
+esp32_bringup	GET read-only	1280	5952	192	128	6272	1920		2	__indirect_call;block_absorb_post_hook
+esp32_bringup	POST login	1280	3792	192	128	4112	4080		2	__indirect_call;block_absorb_post_hook
+esp32_bringup	GET asset	1280	2144	192	128	2464	5728		1	__indirect_call

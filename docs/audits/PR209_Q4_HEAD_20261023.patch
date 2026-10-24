@@ -1,0 +1,87 @@
+# Compile-only delta on reconstructed PR209_Q4_RESOURCE_20261023 sources; apply --unidiff-zero only in temporary copy.
+--- a/run_persistence_coordinator.cpp
++++ b/run_persistence_coordinator.cpp
+@@ -2391,2 +2391,2 @@
+-    RunPersistenceHead prepared;
+-    RunPersistenceHead committed;
++    const std::uint64_t firstHeadRevision = nextHeadRevision_;
++    std::optional<RunPersistenceHead> headStorage{std::in_place};
+@@ -2396,4 +2396,4 @@
+-        committed.state = RunPersistenceHeadState::Committed;
+-        committed.revision = nextHeadRevision_;
+-        committed.current = ref;
+-        committed.commandIdHighWater = previousCommandIdHighWater;
++        headStorage->state = RunPersistenceHeadState::Committed;
++        headStorage->revision = firstHeadRevision;
++        headStorage->current = ref;
++        headStorage->commandIdHighWater = previousCommandIdHighWater;
+@@ -2404 +2404 @@
+-                committed.fallback = fallbackDirective.reference;
++                headStorage->fallback = fallbackDirective.reference;
+@@ -2407 +2407 @@
+-                committed.fallback = currentHead_->current;
++                headStorage->fallback = currentHead_->current;
+@@ -2410 +2410 @@
+-        committedBytes = encodeRunPersistenceHead(committed, epoch_);
++        committedBytes = encodeRunPersistenceHead(*headStorage, epoch_);
+@@ -2419,9 +2419,9 @@
+-        prepared.state = RunPersistenceHeadState::Prepared;
+-        prepared.revision = nextHeadRevision_;
+-        prepared.target = ref;
+-        prepared.mutationKind = mutationKind;
+-        prepared.commandId = commandId;
+-        prepared.oldRunRevision = before.runRevision;
+-        prepared.newRunRevision = snapshot.runRevision;
+-        prepared.oldTransitionSequence = before.transitionSequence;
+-        prepared.newTransitionSequence =
++        headStorage->state = RunPersistenceHeadState::Prepared;
++        headStorage->revision = firstHeadRevision;
++        headStorage->target = ref;
++        headStorage->mutationKind = mutationKind;
++        headStorage->commandId = commandId;
++        headStorage->oldRunRevision = before.runRevision;
++        headStorage->newRunRevision = snapshot.runRevision;
++        headStorage->oldTransitionSequence = before.transitionSequence;
++        headStorage->newTransitionSequence =
+@@ -2430,8 +2430,13 @@
+-            prepared.preparedCurrent = currentHead_->current;
+-            prepared.preparedFallback = currentHead_->fallback;
+-        }
+-        committed.state = RunPersistenceHeadState::Committed;
+-        committed.revision = prepared.revision + 1U;
+-        committed.current = ref;
+-        prepared.commandIdHighWater = previousCommandIdHighWater;
+-        committed.commandIdHighWater = previousCommandIdHighWater;
++            headStorage->preparedCurrent = currentHead_->current;
++            headStorage->preparedFallback = currentHead_->fallback;
++        }
++        headStorage->commandIdHighWater = previousCommandIdHighWater;
++        preparedBytes = encodeRunPersistenceHead(*headStorage, epoch_);
++        // No reference into the Prepared value survives. The encoded bytes own
++        // their data and remain distinct from Committed NEW until all writes end.
++        headStorage.reset();
++        headStorage.emplace();
++        headStorage->state = RunPersistenceHeadState::Committed;
++        headStorage->revision = firstHeadRevision + 1U;
++        headStorage->current = ref;
++        headStorage->commandIdHighWater = previousCommandIdHighWater;
+@@ -2442 +2447 @@
+-                committed.fallback = fallbackDirective.reference;
++                headStorage->fallback = fallbackDirective.reference;
+@@ -2445 +2450 @@
+-                committed.fallback = currentHead_->current;
++                headStorage->fallback = currentHead_->current;
+@@ -2448,2 +2453 @@
+-        preparedBytes = encodeRunPersistenceHead(prepared, epoch_);
+-        committedBytes = encodeRunPersistenceHead(committed, epoch_);
++        committedBytes = encodeRunPersistenceHead(*headStorage, epoch_);
+@@ -2533,2 +2537,2 @@
+-        committed.bytes = std::move(*committedBytes);
+-        currentHead_ = std::move(committed);
++        headStorage->bytes = std::move(*committedBytes);
++        currentHead_ = std::move(*headStorage);
+@@ -2566,2 +2570,2 @@
+-        committed.bytes = std::move(*committedBytes);
+-        currentHead_ = std::move(committed);
++        headStorage->bytes = std::move(*committedBytes);
++        currentHead_ = std::move(*headStorage);

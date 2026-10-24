@@ -318,6 +318,13 @@ class ConfigurationGraphStore {
         const ConfigurationCommitCandidate& candidate, ChangeOrigin origin,
         ChangeOperation operation) const;
 
+    // Reuses the result storage; no PreparedConfigurationCommit return
+    // temporary.
+    void prepareCommitInto(const LoadedConfigurationGraph& current,
+                           const ConfigurationCommitCandidate& candidate,
+                           ChangeOrigin origin, ChangeOperation operation,
+                           ConfigurationCommitPrepareResult& result) const;
+
     [[nodiscard]] ConfigurationCommitExecutionResult executePreparedCommit(
         PreparedConfigurationCommit& prepared);
 

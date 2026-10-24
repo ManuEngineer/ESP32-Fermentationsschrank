@@ -1,0 +1,40 @@
+Product: e31e952def3264ca419187b86a2988bd20e3a487
+Approved plan: 623bc4520bcf3601d3666e7c717ae00213047901
+
+=================================== SUMMARY ===================================
+Environment    Test                              Status    Duration
+-------------  --------------------------------  --------  ------------
+native         test_run_commands                 PASSED    00:00:00.797
+native         test_configuration_graph_store    PASSED    00:00:00.867
+native         test_web_application_routes       PASSED    00:00:02.067
+native         test_issue144_run_identity        PASSED    00:00:01.151
+native         test_target_qualification         PASSED    00:00:00.787
+native         test_user_settings_application    PASSED    00:00:01.168
+native         test_configuration_service        PASSED    00:00:01.116
+native         test_configuration_codecs         PASSED    00:00:00.822
+native         test_configuration_documents      PASSED    00:00:00.794
+native         test_run_recovery_time            PASSED    00:00:00.746
+native         test_temperature_control          PASSED    00:00:00.859
+native         test_run_snapshots                PASSED    00:00:00.737
+native         test_fermentation_ui_commands     PASSED    00:00:01.103
+native         test_configuration_graph_codecs   PASSED    00:00:00.740
+native         test_configuration_migration      PASSED    00:00:00.763
+native         test_run_persistence_coordinator  PASSED    00:00:01.142
+native         test_run_checkpoint_codec         PASSED    00:00:00.832
+native         test_program_models               PASSED    00:00:00.733
+================ 696 test cases: 696 succeeded in 00:00:17.225 ================
+
+Builder on product HEAD:
+STATIC_ANALYSIS_BASE_REF=refs/remotes/origin/main
+STATIC_ANALYSIS_BASE_REF_COMMIT=086873ac3a6ea0d8134810a744e61862e0528a6a
+STATIC_ANALYSIS_MERGE_BASE=086873ac3a6ea0d8134810a744e61862e0528a6a
+BOARD_PROFILE_SINGLE_SOURCE=PASS
+CLANG_FORMAT=PASS
+CLANG_TIDY=PASS
+BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS
+
+Both firmware profiles: PASS (canonical build driver / profile check).
+Hardware / flash / D9 / actual largest-free heap / HWM: NOT_RUN.
+Native 64-bit allocation windows: HEAP.tsv; not an ESP32 heap proof.
+Target full Run chain: FAIL, reachable recovery/sensor Value frame10880 B; known coactive entry15248 B.
+Seven rewritten request variants / Settings: upper bounds NOT_PROVEN.

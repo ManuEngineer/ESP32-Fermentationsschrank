@@ -1,0 +1,15 @@
+product	case	fixture	requests	requested_bytes	largest_request	peak_live	live_after_operation	http_status	host_bad_alloc
+095f393	0	start/replay; 16 programs, max user id/name/notes	196	68811	32769	47484	10603	200	0
+095f393	1	identity write fails before decision	109	58570	32769	47484	5002	500	0
+095f393	2	identity unknown write/readback failure	112	58877	32769	47484	5204	503	0
+095f393	3	settings name commit; 16 max-note programs	1159	516410	19890	69724	24485	200	0
+095f393	4	first C++ allocation fails (native exception)	0	0	0	0	0	0	1
+095f393	5	first cJSON allocation fails (checked null)	22	1369	193	684	0	400	0
+095f393	6	adjust/replay; 32 revisions, max run name/id/notes	581	230331	32769	46088	14610	200	0
+e31e952	0	start/replay; 16 programs, max user id/name/notes	174	60854	32769	45094	9408	200	0
+e31e952	1	identity write fails before decision	94	52099	32769	45094	3807	500	0
+e31e952	2	identity unknown write/readback failure	97	52406	32769	45094	4009	503	0
+e31e952	3	settings name commit; 16 max-note programs	1159	516410	19890	69724	24485	200	0
+e31e952	4	first C++ allocation fails (native exception)	0	0	0	0	0	0	1
+e31e952	5	first cJSON allocation fails (checked null)	22	1369	193	684	0	400	0
+e31e952	6	adjust/replay; 32 revisions, max run name/id/notes	556	217808	32769	43698	14610	200	0

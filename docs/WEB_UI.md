@@ -290,9 +290,10 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
 - eine Meldung bei `403`, dass die Freigabe zuerst am Geraet erfolgen muss.
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
-Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-11456 Bytes (Ownerentscheid D1 = A fuer #27, Plan a671c33, einmalig von 11264 Bytes erhoeht; zuvor 10752 Bytes und D1-C von 8192 Bytes;
-Gesamtlaenge aus besessenem Kopf und statischem Anhang, siehe unten).
+Authentisierungsdomaene. Die weiterhin inline ausgelieferte Setup-Shell hat eine eigene Grenze von
+4096 B (Kopf plus Anhang, mindestens 128 B Reserve). Die normale Asset-Shell
+hat die getrennte Grenze 2048 B; die fruehere gemeinsame 11456-B-Grenze ist
+historisch (PR #209, freigegebener Plan b7d5e2d).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
 (optional `charset=utf-8`), gleiche Origin-/Fetch-Metadata-Pruefung wie die
@@ -415,11 +416,23 @@ leerer Chunk beendet eine erfolgreiche Antwort. Ein leerer Kopf wird ausgelassen
 Nach dem ersten Sendefehler folgen keine weiteren Chunks, auch kein Terminator;
 der Adapter gibt diesen Fehler zurück. Ohne Anhang gilt weiterhin der bisherige
 `httpd_resp_send`-Pfad. Shell-Antworten verwenden damit Chunked Transfer statt
-Content-Length; ihre zusammengesetzten HTML-/JS-Bytes bleiben gleich.
+Content-Length; die Setup-Shell bleibt bytegleich zum vorherigen Generator. Die normale
+Shell referenziert jetzt das getrennte versionierte Script (siehe unten).
 
-Die normale Shell reserviert 1536 B für ihren variablen Kopf; ihr konstanter
-Anhang (9797 B, vor der Sprachwahl 9619 B, vor den Standbyinformationen 9013 B, vor den Laufinformationen 6662 B) liegt im Flash (`.flash.rodata`; der Zuwachs ändert DRAM/IRAM des Kandidaten nicht, siehe [RAM-Bilanz](audits/PR206_RAM_FEASIBILITY_20261019.md)). Die Provisionierungs-Shell teilt ebenfalls ihren
-konstanten Script-Anhang ab. Die 11456-B-Grenze (Ownerentscheid D1 = A, Plan a671c33, zuvor 11264 B, 10752 B und 8192 B) gilt für Kopf **plus** Anhang.
+Die normale Shell enthaelt die sitzungsabhaengigen Konstanten `S/A/U/Q` und
+referenziert `GET /assets/app.<crc8>.js`; CRC-32 bindet die URL an die Scriptbytes.
+Der Asset ist oeffentlich, byte-konstant und frei von Sitzung, CSRF, Sequenz,
+Credentials und Konfiguration. Nur diese exakte URL erhaelt
+`Cache-Control: private, max-age=31536000, immutable`; alte/falsche Versionen,
+Queries und Unterpfade fallen zur 404 durch. Netzwerk-Setup behaelt Vorrang.
+Ein Asset-Ausfall zeigt einen sprachneutralen Hinweis in der Shell; ohne Script
+ist keine Bedienaktion moeglich. GET-only, gleiche Metadatenpruefung, kein Cookie.
+
+Getrennte Grenzen: normale Shell 2048 B, Setup-Shell 4096 B (beide mit mindestens
+128 B Normalreserve), Asset 16384 B (mindestens 1024 B Abschlussreserve).
+Der Asset liegt als unveraenderlicher Anhang im Flash, ohne Koerperkopie im Heap.
+Die konkrete aktuelle Offline-Messung steht in der
+[PR-209-Evidence](audits/PR209_WEB_REMAINING_SCOPE_IMPLEMENTATION.md).
 Alle Antwort-Ersetzungen löschen den Anhang, insbesondere JSON und Fehler:
 auch eine zunächst aufgebaute, anschließend zu große Shell liefert ausschließlich
 Status 503, `application/json; charset=utf-8` und
@@ -461,6 +474,49 @@ trennt die aktuelle PR-Einordnung von diesen offenen Nachweisen.
 C0=GO ist seit dem Ownerentscheid vom 2026-10-14 akzeptiert;
 Bootminimum 5228 B und lange GET-Gesamtdauern aus G0-R3 bleiben Hardwarebefunde.
 F2 ist nicht Teil dieses Umfangs. `ACTUATOR_RELEASE=NO`.
+
+## R1-Restumfang in PR #209
+
+Die Navigation enthaelt Uebersicht, Meldungen, Programme und Einstellungen und
+ist erst mit einer gueltigen Anzeige-Kopie sichtbar. Die Fragment-Allowlist
+beschraenkt sich auf diese Ansichten; aria-current und umbrechende Leiste mit
+2,75-rem-Touchflaechen sind strukturell vorhanden. Das Umschalten selbst
+veraendert keinen Fachzustand. Stale-/Offline-Daten bleiben gedaempft mit Abrufalter;
+Mutationen verlangen weiterhin einen frischen Status und alle bestehenden Gates.
+
+Meldungen erscheinen in API-Reihenfolge, mit unuebersetztem Code, Schweregrad und
+aktiv/quittiert/stumm/erledigt/Entscheidung erforderlich. Quittieren und Stumm je
+Zeile sind bei Busy, Stale/Offline, erledigten oder bereits erreichten Zustaenden
+gesperrt. Die Uebersichts-Aktionsleiste bleibt bestehen.
+
+`GET /api/v1/programs/<id>` liefert fuer einen installierten, aktivierten Eintrag
+Summary und Katalogrevision aus derselben Quelle. Identifiergrenzen 1–48 B,
+Session, kein Anfrage-Body, GET-only, Antwort hoechstens 3072 B. Unbekannt/
+deaktiviert/nicht installiert: 404; ungueltige ID: 400; Quelle nicht verfuegbar:
+503. Fehlende Werte bleiben null und nicht startbar. Die Web-Ansicht sendet nur
+abweichende Startoptionen ueber den bestehenden `start-program`-Intent;
+Programm, Katalogrevision und Eingaben sind an die Zwei-Klick-Bestaetigung
+gebunden. Eine alte oder fehlgeschlagene Detailantwort verwirft die Auswahl.
+
+`GET /api/v1/settings` liest Name, Zeitzone, UserConfiguration-Revision und
+`nameEditable` aus dem Application-Owner. Nur `set-device-name` schreibt, als
+Settings-Variante in `POST /internal/ui/run` hinter denselben Session-/CSRF-/
+Sequenz-/Digest-/Replay-Gates. Settings-Body bis 1024 B, Run-Body weiter 480 B;
+Antwort-/Replaybudget unveraendert. Fehlendes `r.u`, unbekannte Intents und
+`set-time-zone` werden ohne Mutation verworfen. Kein `applyTimeZone`.
+Namensvalidierung, Laufsperre und Commit liegen allein in der Application;
+Web-Commits persistieren Herkunft WebInterface/3, Touch weiterhin LocalDisplay/2.
+Hostname und WLAN-Name aendern sich erst beim naechsten normalen Netzwerk-/
+Geraetestart; die UI zeigt diesen Hinweis am Namensfeld und im Ergebnis.
+
+Die Ergebnisanzeige unterscheidet stale/busy/rejected/confirmation-required/
+too-large/write-failed. Bei unavailable bzw. unbestimmtem Commit wird kein
+Erfolg behauptet: Sequenz gesperrt, Settings/Status neu geladen, sichtbarer
+Pruefhinweis. Ein Browser-Reload initialisiert die Sequenz erneut aus der Shell.
+Native und Fake-DOM-Nachweise ersetzen weder Browserlayout/-Bedienung noch
+Geraetelast, HWM oder Heap: diese bleiben NOT_PROVEN bis zum separat
+freizugebenden D9-Testpunkt. Manuellbetrieb, Diagnose, Diagramme, Journale,
+Exporte, Backup, Service und Programmeditor sind durch diesen PR nicht erledigt.
 
 ## Startseite der angemeldeten Shell (R1-Slice, Issue #27)
 
@@ -600,14 +656,15 @@ Verbindliche Regeln:
 Auch bei entsperrtem Servicebereich benoetigen kritische Aktionen eine eigene
 Bestaetigung, beispielsweise:
 
-- vollstaendiger Werksreset
 - Netzwerkeinstellungen loeschen
 - Touchkalibrierung zuruecksetzen
 - Sensorzuordnung aendern
 - direkte Aktortests starten
 
-Ein Werksreset oder eine vergleichbar weitreichende Aktion darf bei laengerer
-Inaktivitaet eine erneute PIN-Eingabe verlangen.
+Der vollstaendige Werksreset ist in Release 1 ausschliesslich lokal zugaenglich
+(PIN-geschuetzter Ablauf A und PIN-unabhaengiger Recoveryweg B+). Es gibt keine
+Web-Werksreset-Route; der Serviceabschnitt beschreibt fuer andere Funktionen
+zurueckgestellten Scope. PR #209 baut keine Service-Seite/-Route ohne Verbraucher.
 
 ## Live-Aktualisierung
 

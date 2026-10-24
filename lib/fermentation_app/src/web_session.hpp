@@ -22,6 +22,7 @@ inline constexpr std::size_t kMaximumCompletedMutationOutcomes = 8U;
 inline constexpr std::size_t kMaximumMutationMethodBytes = 16U;
 inline constexpr std::size_t kMaximumMutationPathBytes = 256U;
 inline constexpr std::size_t kMaximumWebRunMutationBodyBytes = 480U;
+inline constexpr std::size_t kMaximumWebMutationBodyBytes = 1024U;
 // Digest bytes only: four sessions, eight completed outcomes plus one
 // in-flight digest each. Entry metadata is covered by the manager size check.
 inline constexpr std::size_t kMaximumWebSessionReplayDigestBytes =

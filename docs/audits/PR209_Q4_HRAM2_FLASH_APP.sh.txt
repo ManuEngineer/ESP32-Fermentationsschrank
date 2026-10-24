@@ -1,0 +1,16 @@
+#!/bin/bash
+# G-F: app-only write at 0x10000 (never boot area, never state_store). Args: image tag
+set -e
+IMG="$1"; TAG="$2"
+export IDF_PATH=/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1
+export IDF_TOOLS_PATH=/var/lib/docker/data/engineering/home/manuel/.espressif
+. $IDF_PATH/export.sh >/dev/null 2>&1
+P="--port /dev/ttyUSB0 --baud 460800"
+SZ=$(stat -c %s "$IMG")
+echo "image $IMG size $SZ sha256 $(sha256sum "$IMG" | cut -d' ' -f1)"
+esptool $P --before default-reset --after no-reset write-flash --flash-mode dio --flash-freq 40m --flash-size 4MB 0x10000 "$IMG"
+LEN=$(( (SZ + 4095) / 4096 * 4096 ))
+esptool $P --before default-reset --after no-reset read-flash 0x10000 $LEN readback_$TAG.bin
+head -c $SZ readback_$TAG.bin | sha256sum
+sha256sum "$IMG"
+cmp <(head -c $SZ readback_$TAG.bin) "$IMG" && echo APP_READBACK_EQUALS_IMAGE=YES
