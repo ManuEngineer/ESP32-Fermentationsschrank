@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 3.0 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLAN NACHGEBESSERT, FIX VERIFICATION OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
+**2026-10-23 · PLAN-REVISION 3.1 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLAN NACHGEBESSERT, FIX VERIFICATION OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -526,9 +526,10 @@ Value-Intents `recovery-time-correction` und `sensor-selection` auf der exakten
 Plan-SHA dieser Revision. Bis dahin keine Produktaenderung, PR Draft/HOLD.
 
 **Q4-Ressourcen (§15):** Ownerrichtung zu `H-RAM-2` und `G-S` bestaetigt, **ausfuehrbare Freigaben
-stehen aus** (nach Fix Verification, auf der dann aktuellen Plan-SHA): K0 (ohne Login) und K1
-(authentifiziert, benoetigt `G-S`, weil jeder Login `state_store` schreibt). `G-R7`/`G-RUN` nicht
-freigegeben. Bis dahin `C5_RESOURCE_GATE=HOLD`, keine Hardwareaktion.
+stehen aus** (nach Fix Verification, auf der dann aktuellen Plan-SHA). Quellenbefund Boot-Schreibpfad:
+`P1_BOOT_WRITES_STATE_STORE=CONDITIONAL`, `K0_WITHOUT_G_S=NOT_ELIGIBLE` → `G-S` ist Voraussetzung
+bereits fuer den ersten Diagnoseflash/Boot (K0 **und** K1); ohne `G-S` `HOLD` vor dem Flash.
+`G-R7`/`G-RUN` nicht freigegeben. Bis dahin `C5_RESOURCE_GATE=HOLD`, keine Hardwareaktion.
 
 ## 11. Risiken
 
@@ -1683,12 +1684,12 @@ Jeder Boot beginnt mit EN-Reset, wartet 60 s bis zum stabilen Serverzustand und 
 genau die genannten Anfragen aus; der Boot-/Startzustand und die Image-Hash-Identitaet werden
 im Protokoll festgehalten. Lastzustand ueberall: WLAN, LVGL im Normalbetrieb, ein Browserclient.
 
-| Boot | Pfadmenge `B` | Zweck / Auswertung | Schreibt `state_store`? | Freigabe |
+| Boot | Pfadmenge `B` | Zweck / Auswertung | Schreibt `state_store`? | Gruppe (Freigabe: siehe §15.7) |
 |---|---|---|---|---|
-| B0 | keine Anfrage, 5 min Idle | Basislinie **nur** Boot-/Heap-/Main-HWM aus `logResources()`/Bootlog; der HTTPD-HWM ist ohne Handleraufruf mit dem Overlay-Muster **nicht** messbar und wird fuer B0 nicht beansprucht, ausser die im Diagnoseumfang ausdruecklich genannte Task-HWM-Probe (30-s-Takt liest `uxTaskGetStackHighWaterMark(xTaskGetHandle("httpd"))`, nur lesend) ist genehmigt | nur falls der Boot selbst schreibt (Referenzboot, §15.6.5) | K0 (ohne `G-S`) |
-| B1 | GET Shell **unauthentifiziert** (Login-Shell) | einzelner Pfad (isoliert); `S(GET shell)` | nein erwartet | K0 |
-| B1a | GET Asset (oeffentlich) | einzelner Pfad (isoliert); optional, kann an B1 gebunden werden | nein erwartet | K0 |
-| B1u | GET Status ohne Session (**401-Probe**) | nur Fehlerpfad; **kein** Nachweis des Read-only-Encoders | nein erwartet | K0 |
+| B0 | keine Anfrage, 5 min Idle | Basislinie **nur** Boot-/Heap-/Main-HWM aus `logResources()`/Bootlog; der HTTPD-HWM ist ohne Handleraufruf mit dem Overlay-Muster **nicht** messbar und wird fuer B0 nicht beansprucht, ausser die im Diagnoseumfang ausdruecklich genannte Task-HWM-Probe (30-s-Takt liest `uxTaskGetStackHighWaterMark(xTaskGetHandle("httpd"))`, nur lesend) ist genehmigt | nur falls der Boot selbst schreibt (Referenzboot, §15.6.5) | K0 (unter `G-S`, siehe §15.6.5a) |
+| B1 | GET Shell **unauthentifiziert** (Login-Shell) | einzelner Pfad (isoliert); `S(GET shell)` | nein erwartet | K0 (unter `G-S`) |
+| B1a | GET Asset (oeffentlich) | einzelner Pfad (isoliert); optional, kann an B1 gebunden werden | nein erwartet | K0 (unter `G-S`) |
+| B1u | GET Status ohne Session (**401-Probe**) | nur Fehlerpfad; **kein** Nachweis des Read-only-Encoders | nein erwartet | K0 (unter `G-S`) |
 | B3 | Login (korrektes Passwort), sonst nichts | einzelner Pfad (isoliert); `S(POST login)` | **ja** (`writeCredentials`) | K1 (`G-S`) |
 | B2 | Login → authentifizierter GET Status/read-only | **nicht isoliert**: `M(B2)` nur kumulativ ueber Login **und** GET gegen `R(B2)=max(S_entry, S_log, S(login), S(GET read-only))+320` | **ja** (Login) | K1 (`G-S`) |
 | B4 | Login + `sensor-selection` (abgelehnt) | tiefster abgelehnter Decision-Pfad; `R = max(S_login, S_prepare, S_confirm, S_visitor-sensor) + 320` | **ja** (Login) | K1 (`G-S`) |
@@ -1696,17 +1697,18 @@ im Protokoll festgehalten. Lastzustand ueberall: WLAN, LVGL im Normalbetrieb, ei
 | B6 | Login + Geraetenamen-Commit (zweimal) | Settings-/NVS-Konfigurationspfad; `R` ueber die Menge | **ja** (Login + Konfigurationsgraph) | K1 (`G-S`) |
 
 Reihenfolge der Profile: **zuerst das 12-KiB-Stack-Diagnoseprofil** (alle Boots B0–B6), **danach**,
-sofern sicher durchfuehrbar, das produktnahe 8-KiB-Heap-Profil. Die Abdeckung **ohne `G-S`** ist
-bewusst auf K0 begrenzt (B0, B1, B1a, B1u): das ist eine stark reduzierte Coverage ohne
-authentifizierte Pfade, ohne Settings und ohne Read-only-Encoder.
+sofern sicher durchfuehrbar, das produktnahe 8-KiB-Heap-Profil. **K0** (B0, B1, B1a, B1u) ist die
+Teilmenge ohne Login: stark reduzierte Coverage ohne authentifizierte Pfade, ohne Settings und ohne
+Read-only-Encoder. **Auch K0 wird nur unter `G-S` ausgefuehrt**, weil schon der erste Diagnoseboot
+(P1/B0) `state_store`/`nvs` schreiben kann (§15.6.5a); „K0 ohne `G-S`“ ist `NOT_ELIGIBLE`.
 
 - **Heap-Lauf (8-KiB-Image):** ein durchgehender Lauf Boot → Netzwerk → LVGL → 5 min Idle → ein
   Browserclient: **ein Login** (persistenter Schreibpfad, mitzumessen) mit 5-s-Polling (die
   Session endet nach 30 min Idle, Polling erneuert sie nicht; bei laengerem Lauf zaehlt jeder
   weitere Login als Schreibzugriff) → optional Owner-Touch durch die vorhandenen Seiten (wie
   PR #174) → neun abgelehnte Mutationen → Geraetenamen-Commit → 5 min Erholung. Der
-  authentifizierte Lauf gehoert zu K1 und braucht `G-S`; ohne `G-S` nur K0 (kein Polling der
-  geschuetzten Routen). Heap-Tripel zu klar benannten Zeitpunkten, keine pfadweisen Stackwerte.
+  authentifizierte Lauf gehoert zu K1; wie K0 laeuft er nur unter `G-S`. Eine
+  K0-Variante des Heap-Laufs hat kein Polling der geschuetzten Routen. Heap-Tripel zu klar benannten Zeitpunkten, keine pfadweisen Stackwerte.
 - Run-Persistenz/Checkpoint und Maximalkatalog sind **nicht** Teil (Zeilen 6–8, 11).
 - **Abbruch:** jeder Reset/Panic/Watchdog/Brownout, jedes `heap_alloc_failed` in der Idle-/
   Polling-Phase, Geraet > 60 s nicht erreichbar, `M(B) > R(B)` (dann Stopp und Untersuchung,
@@ -1723,9 +1725,50 @@ Umgang:
 | Bereich | Wird beruehrt von | Behandlung |
 |---|---|---|
 | App `factory` `0x10000`–`0x2FFFFF` | Flash des Diagnoseimages | wie H-RAM-1: zweifach lesen, SHA-256, App-only-Flash, Readback-Hash, Rueckflash und Hash-Vergleich |
-| `state_store` `0x300000`–`0x3FFFFF` | **jeder erfolgreiche Passwort-Login** (Credential-Record, `recordSequence + 1`), Geraetenamen-Commit (Konfigurationsgraph, Revisionen), moeglicherweise normaler Boot | getrennt gesichert und identifiziert (siehe unten); **nur ueber den hier definierten Rueckfall** wiederhergestellt |
+| `state_store` `0x300000`–`0x3FFFFF` | **jeder erfolgreiche Passwort-Login** (Credential-Record, `recordSequence + 1`), Geraetenamen-Commit (Konfigurationsgraph, Revisionen), bedingt der Diagnoseboot selbst (§15.6.5a) | getrennt gesichert und identifiziert (siehe unten); **nur ueber den hier definierten Rueckfall** wiederhergestellt |
 | `nvs` `0x9000`–`0xEFFF`, `phy_init` `0xF000` | ESP-IDF-System-NVS/PHY-Kalibrierung, moeglicherweise bei Boots | nur lesen und Hash vergleichen; **nicht** schreiben (Abweichung wird berichtet) |
 | Bootloader/Partitionstabelle `0x0`–`0x8FFF` | nicht beruehrt (Produktpartitionstabelle bleibt) | Hash-Vergleich vorher/nachher |
+
+##### 15.6.5a Boot-Schreibpfad und Vor-Flash-Gate (Quellenbefund)
+
+Quellengestuetzte Pruefung des Bootpfads bis zum stabilen Idle:
+[BOOT_WRITE_PATHS](../audits/PR209_Q4_HRAM2_BOOT_WRITE_PATHS_20261024.md). Im Steady-State
+(Bootstrap `Initialized`, Auth-Handoff `Consumed`, Credential-Schema v2, valide PHY-Kalibrierung,
+keine NVS-Reste) enthaelt der Code **keinen** Schreibpfad. Schreiben koennen dagegen: leere
+Partition/fehlender Namespace, Bootstrap `Empty`/`Initializing`/`Resetting`, Auth-Handoff
+`None`/`Unconsumed`/`InProgress`, fehlendes bzw. v1-Credential, NVS-Reste unterbrochener Schreibvorgaenge
+(Duplikate, `FREEING`-Seiten, verwaiste Blobs) und die PHY-Kalibrierung in `nvs` (fehlende/ungueltige
+Daten, MAC- oder Versionsabweichung). Der Gerätezustand ist ohne lesendes `P0` **nicht belegt**.
+
+```text
+P1_BOOT_WRITES_STATE_STORE=CONDITIONAL    P1_BOOT_WRITES_NVS_PHY=CONDITIONAL
+K0_WITHOUT_G_S=NOT_ELIGIBLE               (-> HOLD vor dem ersten Diagnoseflash ohne G-S)
+```
+
+- **Vor dem ersten Flash:** nur lesendes `P0` (doppelt, byteidentisch, SHA-256) und der
+  quellengestuetzte Preflight. Zusaetzlich wird das `P0`-Abbild von `state_store` und `nvs` **offline**
+  mit den vorhandenen lesenden IDF-Werkzeugen (`components/nvs_flash/nvs_partition_tool/nvs_tool.py`,
+  `nvs_check.py`) klassifiziert (Bootstrap-/Handoff-Zustand, Credential-Schema, NVS-Reste,
+  `phy`-Namespace inkl. `cal_mac`/`cal_version`); die Klassifikation ist Evidenz, kein Freibrief:
+  sie macht K0 **nicht** zu `ELIGIBLE`. Der Diagnoseflash mit anschliessendem Boot P1/B0 wird nur
+  zusammen mit vorbereitetem und freigegebenem `G-S` ausgefuehrt; es gibt keine Freigabe, die erst
+  **nach** P1 festgestellte Schreibzugriffe nachtraeglich genehmigt.
+- **Nach P1 (und nach jedem weiteren Boot):** `state_store`-Hash gegen den jeweiligen Vorgaenger
+  vergleichen, `nvs`/`phy_init` getrennt. Bei veraendertem `state_store`: keine weiteren K0-/K1-
+  Boots, bevor Abweichung (Entry-Diff per `nvs_tool.py`), byte-exakter Rueckfall (RB-2) und
+  definierte Ausgangsbasis geklaert sind. Bei unveraendertem Hash: keine pauschale
+  Schreibfreiheits- oder Vollabnahmebehauptung fuer andere Zustaende/Boots.
+- **Vergleichbarkeit (Hashkette):** jede Messung nennt ihren Ausgangs-Hash (`P0` oder den
+  ausdruecklich dokumentierten Vorgaengerzustand). Erwartete Aenderungen (Login:
+  `recordSequence + 1`, Namenscommit: Konfig-Records) werden per Entry-Diff klassifiziert. Ein
+  Restore auf `P0` (RB-2) ist erforderlich: bei unerwarteter Abweichung, vor einer Messung, die
+  `P0` als Ausgangsbasis braucht, und am Ende der K1-Serie. Keine stillschweigende Uebernahme
+  eines durch P1, Login oder Commit veraenderten Zustands als neue Baseline.
+- **`nvs`/`phy_init`:** bleiben **nur lesend**. Wird `nvs` (PHY-Kalibrierung) durch den Boot
+  veraendert, wird das berichtet und es folgt **kein** Restore/Erase dieser Partition ohne neue,
+  ausdrueckliche Ownerentscheidung; ein Rueckfall dafuer ist **ungeklaert** (keine neue
+  Freigabekategorie, kein ungepruefter Schreibumfang). Weitere Boots laufen dann nur nach
+  dokumentierter Entscheidung.
 
 **Vor der ersten Messung (nur lesen, `P0`):** Geraeteidentifikation (Chip/MAC/Flash-ID,
 Boot-Quell-SHA); `0x0`–`0xFFFF`, App und `state_store` je **zweimal** auslesen, beide Lesungen
@@ -1754,10 +1797,7 @@ Das ergibt, ob schon der Boot persistent schreibt, bevor Szenarien laufen.
 - **Regel:** **Jeder authentifizierte Boot (B2–B6) und der authentifizierte Heap-Lauf starten nur,
   wenn `G-S` erteilt ist** und RB-2 mit den vorab verifizierten, doppelt gelesenen Backups
   bereitsteht; der Rueckfall RB-1 allein genuegt dafuer nicht (ein Login ist per Web nicht
-  rueckgaengig zu machen, `recordSequence` steigt monoton). Ohne `G-S` laeuft ausschliesslich K0
-  (B0, B1, B1a, B1u); K1 entfaellt (`NOT_RUN`). Nach jedem Ablauf wird `state_store` per Hash mit
-  `P0` verglichen; eine unerwartete Abweichung stoppt die Messung und wird gemeldet, es folgt
-  **kein** automatischer Restore ohne `G-S`.
+  rueckgaengig zu machen, `recordSequence` steigt monoton). **Ohne `G-S` laeuft nichts am Geraet:** schon der erste Diagnoseboot (P1/B0) kann schreiben (§15.6.5a); K0 und K1 sind beide `HOLD` vor dem Flash. Nach jedem Ablauf wird `state_store` per Hash mit dem dokumentierten Vorgaenger (Hashkette, §15.6.5a) verglichen; eine unerwartete Abweichung stoppt die Messung und wird gemeldet, es folgt **kein** automatischer Restore ohne `G-S`.
 - **Abbruchfall (Bootloop, unerreichbare Weboberflaeche, Reset):** UART-Beleg → App-Rueckflash
   (`G-F`) aus dem verifizierten Backup; da jeder Login `state_store` veraendert hat, folgt RB-2
   (`G-S`) mit Readback-Hash gleich `P0` – dieser Weg braucht weder Weboberflaeche noch laufende
@@ -1822,31 +1862,40 @@ ausdruecklich auf der dann aktuellen Plan-SHA nach bestandener Fix Verification.
 
 **Zwei Zugriffstypen, logisch gekoppelt (zur ausdruecklichen Freigabe vorzulegen, noch nicht
 erteilt):**
-- **Teil K0 – ohne Login, ohne `state_store`-Schreibzugriff durch die Szenarien:** zwei non-merge
+- **Teil K0 – ohne Login (B0, B1, B1a, B1u), ebenfalls nur unter `G-S`:** zwei non-merge
   Diagnoseimages auf Produktstand `80bfb28`; `G-F` app-only Flash `0x10000`–`0x2FFFFF` mit zwei
   byteidentischen Backups und Hash-verifiziertem Rueckflash; `G-U` UART; `G-R` EN-/BOOT-Reset;
-  `G-B` HTTP; Lesezugriffe auf `0x0`–`0xFFFF`, App und `state_store` (`P0`/`P1`/Nachvergleich);
-  Boots B0, B1, B1a, B1u. Ergebnis: stark reduzierte Coverage (unauthentifizierter Shell/Asset,
-  Boot-/Heap-/Main-Basislinie, 401-Probe), **kein** Nachweis der authentifizierten Pfade.
-- **Teil K1 – authentifizierter Kern (B2–B6, authentifizierter Heap-Lauf):** **benoetigt `G-S`**
+  `G-B` HTTP; Lesezugriffe auf `0x0`–`0xFFFF`, App und `state_store` (`P0`, offline-
+  Klassifikation, Hashkette). Die Szenarien selbst schreiben nicht, aber **der Diagnoseboot
+  (P1/B0) kann `state_store`/`nvs` schreiben** (§15.6.5a, `K0_WITHOUT_G_S=NOT_ELIGIBLE`); deshalb
+  wird `G-S` bereits **vor dem ersten Diagnoseflash** vorbereitet und freigegeben. Ergebnis: stark
+  reduzierte Coverage (unauthentifizierter Shell/Asset, Boot-/Heap-/Main-Basislinie, 401-Probe).
+- **Teil K1 – authentifizierter Kern (B2–B6, authentifizierter Heap-Lauf):** ebenfalls `G-S`
   (physischer Erase-/Schreibzugriff auf `state_store`, `0x300000`, 1 MiB, byte-exakter Rueckfall
-  RB-2 mit Readback-Hash gleich `P0`), weil jeder erfolgreiche Login den Credential-Record
-  schreibt. Kein authentifizierter Lauf und **kein `H-RAM-2`-Gesamtlauf ohne freigegebenen
-  Recovery-Pfad**.
+  RB-2 mit Readback-Hash gleich `P0`), weil zusaetzlich jeder erfolgreiche Login den
+  Credential-Record schreibt. Kein authentifizierter Lauf und **kein `H-RAM-2`-Lauf (auch nicht K0)
+  ohne freigegebenen Recovery-Pfad**. Die Szenarioauswahl (zuerst K0, dann K1) bleibt moeglich;
+  `G-S` ist fuer beide dieselbe Voraussetzung.
 
 **Zulaessige Szenarien und Abdeckung:**
 
 | Szenario | ohne `G-S` | mit `G-S` | Abdeckung |
 |---|---|---|---|
-| B0 Boot-/Heap-/Main-Basislinie | ja | ja | Boot, Heap, Main-HWM (HTTPD-HWM nur mit genehmigter Task-HWM-Probe) |
-| B1 / B1a unauthentifizierter Shell / Asset | ja | ja | Einzelpfade, isoliert |
-| B1u 401-Probe Status | ja | ja | nur Fehlerpfad, kein Encoder |
-| B3 Login | nein | ja | Einzelpfad + persistenter Schreibpfad |
-| B2 Login → authentifizierter Status | nein | ja | kumulativ ueber Login+GET |
-| B4 / B5 abgelehnte Intents | nein | ja | Prepare/Confirm/Decision nur Ablehnung |
-| B6 Namenscommit | nein | ja | Settings-/Konfigurations-NVS |
-| Authentifizierter Heap-Lauf | nein | ja | Teilnachweis Normalbetrieb |
+| P0 lesende Sicherung + offline-Klassifikation | ja (nur Lesen, kein Boot der Firmware) | ja | Ausgangszustand |
+| Diagnoseflash + P1/B0 Boot-/Heap-/Main-Basislinie | **HOLD (nicht zulaessig)** | ja | Boot, Heap, Main-HWM (HTTPD-HWM nur mit genehmigter Task-HWM-Probe) |
+| B1 / B1a unauthentifizierter Shell / Asset | HOLD | ja | Einzelpfade, isoliert |
+| B1u 401-Probe Status | HOLD | ja | nur Fehlerpfad, kein Encoder |
+| B3 Login | HOLD | ja | Einzelpfad + persistenter Schreibpfad |
+| B2 Login → authentifizierter Status | HOLD | ja | kumulativ ueber Login+GET |
+| B4 / B5 abgelehnte Intents | HOLD | ja | Prepare/Confirm/Decision nur Ablehnung |
+| B6 Namenscommit | HOLD | ja | Settings-/Konfigurations-NVS |
+| Authentifizierter Heap-Lauf | HOLD | ja | Teilnachweis Normalbetrieb |
 | Run-Store, Checkpoint, RAM-only-Sensor, Maximalkatalog | `NOT_RUN` | `NOT_RUN` | siehe §15.6.1 |
+
+**Ausfuehrbarer Umfang auf einer neuen Plan-SHA (nach Fix Verification dieses Deltas):**
+`H-RAM-2` (K0 und K1, Stack-Diagnoseprofil zuerst, danach Heap-Profil) zusammen mit `G-F` und `G-S`
+als **gemeinsam** zur ausdruecklichen Freigabe vorzulegender Umfang; `G-U`/`G-R`/`G-B` wie
+beschrieben. Ein Teilumfang „nur K0 ohne `G-S`“ wird nicht angeboten.
 
 **Nicht erbeten:** `G-R7` (Slice-7-Harness, destruktiv), `G-RUN` (erfolgreicher Run-Pfad,
 aktorrelevant, an #30/#35 gebunden), Maximalkatalog-Hilfe. Bis zu den ausdruecklichen Freigaben
