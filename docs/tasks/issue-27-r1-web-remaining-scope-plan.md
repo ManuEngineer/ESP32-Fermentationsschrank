@@ -521,6 +521,11 @@ Asset-Version, Asset blockiert/503, B-1/B-2 sichtbar) ist auf dem finalen Stand 
 ([Vorbereitung](../audits/PR209_Q4_D9_PREPARATION_20261024.md)), aber `NOT_RUN`; er wartet auf die gesonderte Ownerfreigabe
 `G-F`/`G-S`/`G-U`/`G-R`/`G-B` fuer das exakte Image.
 
+**Ergebnis 2026-10-24 ([D9-Ergebnis](../audits/PR209_Q4_D9_RESULT_20261024.md)):** D9 auf dem Messimage `7e693ebf…` ausgefuehrt
+(Desktop, Mobil-Emulation, B-1/B-2 sichtbar, 404 real, Asset-Ausfall/-503 simuliert, Heap/HWM, kein Panic/Reset/`heap_alloc_failed`);
+Runner-Auswertung der Cache-Pruefung `FAIL` (Runner-Defekt), Folgepruefung und Geraeteseite bestaetigen den Cache-Treffer; Restore hash-gleich `P0`,
+Kontrollboot `NOT_RUN`. **`D9=PARTIAL`** bis zur Bewertung im unabhaengigen Review.
+
 ## 10. Offene Ownerfragen
 
 **Q3:** Freigabe dieser exakten Planrevision fuer die begrenzte Stackkorrektur
@@ -2052,3 +2057,15 @@ bzw. Aktorfreigabe verbindlich (Zuordnung zu #30/#190, #32/#33, #34/#35, #36/#37
 [Vorbereitungs-Evidence](../audits/PR209_Q4_D9_PREPARATION_20261024.md) §1). Historische `FAIL`-/`NOT_RUN`-Nachweise werden nicht
 ueberschrieben. Eine Pre-Ready-/Ready-/Merge-Freigabe folgt nur nach unabhaengigem Review-GO und `OPEN_BLOCKERS=0` auf separate
 Ownerfreigabe.
+
+### 15.13 D9-Abschlusslauf (ausgefuehrt, Bewertung offen)
+
+Ausgefuehrt am 2026-10-24 unter `G-F`/`G-S`/`G-U`/`G-R`/`G-B` auf dem Messimage `7e693ebfad1a5e8b4ab2c3c7f107dae36327ecb80d92225bb45033141ad47a06`
+(Produkt `0dc3aef` + lokales Overlay `98eb608`; nicht das uninstrumentierte Produktimage). Ergebnis in
+[PR209_Q4_D9_RESULT_20261024](../audits/PR209_Q4_D9_RESULT_20261024.md): kein Panic/Reset/Watchdog/`heap_alloc_failed`; HTTPD-Stacknutzung 6 032 B
+(Rest 2 672 B), `internal_min` 19 792 B, groesster Block 18 432 B (Tiefststand bei Asset-Anfragen, erholt sich: 41 932 B frei / 34 816 B Block);
+Desktop/Mobil-Emulation, B-1/B-2, 404 und Asset-Ausfall (simuliert) bestanden; **eine Runner-Pruefung (Cache-Treffer) meldete `FAIL` wegen eines
+Auswertungsfensters im Runner**, Gesamtstatus des Laufs `end=FAIL`; Folgepruefung `CACHE_HIT=PASS` und UART-Befund (Reload ohne Asset-Request) belegen den Treffer.
+`state_store` nur `auth0` geaendert, danach byteidentisch zu `P0` wiederhergestellt; Kontrollboot der Original-Firmware `NOT_RUN`.
+`D9=PARTIAL` bis zur Review-Bewertung; keine Umdeklaration von `NOT_PROVEN`. `C5_RESOURCE_GATE=ACCEPTED_PARTIAL_FOR_PR209`,
+`PR209_MERGE=HOLD`, `ACTUATOR_RELEASE=NO`.

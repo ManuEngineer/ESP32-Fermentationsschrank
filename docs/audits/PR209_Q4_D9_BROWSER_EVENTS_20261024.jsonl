@@ -1,0 +1,35 @@
+{"wall":"2026-10-24T19:16:41.195Z","phase":"start","kind":"INFO","result":"INFO","detail":"device=<DEVICE_IP> chromium=149.0.7827.55"}
+{"wall":"2026-10-24T19:16:42.182Z","phase":"desktop first load: shell + versioned asset","kind":"REAL","result":"PASS","detail":"requests=2 asset=/assets/app.b9938685.js cache-control=private, max-age=31536000, immutable"}
+{"wall":"2026-10-24T19:16:45.330Z","phase":"desktop B-1 wrong password visible de","kind":"REAL","result":"PASS","detail":"Passwort · Abgelehnt"}
+{"wall":"2026-10-24T19:16:48.639Z","phase":"desktop B-1 wrong password visible en","kind":"REAL","result":"PASS","detail":"Password · Rejected"}
+{"wall":"2026-10-24T19:16:51.919Z","phase":"desktop B-1 wrong password visible es","kind":"REAL","result":"PASS","detail":"Contrasena · Rechazado"}
+{"wall":"2026-10-24T19:16:54.809Z","phase":"desktop login success","kind":"REAL","result":"PASS","detail":"logout button visible"}
+{"wall":"2026-10-24T19:16:56.417Z","phase":"desktop view Uebersicht (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:16:57.706Z","phase":"desktop view Meldungen (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:16:58.977Z","phase":"desktop view Programme (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:00.279Z","phase":"desktop view Einstellungen (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:01.883Z","phase":"desktop view Overview (en)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:03.173Z","phase":"desktop view Alerts (en)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:04.450Z","phase":"desktop view Programs (en)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:05.749Z","phase":"desktop view Settings (en)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:07.340Z","phase":"desktop view Resumen (es)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:08.591Z","phase":"desktop view Alertas (es)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:09.887Z","phase":"desktop view Programas (es)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:11.186Z","phase":"desktop view Ajustes (es)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:13.343Z","phase":"desktop B-2 empty name rejected de","kind":"REAL","result":"PASS","detail":"Geraetename · Abgelehnt"}
+{"wall":"2026-10-24T19:17:15.481Z","phase":"desktop B-2 empty name rejected en","kind":"REAL","result":"PASS","detail":"Device name · Rejected"}
+{"wall":"2026-10-24T19:17:17.635Z","phase":"desktop B-2 empty name rejected es","kind":"REAL","result":"PASS","detail":"Nombre · Rechazado"}
+{"wall":"2026-10-24T19:17:18.794Z","phase":"desktop cache-hit on second shell load (asset not refetched)","kind":"REAL","result":"FAIL","detail":"no shell response"}
+{"wall":"2026-10-24T19:17:21.325Z","phase":"mobile-emulated first load: shell + versioned asset","kind":"REAL","result":"PASS","detail":"requests=2 asset=/assets/app.b9938685.js cache-control=private, max-age=31536000, immutable"}
+{"wall":"2026-10-24T19:17:24.728Z","phase":"mobile-emulated B-1 wrong password visible de","kind":"REAL","result":"PASS","detail":"Passwort · Abgelehnt"}
+{"wall":"2026-10-24T19:17:27.936Z","phase":"mobile-emulated login success","kind":"REAL","result":"PASS","detail":"logout button visible"}
+{"wall":"2026-10-24T19:17:29.606Z","phase":"mobile-emulated view Uebersicht (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:30.950Z","phase":"mobile-emulated view Meldungen (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:32.281Z","phase":"mobile-emulated view Programme (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:33.638Z","phase":"mobile-emulated view Einstellungen (de)","kind":"REAL","result":"PASS","detail":""}
+{"wall":"2026-10-24T19:17:35.851Z","phase":"mobile-emulated B-2 empty name rejected de","kind":"REAL","result":"PASS","detail":"Geraetename · Abgelehnt"}
+{"wall":"2026-10-24T19:17:37.533Z","phase":"stale asset URL returns 404 from the device","kind":"REAL","result":"PASS","detail":"status 404"}
+{"wall":"2026-10-24T19:17:38.726Z","phase":"stale asset: visible hint, then reload recovers","kind":"SIMULATED","result":"PASS","detail":"hint=\"Script unavailable / Skript nicht verfuegbar / Script no dis\" recovered=yes (rewrite simulated, 404 real)"}
+{"wall":"2026-10-24T19:17:39.081Z","phase":"asset abort: visible failure hint, no mutation","kind":"SIMULATED","result":"PASS","detail":"hint=\"Script unavailable / Skript nicht verfuegbar / Script no dis\""}
+{"wall":"2026-10-24T19:17:39.370Z","phase":"asset 503: visible failure hint, no mutation","kind":"SIMULATED","result":"PASS","detail":"hint=\"Script unavailable / Skript nicht verfuegbar / Script no dis\""}
+{"wall":"2026-10-24T19:17:39.382Z","phase":"end","kind":"INFO","result":"FAIL","detail":"failed checks=1 unexpected console/page errors=0 "}

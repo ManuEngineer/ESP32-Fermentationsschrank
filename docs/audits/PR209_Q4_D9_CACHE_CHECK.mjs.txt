@@ -1,0 +1,18 @@
+// D9 follow-up: corrected cache-hit evaluation (login-free; the original runner window `net.slice(-6)` lost the shell response).
+import { createRequire } from 'node:module';
+const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT);
+const BASE = 'http://' + process.env.DEVICE;
+const b = await chromium.launch({ headless: true }); const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, locale: 'de-CH' });
+const page = await ctx.newPage(); const cdp = await ctx.newCDPSession(page); await cdp.send('Network.enable');
+const urls = new Map(), cached = new Set(), resp = [];
+cdp.on('Network.requestWillBeSent', e => urls.set(e.requestId, e.request.url));
+cdp.on('Network.requestServedFromCache', e => cached.add(e.requestId));
+cdp.on('Network.responseReceived', e => resp.push({ id: e.requestId, url: e.response.url.replace(BASE, ''), status: e.response.status, fromDisk: e.response.fromDiskCache }));
+const phase = async name => { const n0 = resp.length; const c0 = new Set(cached);
+  if (name === 'first') await page.goto(BASE + '/'); else await page.reload(); await page.waitForLoadState('networkidle');
+  const r = resp.slice(n0).filter(x => x.url === '/' || x.url.startsWith('/assets/'));
+  return { phase: name, responses: r.map(x => `${x.url} ${x.status}${x.fromDisk ? ' (disk cache)' : ''}`), assetServedFromCache: [...urls].some(([id, u]) => u.includes('/assets/app.') && cached.has(id) && !c0.has(id)) }; };
+const first = await phase('first'); await new Promise(r => setTimeout(r, 1500)); const second = await phase('reload');
+console.log(JSON.stringify({ wall: new Date().toISOString(), first, second }));
+const ok = first.responses.some(x => x.startsWith('/ 200')) && first.responses.some(x => /^\/assets\/app\.[0-9a-f]{8}\.js 200$/.test(x)) && second.responses.some(x => x.startsWith('/ 200')) && second.assetServedFromCache;
+console.log(ok ? 'CACHE_HIT=PASS' : 'CACHE_HIT=FAIL'); await b.close(); process.exitCode = ok ? 0 : 1;

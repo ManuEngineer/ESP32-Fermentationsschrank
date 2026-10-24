@@ -1,0 +1,36 @@
+INFO  INFO       start device=<DEVICE_IP> chromium=149.0.7827.55
+PASS  REAL       desktop first load: shell + versioned asset requests=2 asset=/assets/app.b9938685.js cache-control=private, max-age=31536000, immutable
+PASS  REAL       desktop B-1 wrong password visible de Passwort · Abgelehnt
+PASS  REAL       desktop B-1 wrong password visible en Password · Rejected
+PASS  REAL       desktop B-1 wrong password visible es Contrasena · Rechazado
+PASS  REAL       desktop login success logout button visible
+PASS  REAL       desktop view Uebersicht (de) 
+PASS  REAL       desktop view Meldungen (de) 
+PASS  REAL       desktop view Programme (de) 
+PASS  REAL       desktop view Einstellungen (de) 
+PASS  REAL       desktop view Overview (en) 
+PASS  REAL       desktop view Alerts (en) 
+PASS  REAL       desktop view Programs (en) 
+PASS  REAL       desktop view Settings (en) 
+PASS  REAL       desktop view Resumen (es) 
+PASS  REAL       desktop view Alertas (es) 
+PASS  REAL       desktop view Programas (es) 
+PASS  REAL       desktop view Ajustes (es) 
+PASS  REAL       desktop B-2 empty name rejected de Geraetename · Abgelehnt
+PASS  REAL       desktop B-2 empty name rejected en Device name · Rejected
+PASS  REAL       desktop B-2 empty name rejected es Nombre · Rechazado
+FAIL  REAL       desktop cache-hit on second shell load (asset not refetched) no shell response
+PASS  REAL       mobile-emulated first load: shell + versioned asset requests=2 asset=/assets/app.b9938685.js cache-control=private, max-age=31536000, immutable
+PASS  REAL       mobile-emulated B-1 wrong password visible de Passwort · Abgelehnt
+PASS  REAL       mobile-emulated login success logout button visible
+PASS  REAL       mobile-emulated view Uebersicht (de) 
+PASS  REAL       mobile-emulated view Meldungen (de) 
+PASS  REAL       mobile-emulated view Programme (de) 
+PASS  REAL       mobile-emulated view Einstellungen (de) 
+PASS  REAL       mobile-emulated B-2 empty name rejected de Geraetename · Abgelehnt
+PASS  REAL       stale asset URL returns 404 from the device status 404
+PASS  SIMULATED  stale asset: visible hint, then reload recovers hint="Script unavailable / Skript nicht verfuegbar / Script no dis" recovered=yes (rewrite simulated, 404 real)
+PASS  SIMULATED  asset abort: visible failure hint, no mutation hint="Script unavailable / Skript nicht verfuegbar / Script no dis"
+PASS  SIMULATED  asset 503: visible failure hint, no mutation hint="Script unavailable / Skript nicht verfuegbar / Script no dis"
+FAIL  INFO       end failed checks=1 unexpected console/page errors=0 
+rc=1
