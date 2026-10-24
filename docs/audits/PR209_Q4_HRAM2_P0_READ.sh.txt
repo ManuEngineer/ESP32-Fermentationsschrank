@@ -1,0 +1,14 @@
+#!/bin/bash
+# P0: read-only flash reads via ROM bootloader (esptool read-flash). No write/erase command is used.
+set -e
+export IDF_PATH=/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1
+export IDF_TOOLS_PATH=/var/lib/docker/data/engineering/home/manuel/.espressif
+. $IDF_PATH/export.sh >/dev/null 2>&1
+P="--port /dev/ttyUSB0 --baud 460800"
+for run in A B; do
+  esptool $P --before default-reset --after no-reset read-flash 0x0 0x10000   boot_$run.bin
+  esptool $P --before default-reset --after no-reset read-flash 0x10000 0x2F0000 factory_$run.bin
+  esptool $P --before default-reset --after no-reset read-flash 0x300000 0x100000 state_store_$run.bin
+done
+sha256sum boot_A.bin boot_B.bin factory_A.bin factory_B.bin state_store_A.bin state_store_B.bin > SHA256SUMS
+cmp boot_A.bin boot_B.bin && cmp factory_A.bin factory_B.bin && cmp state_store_A.bin state_store_B.bin && echo P0_BYTE_IDENTICAL=YES

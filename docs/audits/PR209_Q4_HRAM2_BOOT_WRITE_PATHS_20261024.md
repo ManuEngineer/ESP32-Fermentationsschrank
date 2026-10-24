@@ -46,7 +46,7 @@ P1_BOOT_WRITES_STATE_STORE=CONDITIONAL
    Auth-Handoff None/Unconsumed/InProgress, fehlendem/v1-Credential, NVS-Resten. Gerätezustand NOT_PROVEN.)
 P1_BOOT_WRITES_NVS_PHY=CONDITIONAL
   (nvs/phy_init: PHY-Kaldaten fehlen/ungültig/MAC- oder Versionsabweichung, NVS-Reste in `nvs`.)
-SYSTEM_NVS_WRITE_AT_P1=NOT_PROVEN
+SYSTEM_NVS_WRITE_AT_P1=NOT_PROVEN   (Stand der Quellenprüfung; durch den P0-Preflight abgelöst: siehe PRE_P1_REPORT = EXCLUDED)
   (`nvs`/`phy_init`: Host-Zugriffe nur lesend; firmwareinterne Schreibvorgänge beim Boot möglich – NVS-Init-Reste, PHY-Kalibrierung.
    `G-S` deckt `nvs` nicht ab und ist kein Rückfall dafür; P1=HOLD, bis der Vor-P1-Bericht `EXCLUDED` ergibt oder der Owner entschieden hat.)
 K0_WITHOUT_G_S=NOT_ELIGIBLE   (tragfähiger Vor-Flash-Nachweis liegt nicht vor; erster Diagnoseflash mit P1/B0 ohne

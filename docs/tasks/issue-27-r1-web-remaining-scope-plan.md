@@ -1,6 +1,6 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-23 · PLAN-REVISION 3.2 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLAN NACHGEBESSERT, FIX VERIFICATION OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
+**2026-10-23 · PLAN-REVISION 3.3 mit Implementierungsnachtrag §13, Korrekturdelta §14 (FREIGEGEBEN `05f8d74`, UMGESETZT) und Ressourcenqualifikation §15 (M-H1 ABGESCHLOSSEN/GO, H-RAM-2 PLAN NACHGEBESSERT, FIX VERIFICATION OFFEN) · D1–D9/Q1/Q2/Q3 UNVERAENDERT · Q4 OPTION A auf Plan-SHA `623bc4520bcf3601d3666e7c717ae00213047901` FREIGEGEBEN UND UMGESETZT · RESSOURCENABSCHLUSS HOLD.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
@@ -528,7 +528,7 @@ Plan-SHA dieser Revision. Bis dahin keine Produktaenderung, PR Draft/HOLD.
 **Q4-Ressourcen (§15):** Ownerrichtung zu `H-RAM-2` und `G-S` bestaetigt, **ausfuehrbare Freigaben
 stehen aus** (nach Fix Verification, auf der dann aktuellen Plan-SHA). Quellenbefund Boot-Schreibpfad:
 `P1_BOOT_WRITES_STATE_STORE=CONDITIONAL`, `K0_WITHOUT_G_S=NOT_ELIGIBLE` → `G-S` ist Voraussetzung
-bereits fuer den ersten Diagnoseflash/Boot (K0 **und** K1); ohne `G-S` `HOLD` vor dem Flash. Zusaetzlich `SYSTEM_NVS_WRITE_AT_P1=NOT_PROVEN`: `G-S` deckt `nvs` nicht ab, P1 ist `HOLD`, bis der Vor-P1-Bericht `EXCLUDED` ergibt oder der Owner den System-NVS-Effekt ausdruecklich entschieden hat.
+bereits fuer den ersten Diagnoseflash/Boot (K0 **und** K1); ohne `G-S` `HOLD` vor dem Flash. Zusaetzlich `G-S` deckt `nvs` nicht ab; `SYSTEM_NVS_WRITE_AT_P1=EXCLUDED` laut `PRE_P1_REPORT` (P0-Preflight 2026-10-24, nur lesend). P1 bleibt `HOLD`, bis `G-F` und `G-S` ausdruecklich freigegeben sind.
 `G-R7`/`G-RUN` nicht freigegeben. Bis dahin `C5_RESOURCE_GATE=HOLD`, keine Hardwareaktion.
 
 ## 11. Risiken
@@ -1770,13 +1770,25 @@ entschieden und im Vor-P1-Bericht (`PRE_P1_REPORT`) festgehalten:
 | PHY-Konfiguration des Diagnoseimages unveraendert (`CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=1`, `RF_CAL_PARTIAL`) | `sdkconfig` des Diagnoseimages gegen die bekannte Produktkonfiguration |
 
 ```text
-SYSTEM_NVS_WRITE_AT_P1 = EXCLUDED | NOT_EXCLUDED | NOT_PROVEN        (derzeit: NOT_PROVEN)
+SYSTEM_NVS_WRITE_AT_P1 = EXCLUDED | NOT_EXCLUDED | NOT_PROVEN        (derzeit: EXCLUDED laut PRE_P1_REPORT 2026-10-24)
 EXCLUDED   -> P1 darf unter G-F + G-S laufen (Restunsicherheit nicht untersuchter IDF-Interna im Bericht benannt)
 sonst      -> P1=HOLD vor Flash/Boot, bis der Owner den moeglichen System-NVS-Effekt und dessen
               Umgang ausdruecklich entschieden hat (z. B. Akzeptanz einer moeglichen PHY-Kalibrier-
               speicherung ohne Restore, oder eine eigens zu erbittende Freigabe fuer einen
               `nvs`-Rueckfall). Diese Entscheidung ist in `G-S` nicht enthalten.
 ```
+
+**Ergebnis `PRE_P1_REPORT` (P0-Preflight 2026-10-24, nur lesend, Owner-Freigabe nur fuer diesen Schritt):**
+[PRE_P1_REPORT](../audits/PR209_Q4_HRAM2_P0_PRE_P1_REPORT_20261024.md) – `P0_BYTE_IDENTICAL=YES`
+(Boot/`nvs`/`phy_init`, Factory-App und `state_store` je zweimal unabhaengig gelesen, SHA-256 im Bericht;
+Boot-Bereich und App hash-gleich zu H-RAM-1), offline: `nvs` integer ohne Reste, `phy`-Kaldaten gueltig,
+`cal_mac` = Chip-MAC, PHY-Bibliothek/IDF-Pin/Konfiguration gleich dem installierten Image;
+`state_store`: Bootstrap `Initialized`, Handoffs `Consumed`, Auth `Provisioned`, Credential v2, Run-Head
+`Committed`/`NoActiveRun`, keine NVS-Reste → **`SYSTEM_NVS_WRITE_AT_P1=EXCLUDED`** (Voraussetzungen und
+Restunsicherheit im Bericht: gilt nur fuer Diagnoseimages mit gleichem IDF-Pin/`sdkconfig`-Basis, beim Bau
+erneut zu vergleichen; `phy_get_rf_cal_version()` des Diagnoseimages ist nicht ausgefuehrt belegt).
+`EXCLUDED` ist **keine** Freigabe: `P1=HOLD`, bis `G-F` und `G-S` ausdruecklich freigegeben sind; die
+Hashkette nach P1 bleibt verbindlich.
 
 **Sprachliche Trennung (verbindlich):** **geplante Host-Zugriffe** auf `nvs`/`phy_init` sind nur
 lesend; **moegliche firmwareinterne Schreibvorgaenge** beim Boot sind davon unabhaengig. Weder
