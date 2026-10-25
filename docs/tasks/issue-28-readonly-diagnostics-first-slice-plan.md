@@ -56,10 +56,10 @@ O-R3/K2–K7 sind vom Owner genehmigt (u. a. „#28 fachlich von spaeteren Journ
 | Netz-/Zeit-/Ressourcenstatus (Web/Touch) | Netz-/Zeit: Bestand teilweise; Ressourcen: kein Port | Netz-/Zeitmodus ja (nur Modus), Ressourcen **nein** | Netzmodus optional D1+; Ressourcen Deferred |
 | Regler-/Aktor-/Interlock-Diagnose | #35 (Regelkomposition), #32/#33 (Aktorik) | **nein** | Deferred (Hardware/Commissioning) |
 | Gefuehrter PIN-**Serviceablauf** mit Mockaktoren | PIN-/Auth (#19/#188 Ablauf A), E5-Servicegate, gesperrtes Hardwarebackend | nein (Aktor-/Servicepfad, ausgeschlossen) | Deferred |
-| Webdiagnose | JS-Asset-Budget (30 B), API-Erweiterung | **nein ohne Budgetentscheid** | Folgeschnitt, Owner D-28-2 |
+| Webdiagnose | JS-Asset-Budget (30 B), API-Erweiterung | **nein** (Budget) | Folgeschnitt, Deferral laut D-28-2 = A |
 | Kein benutzeraktivierbarer UART-Diagnosemodus | – | – | Out (R1-Grenze, `FUTURE_RELEASE`) |
 
-Aenderungen, die einen Ownerentscheid brauchen (nicht still aufgeloest): (a) **ob #28 mit einem Teilumfang beginnen darf**, obwohl #19 formal Abhaengigkeit bleibt und die Vertragsanpassung aussteht (D-28-1); (b) jede **Aenderung des Issue-/SSOT-Textes** von #28 (Abhaengigkeiten, Akzeptanz „Serviceablauf … vollstaendig durchlaufen“, „aktueller Laufchart und begrenzte Historie“); (c) K1 – bleibt offen.
+Aenderungen, die einen Ownerentscheid brauchen (nicht still aufgeloest): (a) **ob #28 mit einem Teilumfang beginnen darf**, obwohl #19 formal Abhaengigkeit bleibt und die Vertragsanpassung aussteht – **entschieden: D-28-1 = A**; (b) jede **Aenderung des Issue-/SSOT-Textes** von #28 (Abhaengigkeiten, Akzeptanz „Serviceablauf … vollstaendig durchlaufen“, „aktueller Laufchart und begrenzte Historie“); (c) K1 – bleibt offen.
 
 ## 4. Wertinventar fuer D1 (Producer, Owner, Gueltigkeit, Consumer, Test)
 
@@ -84,7 +84,7 @@ Regeln fuer jede Zeile: fehlender oder nicht hardwarequalifizierter Wert ⇒ Tex
 | Variante | Aufwand/Risiko | Budget | Urteil |
 |---|---|---|---|
 | **Touch (Diagnoseseite)** | Bestehende Seite, Pager und Slots vorhanden; Renderer-Zweig, ein Listenmodell, neue Textschluessel; bekannte Allokationsregeln der Content-Seiten | Flash: wenige constexpr-Texte; Allokationsvertrag siehe unten (Steady-State ohne Redraw allokationsfrei, Redraw begrenzt); kein Webbudget | **gewaehlt (D1)** |
-| Web (neue Diagnoseansicht) | API-Erweiterung (`/api/v1/...`), Asset-Code, Sprachtexte DE/EN/ES, Codec-/Routen-Tests | **30 B** Asset-Spielraum, Shell 2048 B, HTTPD-/Heapgrenzen aus #209 | **verschoben** (D-28-2) |
+| Web (neue Diagnoseansicht) | API-Erweiterung (`/api/v1/...`), Asset-Code, Sprachtexte DE/EN/ES, Codec-/Routen-Tests | **30 B** Asset-Spielraum, Shell 2048 B, HTTPD-/Heapgrenzen aus #209 | **verschoben** (D-28-2 = A: Deferral, keine D1-Voraussetzung) |
 | Web ueber vorhandene API | `/api/v1/temperatures` liefert nur Rolle/`valid`/Wert/Qualitaet – bereits im Dashboard | – | kein Mehrwert, keine Diagnose |
 
 **Allokationsvertrag (praezisiert):** `main/fermentation_ui_renderer.cpp` baut bei einem noetigen Redraw `ScreenDrawCommand`s mit `std::vector`/`std::string` und `commands.reserve(kMaximumDrawCommands)`; ein vollstaendiger Redraw ist **nicht** allokationsfrei, und D1 behauptet das nicht. Die tatsaechlich vorhandene Garantie ist: bei **unveraendertem UI-Zustand** laeuft der `UiRenderGate`-Pfad **ohne Redraw** mit null Allokationen (`test_ui_steady_state_allocations`); diese Invariante muss D1 weiter erfuellen. Fuer einen ausgeloesten Redraw gilt im D1-Scope: Draw-Command-Zahl, Texte und Textrechtecke sind deterministisch und begrenzt, es entsteht keine zusaetzliche persistente oder allokierende Datenhaltung, kein ungebundenes Wachstum und kein neuer Allokationspfad ausser dem bestehenden Redraw-Aufbau. Keine Umstellung der Renderer-Architektur, kein neuer globaler Zero-Allocation-Anspruch.
