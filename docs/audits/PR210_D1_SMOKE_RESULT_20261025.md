@@ -25,7 +25,14 @@ UART-Aufnahme 17:34:36–19:33:23 (7 127 s): kein Panic, kein Watchdog, kein `he
 
 ## Persistenz und Restore
 `state_store` nach dem Lauf `ecaa22eb652ae0481f8e2cddce2a68530f3895113efde9a0e2ae672f205e5a59`; Offline-Diff gegen `P0` (23/23 Schluessel): `auth0` (Envelope 82 → 83, ein Login) und die Konfigurationsrecords `cm0–2`, `cr0–1`, `uc1–3` (Sprachwechsel DE/EN/ES); Boot-Bereich (`nvs`/`phy_init`) gleich `P0`. Restore: `state_store` byte-exakt (RB-2, Readback = `P0`), Original-App `factory_A.bin` (Readback-Hash `3b907b25…` = `P0`), Abschlusspruefung Boot `2244ca13…`, `state_store` `fbdd8705…`, App = `P0`. Passwortdatei vernichtet.
-Nach dem Restore steht der Chip im **ROM-Bootloader** (kein App-Start, schwarzes Display); **Kontrollboot der Original-Firmware `NOT_RUN`**.
+Nach dem Restore stand der Chip im **ROM-Bootloader** (kein App-Start, schwarzes Display, vom Owner bemerkt; erwartetes Verhalten von `esptool --after no-reset`).
 
 ## Bewertung HW-28-D1-01
 `PASS` fuer die Punkte 1–4 und 6 (Owner-Verdikte und Fotos), Punkt 5 mit eingeschraenkter Evidenz (EN/ES nur Owner-Aussage), 5a `NOT_OBSERVABLE`. Kein Pre-Ready-/Ready-/Merge-Gate daraus abgeleitet.
+
+## Kontrollboot der wiederhergestellten Original-Firmware (2026-10-25, 22:08–22:16, auf Owner-Anweisung)
+Normaler EN-Reset (RTS-Puls ueber die UART-Aufnahme, kein Flash/Erase):
+- **Builder (UART, 411 s, 532 Zeilen):** `rst:0x1 (POWERON_RESET)`, `boot:0x13`, `App version a9a1156`, `app_main` laeuft, `real actuators: disabled`, Touch-Kalibrierung `active_status=Available`, UI-Init abgeschlossen, WLAN `HomeConnected`, Heartbeat durchgehend; **kein** Panic, Watchdog, Abort, `heap_alloc_failed`, `ui_skipped_low_memory` und kein `E (`-Log; Web antwortet `HTTP 200`.
+- **Owner-Beobachtung (Chat):** „Alles normal. Ok“ – Display und Touch funktionieren wieder normal (Home, Status und Rueckweg).
+- **Persistenz nach dem Kontrollboot (Builder, Readback):** Boot-Bereich `2244ca13…`, App `3b907b25…` und `state_store` `fbdd8705…` sind **byteidentisch zu `P0`**; der normale Boot der Original-Firmware hat nichts geschrieben. Hinweis: Das Auslesen endete mit `--after hard-reset`, das Geraet startete danach nochmals; dieser zweite Boot wurde nicht erneut per Hash geprueft.
+**Kontrollboot: `PASS`** (Builder-UART und Hashes, Owner-Beobachtung getrennt gefuehrt). Das beweist den Start der wiederhergestellten Original-Firmware, nicht die Funktion der D1-Diagnoseseite oder der Sensor-/Aktorhardware.
