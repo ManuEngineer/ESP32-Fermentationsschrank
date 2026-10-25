@@ -1,6 +1,6 @@
 # Issue #28 – Plan: erster hardwareunabhaengiger, rein lesender Diagnoseschnitt (D1)
 
-**Status: PLAN – Entwurf, nicht freigegeben. Keine Produkt-, Test-, Build- oder Hardwareaktion.**
+**Status: Plan-SHA `81f180490ff2dd2522686ed08413a0643e8194c8` vom Owner fuer die Umsetzung von D1 freigegeben (2026-10-25); D1 umgesetzt, Independent Review offen (§11). Keine Geraete-/Flash-Aktion.**
 Basis: `main` `70f44310bebea2cd99cf99982ec08e35230f8fcf` (nach PR #209). Branch `agent/issue-28-readonly-diagnostics-plan`, Draft-PR.
 Auftrag: `Auftrag_Issue28_hardwarefrei_Plan.md` (Planung, keine Implementierung). `ACTUATOR_RELEASE=NO`, keine Safety- oder Aktorfreigabe durch Diagnose.
 **D-28-1 = A, D-28-2 = A – Quelle: direkte Owner-Chatanweisung an den Builder-Agenten vom 2026-10-25, Wortlaut „D-28-1 = A und D-28-2 = A“ (§8, dort Nachvollziehbarkeit und Rueckfallregel).** Das ist keine Freigabe der Plan-SHA und keine Geraete-/Flash-Freigabe.
@@ -198,3 +198,9 @@ Risiken: (1) Resetursachen-Text wird als „Sicherheitsaussage“ missverstanden
 - Reihenfolge nach Freigabe: (1) Textschluessel + Mapping `resetCause` → Text mit Test, (2) Zeilenmodell/Pager im Workspace, (3) Renderer-Zweig, (4) `SIM-28-D1-*`, `ACCEPTANCE_TESTS.md`/`ROADMAP.md`. Pre-Ready/Ready/Merge nur nach separater Ownerfreigabe.
 - Roadmap-Statuspflege nach PR #209 ist bereits als erster Commit des Branches erledigt und kein Produktscope.
 - `ACTUATOR_RELEASE=NO`; keine Hardware-/Flash-/Aktorfreigabe aus diesem Plan.
+
+## 11. Umsetzungsstand D1 (nach Planfreigabe `81f1804`)
+
+Umgesetzt in `lib/fermentation_app` (Textschluessel `fermentation_ui_text.{hpp,cpp}`: 22 Schluessel je Sprache, `resetCauseTextKey`, `diagnosticRoleShortTextKey`; `fermentation_touch_workspace.{hpp,cpp}`: `kFermentationUiDiagnosticsRowCount = 9`, Pager-Zaehler der Seite `Diagnostics`) und `main/fermentation_ui_renderer.cpp` (Zweig `Diagnostics`, getrennt von `Service`). Primaerdarstellung der Wertezeile (Kurzrolle · Qualitaet · `R`/`K`/`F`); der Rueckfall (Wertezeile teilen) wurde **nicht** benoetigt. Tests: `SIM-28-D1-01..06` (`docs/ACCEPTANCE_TESTS.md`), native Gesamtsuite 1857/1857 PASS, beide ESP-IDF-Profile PASS, `bash scripts/run_pre_ready_gates.sh self-check` PASS (`CLANG_TIDY=PASS`, `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`), Architekturgrenzen PASS. Gegenproben: absichtlich verfaelschter Warnton und vertauschte Kurzrolle werden von den Tests erkannt.
+Ressourcen (Release, vor/nach, gemessene Linkerwerte): `.flash.rodata` 244 124 → 246 220 B (+2 096 B), `.flash.text` 1 408 866 → 1 410 954 B (+2 088 B), `.dram0.*`/`.iram0.text` unveraendert; Image 1 774 384 → 1 778 576 B (+4 192 B). Bringup entsprechend (+2 096 / +2 192 B). Kein RAM-/Stackmesswert, keine Web-/HTTPD-Aenderung.
+Nicht ausgefuehrt/`NOT_RUN`: Touch-/Browser-Smoke auf dem realen ESP32 (§6.4a, `HW-28-D1-01`, braucht gesonderte Ausfuehrungsfreigabe fuer ein benanntes Image), `D9`, Sensor-/Aktorhardware. Die 304-px-Grenzen sind hostseitig gegen ein konservatives 7-px-Zeichenbudget geprueft; die reale Schrift ist erst im Board-Smoke belegbar. Issue #28 bleibt offen.
