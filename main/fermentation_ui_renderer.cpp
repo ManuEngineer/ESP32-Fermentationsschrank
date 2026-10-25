@@ -370,6 +370,11 @@ void addDiagnosticsRow(
                     key = fermentationTextKey("status-not-ready");
                     tone = ThemeToken::StatusWarning;
                 }
+            } else if (state == ProcessState::Boot && !snapshot.status.ready) {
+                // E.g. ServiceRequired without a runtime lease: the projector
+                // leaves the default Boot, which is not a proven state.
+                key = fermentationTextKey("status-not-ready");
+                tone = ThemeToken::StatusWarning;
             } else {
                 key = processStateTextKey(state);
                 tone = state == ProcessState::Fault ? ThemeToken::StatusWarning

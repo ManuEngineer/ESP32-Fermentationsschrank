@@ -2195,6 +2195,10 @@ void test_diagnostics_state_row_shows_the_established_process_state() {
         {ProcessState::Fault, FermentationHomeMode::Restricted, true,
          "process-state-fault", ThemeToken::StatusWarning},
         // No established state: the default Boot is NOT presented as a state.
+        // ServiceRequired without a runtime lease: Restricted home, default
+        // Boot, not ready -> "not ready", never Boot as a proven state.
+        {ProcessState::Boot, FermentationHomeMode::Restricted, false,
+         "status-not-ready", ThemeToken::StatusWarning},
         {ProcessState::Boot, FermentationHomeMode::Unavailable, false,
          "status-not-ready", ThemeToken::StatusWarning},
         {ProcessState::Boot, FermentationHomeMode::Unavailable, true,
