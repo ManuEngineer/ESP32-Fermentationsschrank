@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <algorithm>
+#include <limits>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -2164,15 +2165,116 @@ void test_diagnostics_fixed_rows_show_reset_cause_fault_and_state() {
         TEST_ASSERT_TRUE(rowHasText(diagnosticsRow(faulted, 1U), "0x0301"));
         TEST_ASSERT_FALSE(rowHasText(diagnosticsRow(faulted, 1U),
                                      localized(locale, "value-none")));
-        // State row: ready state text, or the not-ready text.
-        unknown.status.ready = false;
-        TEST_ASSERT_TRUE(rowHasText(
-            diagnosticsRow(diagnosticsScreenAt(unknown, 0U, locale), 2U),
-            localized(locale, "status-not-ready")));
-        unknown.status.ready = true;
-        TEST_ASSERT_TRUE(rowHasText(
-            diagnosticsRow(diagnosticsScreenAt(unknown, 0U, locale), 2U),
-            localized(locale, "standby")));
+    }
+}
+
+void test_diagnostics_state_row_shows_the_established_process_state() {
+    using fermentation::FermentationHomeMode;
+    using fermentation::ProcessState;
+    struct Case {
+        ProcessState state;
+        FermentationHomeMode mode;
+        bool ready;
+        const char* key;
+        device_platform::ThemeToken tone;
+    };
+    using device_platform::ThemeToken;
+    const Case cases[] = {
+        // SAFE_BOOT is never hidden behind "restricted" or "not ready".
+        {ProcessState::SafeBoot, FermentationHomeMode::Restricted, true,
+         "process-state-safe-boot", ThemeToken::StatusWarning},
+        {ProcessState::SafeBoot, FermentationHomeMode::Restricted, false,
+         "process-state-safe-boot", ThemeToken::StatusWarning},
+        {ProcessState::SafeBoot, FermentationHomeMode::Unavailable, false,
+         "process-state-safe-boot", ThemeToken::StatusWarning},
+        // Concrete running states.
+        {ProcessState::Fermenting, FermentationHomeMode::ActiveRun, true,
+         "process-state-fermenting", ThemeToken::TextPrimary},
+        {ProcessState::Standby, FermentationHomeMode::Standby, true,
+         "process-state-standby", ThemeToken::TextPrimary},
+        {ProcessState::Fault, FermentationHomeMode::Restricted, true,
+         "process-state-fault", ThemeToken::StatusWarning},
+        // No established state: the default Boot is NOT presented as a state.
+        {ProcessState::Boot, FermentationHomeMode::Unavailable, false,
+         "status-not-ready", ThemeToken::StatusWarning},
+        {ProcessState::Boot, FermentationHomeMode::Unavailable, true,
+         "unavailable", ThemeToken::TextSecondary},
+    };
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto& item : cases) {
+            fermentation::FermentationUiSnapshot snapshot;
+            snapshot.home.mode = item.mode;
+            snapshot.home.processState = item.state;
+            snapshot.status.ready = item.ready;
+            const auto row =
+                diagnosticsRow(diagnosticsScreenAt(snapshot, 0U, locale), 2U);
+            TEST_ASSERT_TRUE(rowHasText(row, localized(locale, "label-state")));
+            TEST_ASSERT_TRUE(rowHasText(row, localized(locale, item.key)));
+            if (item.state == ProcessState::Boot) {
+                TEST_ASSERT_FALSE(
+                    rowHasText(row, localized(locale, "process-state-boot")));
+            }
+            for (const auto& command : row) {
+                if (command.text == localized(locale, item.key)) {
+                    TEST_ASSERT_TRUE(command.token == item.tone);
+                }
+            }
+        }
+    }
+}
+
+void test_diagnostics_numbers_are_never_truncated_and_fit_the_field() {
+    struct Case {
+        double value;
+        const char* text;
+    };
+    const Case cases[] = {
+        {21.34, "21.3"}, {-21.36, "-21.4"}, {99.94, "99.9"},  {-99.94, "-99.9"},
+        {99.95, "100"},  {99.96, "100"},    {-99.96, "-100"}, {-127.0, "-127"},
+        {999.4, "999"},  {-999.4, "-999"},  {999.5, "+OVF"},  {-999.5, "-OVF"},
+        {1e16, "+OVF"},  {-1e16, "-OVF"},   {1e100, "+OVF"},  {-1e100, "-OVF"},
+        {-0.04, "0.0"},  {0.0, "0.0"},      {85.0, "85.0"},
+    };
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto& item : cases) {
+            const auto snapshot = diagnosticsSnapshot(
+                fermentation::FermentationTemperatureRole::Cooling,
+                device_platform::SensorQuality::Failed, item.value, item.value,
+                item.value, 1000U);
+            const auto row =
+                diagnosticsRow(diagnosticsScreenAt(snapshot, 8U, locale), 0U);
+            for (const char* label :
+                 {"value-raw", "value-corrected", "value-filtered"}) {
+                const auto text = localized(locale, label) + item.text;
+                TEST_ASSERT_TRUE_MESSAGE(rowHasText(row, text), text.c_str());
+                // The value (label + at most 5 glyphs, e.g. "R-99.9") stays
+                // inside its fixed rectangle (7 px per glyph bound).
+                for (const auto& command : row) {
+                    if (command.text == text) {
+                        TEST_ASSERT_TRUE(text.size() <= 6U);
+                        TEST_ASSERT_TRUE(text.size() * 7U <=
+                                         command.rect.width);
+                    }
+                }
+            }
+        }
+        // Missing and non-finite values stay "--.-" (never 0, never a prefix).
+        for (const double bad : {std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::infinity(),
+                                 -std::numeric_limits<double>::infinity()}) {
+            const auto snapshot = diagnosticsSnapshot(
+                fermentation::FermentationTemperatureRole::Cooling,
+                device_platform::SensorQuality::Failed, bad, std::nullopt, bad,
+                std::nullopt);
+            const auto row =
+                diagnosticsRow(diagnosticsScreenAt(snapshot, 8U, locale), 0U);
+            TEST_ASSERT_TRUE(
+                rowHasText(row, localized(locale, "value-raw") + "--.-"));
+            TEST_ASSERT_TRUE(
+                rowHasText(row, localized(locale, "value-corrected") + "--.-"));
+            TEST_ASSERT_TRUE(
+                rowHasText(row, localized(locale, "value-filtered") + "--.-"));
+        }
     }
 }
 
@@ -3295,6 +3397,8 @@ int main() {
         test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason);
     RUN_TEST(test_messages_page_shows_an_empty_state_only_without_messages);
     RUN_TEST(test_diagnostics_fixed_rows_show_reset_cause_fault_and_state);
+    RUN_TEST(test_diagnostics_state_row_shows_the_established_process_state);
+    RUN_TEST(test_diagnostics_numbers_are_never_truncated_and_fit_the_field);
     RUN_TEST(test_diagnostics_value_rows_are_self_contained_when_isolated);
     RUN_TEST(
         test_diagnostics_rows_stay_within_the_304px_budget_in_every_window);

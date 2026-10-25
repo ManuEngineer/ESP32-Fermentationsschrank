@@ -264,14 +264,29 @@ std::string temperatureText(const TemperatureView& temperature) {
     return celsiusText(temperature.valueCelsius);
 }
 
-// Diagnostics page (#28 D1): value text with one decimal ("21.3"), no decimals
-// from |value| >= 100 ("-127") and "--.-" when no value exists. An absent value
-// is never rendered as 0.
+// Diagnostics page (#28 D1): value text that fits the fixed 5-glyph field next
+// to its label ("R" + at most 4 glyphs). One decimal below |99.95| ("21.3",
+// "-99.9"), no decimals up to |999.5| ("100", "-127"), and an explicit
+// "+OVF"/"-OVF" marker for finite values that cannot be shown; a number is
+// never truncated or cut to a buffer prefix. No value (or a non-finite one) is
+// "--.-", never 0.
 std::string diagnosticValueText(const std::optional<double>& value) {
     if (!value.has_value() || !std::isfinite(*value)) return "--.-";
-    char buffer[16];
-    const bool wide = *value >= 100.0 || *value <= -100.0;
-    std::snprintf(buffer, sizeof(buffer), wide ? "%.0f" : "%.1f", *value);
+    const double number = *value;
+    if (number >= 999.5) return "+OVF";
+    if (number <= -999.5) return "-OVF";
+    char buffer[8];
+    int written = 0;
+    if (number >= 99.95 || number <= -99.95) {
+        written = std::snprintf(buffer, sizeof(buffer), "%.0f", number);
+    } else {
+        double rounded = std::round(number * 10.0) / 10.0;
+        if (rounded == 0.0) rounded = 0.0;  // no "-0.0"
+        written = std::snprintf(buffer, sizeof(buffer), "%.1f", rounded);
+    }
+    if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(buffer)) {
+        return "+OVF";
+    }
     return buffer;
 }
 
@@ -339,13 +354,28 @@ void addDiagnosticsRow(
                            ThemeToken::Surface);
             }
         } else {
-            addText(commands, packs, locale,
-                    snapshot.status.ready
-                        ? homeModeKey(snapshot.home.mode)
-                        : fermentationTextKey("status-not-ready"),
-                    value,
-                    snapshot.status.ready ? ThemeToken::TextPrimary
-                                          : ThemeToken::StatusWarning,
+            // Established process state only: SAFE_BOOT is always shown as
+            // such; without an established state (home unavailable) the honest
+            // "not ready"/"unavailable" text stays, the default Boot is never
+            // presented as a proven state.
+            const auto state = snapshot.home.processState;
+            device_platform::TextKey key = fermentationTextKey("unavailable");
+            auto tone = ThemeToken::TextSecondary;
+            if (state == ProcessState::SafeBoot) {
+                key = processStateTextKey(state);
+                tone = ThemeToken::StatusWarning;
+            } else if (snapshot.home.mode ==
+                       FermentationHomeMode::Unavailable) {
+                if (!snapshot.status.ready) {
+                    key = fermentationTextKey("status-not-ready");
+                    tone = ThemeToken::StatusWarning;
+                }
+            } else {
+                key = processStateTextKey(state);
+                tone = state == ProcessState::Fault ? ThemeToken::StatusWarning
+                                                    : ThemeToken::TextPrimary;
+            }
+            addText(commands, packs, locale, key, value, tone,
                     ThemeToken::Surface);
         }
         return;
