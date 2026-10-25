@@ -1,8 +1,10 @@
-# Issue #28 – Plan: erster hardwarefreier, rein lesender Diagnoseschnitt (D1)
+# Issue #28 – Plan: erster hardwareunabhaengiger, rein lesender Diagnoseschnitt (D1)
 
 **Status: PLAN – Entwurf, nicht freigegeben. Keine Produkt-, Test-, Build- oder Hardwareaktion.**
 Basis: `main` `70f44310bebea2cd99cf99982ec08e35230f8fcf` (nach PR #209). Branch `agent/issue-28-readonly-diagnostics-plan`, Draft-PR.
 Auftrag: `Auftrag_Issue28_hardwarefrei_Plan.md` (Planung, keine Implementierung). `ACTUATOR_RELEASE=NO`, keine Safety- oder Aktorfreigabe durch Diagnose.
+**Ownerentscheide (Chat-Anweisung 2026-10-25): D-28-1 = A, D-28-2 = A** (§8). Das ist keine Freigabe der Plan-SHA und keine Geraete-/Flash-Freigabe.
+Begriff „hardwareunabhaengig“: die **Funktion benoetigt keine Sensor-/Aktorhardware**; sie wird zusaetzlich **auf dem realen ESP32 (Display/Touch/Web) verifiziert** (§6.4a). Es fehlen Sensor-/Aktorhardware und deren Inbetriebnahmenachweise, nicht die Testmoeglichkeit der UI auf dem Board.
 Erste Aenderung dieses Branches war die Post-Merge-Roadmappflege (`docs/ROADMAP.md`, Commit `28438f7`); sie ist kein Produktscope.
 
 ## 1. Ergebnis in Kurzform
@@ -15,8 +17,8 @@ Kein neuer Producer, keine neue Web-API, kein neues Asset, kein neuer Port, kein
 **Web wird in einen Folgeschnitt verschoben** (JS-Asset hat nur 30 B Spielraum; die Web-API liefert heute weder Roh-/Korrigiert-/Gefiltert-Werte noch Alter).
 **Ressourcendiagnose (Heap/Flash) und Firmware-/Konfigurationsrevision sind nicht Teil von D1**, weil es dafuer keinen Producer hinter einem Port gibt.
 
-Zwei **echte Ownerentscheide** stehen offen (§8): D-28-1 (Teilstart trotz formaler #19-Abhaengigkeit) und D-28-2 (Webbudget fuer einen Folgeschnitt).
-Ohne D-28-1 ist D1 nicht vertragskonform; die entscheidungsreife Alternative steht in §8.
+**Entschieden (§8):** D-28-1 = A (Teilstart D1 trotz formaler #19-Abhaengigkeit, K1 unveraendert offen) und D-28-2 = A (Web-Diagnose ist ein eigener, spaeter zu planender und budgetierter Folgeschnitt – **keine** Voraussetzung fuer D1 oder dessen Browser-Regressions-Smoke).
+**Verifikation:** Host-Tests fuer die volle Zustandsmatrix (Pflicht) **plus** Touch- und Browser-Smoke auf dem realen Board nach Implementierung und gesondert genehmigter Testausfuehrung (§6.4a).
 
 ## 2. Quellen und gepruefter Ist-Stand
 
@@ -35,7 +37,7 @@ Befunde, die den Plan bestimmen:
 5. Es gibt **keinen Producer hinter einem Port** fuer: Heap/Flash-/Ressourcenwerte (nur `logResources()` in `main/app_main.cpp` per UART), Firmware- und Konfigurationsrevision, Reglerausgang/P-/I-Anteil/Impulsakkumulator (Regelkomposition fehlt, #35), 1-Wire-Busfehler/ROM/CRC-Zaehler als Diagnose (Sampling-Task budget-gesperrt, #30/#190), einen **passiven Boot-Selbsttest als Modell** (die Spezifikation beschreibt ihn; im Code existiert kein `SelfTest`-Modell).
 6. Die Web-API (`/api/v1/temperatures`) liefert je Rolle nur `role`, `valid`, `valueCelsius`, `quality` – **keine** Roh-/Korrigiert-/Gefiltert-Werte, kein Alter. Ein Web-Diagnosebereich braeuchte API-Erweiterung **und** Asset-Code.
 7. Webbudget: JS-Asset 15 330 B bei Limit 16 384 B und Pflichtreserve ≥ 1 024 B ⇒ **30 B** Spielraum (PR #209, Plan §15.11). Shell-/HTTPD-Grenzen unveraendert.
-8. Auf dem Ziel ist kein Sensorproducer komponiert (Technik-Seite zeigt `--.- C`); auf Hardware waeren die Sensorzeilen von D1 daher bis #30/#190 `nicht verfuegbar`. D1 ist **hostseitig** verifizierbar, kein Hardwarenachweis.
+8. Auf dem Ziel ist kein Sensorproducer komponiert (Technik-Seite zeigt `--.- C`); auf Hardware waeren die Sensorzeilen von D1 daher bis #30/#190 `nicht verfuegbar`. D1 braucht dafuer keine Sensorhardware: die volle Zustandsmatrix ist per Host-Fakes pruefbar, die Anzeige zusaetzlich per Smoke auf dem Board (Sensorzeilen dort wahrheitsgemaess `nicht verfuegbar`); das ist **kein** Nachweis fuer DS18B20-Hardware.
 
 ## 3. #19-/R1-Abgrenzung: Abhaengigkeits-/Vertragsmatrix
 
@@ -81,9 +83,11 @@ Regeln fuer jede Zeile: fehlender oder nicht hardwarequalifizierter Wert ⇒ Tex
 
 | Variante | Aufwand/Risiko | Budget | Urteil |
 |---|---|---|---|
-| **Touch (Diagnoseseite)** | Bestehende Seite, Pager und Slots vorhanden; Renderer-Zweig, ein Listenmodell, neue Textschluessel; bekannte Allokationsregeln der Content-Seiten | Flash: wenige constexpr-Texte; **keine** neue Laufzeitallokation (Test `test_ui_steady_state_allocations`); kein Webbudget | **gewaehlt (D1)** |
+| **Touch (Diagnoseseite)** | Bestehende Seite, Pager und Slots vorhanden; Renderer-Zweig, ein Listenmodell, neue Textschluessel; bekannte Allokationsregeln der Content-Seiten | Flash: wenige constexpr-Texte; Allokationsvertrag siehe unten (Steady-State ohne Redraw allokationsfrei, Redraw begrenzt); kein Webbudget | **gewaehlt (D1)** |
 | Web (neue Diagnoseansicht) | API-Erweiterung (`/api/v1/...`), Asset-Code, Sprachtexte DE/EN/ES, Codec-/Routen-Tests | **30 B** Asset-Spielraum, Shell 2048 B, HTTPD-/Heapgrenzen aus #209 | **verschoben** (D-28-2) |
 | Web ueber vorhandene API | `/api/v1/temperatures` liefert nur Rolle/`valid`/Wert/Qualitaet – bereits im Dashboard | – | kein Mehrwert, keine Diagnose |
+
+**Allokationsvertrag (praezisiert):** `main/fermentation_ui_renderer.cpp` baut bei einem noetigen Redraw `ScreenDrawCommand`s mit `std::vector`/`std::string` und `commands.reserve(kMaximumDrawCommands)`; ein vollstaendiger Redraw ist **nicht** allokationsfrei, und D1 behauptet das nicht. Die tatsaechlich vorhandene Garantie ist: bei **unveraendertem UI-Zustand** laeuft der `UiRenderGate`-Pfad **ohne Redraw** mit null Allokationen (`test_ui_steady_state_allocations`); diese Invariante muss D1 weiter erfuellen. Fuer einen ausgeloesten Redraw gilt im D1-Scope: Draw-Command-Zahl, Texte und Textrechtecke sind deterministisch und begrenzt, es entsteht keine zusaetzliche persistente oder allokierende Datenhaltung, kein ungebundenes Wachstum und kein neuer Allokationspfad ausser dem bestehenden Redraw-Aufbau. Keine Umstellung der Renderer-Architektur, kein neuer globaler Zero-Allocation-Anspruch.
 
 Keine stille Vergroesserung von Asset, Shellgrenzen oder HTTPD-Stack; keine neue Web-API und keine zweite Datenhaltung. Eine hypothetische Webdiagnose rechtfertigt keine Vorabstraktion.
 
@@ -99,34 +103,42 @@ Die Seite `Diagnostics` zeigt ein Fenster ueber eine **feste, begrenzte Zeilenli
 3. `Zustand` – bestehender Prozess-/SAFE_BOOT-Text (`process-state-safe-boot` u. a.).
 4.–9. je Temperaturrolle (Schrankluft, Produkt, Kuehlkoerper) zwei Zeilen: (a) Rolle · Qualitaet · Alter der letzten gueltigen Probe; (b) Roh · korrigiert · gefiltert (je `--.-`, wenn leer).
 
-Die Liste hat damit maximal 9 Zeilen (3 Seiten); die Zeilenanzahl ist zur Compilezeit begrenzt. Der Service-Slot (`Diagnose → Service`) bleibt unveraendert (PIN-Seite, weiterhin ohne Aktorwirkung); die Service-Seite behaelt den `deferred-28`-Hinweis.
+Die Liste hat damit maximal **neun Zeilen, drei gleichzeitig sichtbar**; der vorhandene Pager (`device_platform::VerticalPager`) verschiebt das Fenster um **eine Zeile** je Druck (`currentIndex` 0–8, das Fenster zeigt die Zeilen `currentIndex` bis `currentIndex+2`, wie die Technik-Seite), alle Zeilen sind erreichbar; **keine** Sprung-/Seitenlogik und kein neues Paging-Verhalten. Die Zeilenanzahl ist zur Compilezeit begrenzt. Der Service-Slot (`Diagnose → Service`) bleibt unveraendert (PIN-Seite, weiterhin ohne Aktorwirkung); die Service-Seite behaelt den `deferred-28`-Hinweis.
 
 ### 6.2 Betroffene bestehende Module (keine neuen Module/Ports)
 - `lib/fermentation_app/src/fermentation_touch_workspace.{hpp,cpp}`: `pager.itemCount` der Seite `Diagnostics` aus der festen Zeilenzahl, Page-Views unveraendert; **keine** neue Navigation.
 - `lib/fermentation_app/src/fermentation_ui_text.{hpp,cpp}`: neue lokalisierte Schluessel fuer Resetursachen, Seitenzeilenlabels und ggf. `kein Fehler` (DE/EN/ES; bestehender Konsistenztest fuer alle Sprachen), Hilfsfunktion `resetCauseTextKey(ResetCause)` analog zu `sensorQualityTextKey`.
-- `main/fermentation_ui_renderer.cpp` (bzw. dessen nativ getesteter Renderer-Kern): Zweig `Diagnostics` getrennt von `Service`; zeilenweise Darstellung ohne Allokation.
+- `main/fermentation_ui_renderer.cpp` (bzw. dessen nativ getesteter Renderer-Kern): Zweig `Diagnostics` getrennt von `Service`; zeilenweise Darstellung mit begrenzten Draw-Commands und Textrechtecken (kein zusaetzlicher Allokationspfad, §5).
 - Tests: `test_local_touch_ui`, `test_renderer_boundary`, `test_ui_steady_state_allocations`, `test_sensor_quality_pipeline` (nur Fixture-Nutzung). **Nicht** angefasst: `device_platform*`-Ports, ESP-IDF-Adapter, Application-Producer, Web-Routen/-Asset/-Shell, Persistenz, `ActuationInterlock`.
 
 ### 6.3 Akzeptanzkriterien (pruefbar)
 - **A1** Die Seite `Diagnostics` zeigt statt `deferred-28` die Zeilenliste in DE/EN/ES; `Service` zeigt unveraendert den Hinweis.
 - **A2** Jeder fehlende Wert (kein `resetCause`, leere optionale Sensorwerte, kein Sensor) wird als `nicht verfuegbar` bzw. `--.-` dargestellt – nie `0`, nie `OK`; ein `Failed`/`Stale`-Sensor zeigt seinen Status und sein Alter, nie wie eine aktuelle Messung.
 - **A3** Die Diagnose ist bei **laufendem Prozess** (sofern die Statusseite dort erreichbar ist, §2 Befund 2) erreichbar und lesbar (aktiver Lauf, Wartezustand, Abschluss, SAFE_BOOT); es entsteht kein Aktionspfad, keine Mutation, kein Intent (`ActuationInterlock`, Regelung, Watchdogs, Mutationsrechte unveraendert).
-- **A4** Anzeige ist deterministisch, begrenzt, ueberlappungsfrei und stationaer ohne Allokation (bestehende Content-Seitenregeln).
+- **A4** Anzeige ist deterministisch, begrenzt (Zeilen, Draw-Commands, Texte, Rechtecke) und ueberlappungsfrei; bei **unveraendertem Zustand** laeuft der `UiRenderGate`-Pfad ohne Redraw mit **null Allokationen** (bestehende Invariante bleibt erfuellt); ein ausgeloester Redraw ist begrenzt, aber **nicht** als allokationsfrei zugesichert.
 - **A5** Kein Geheimnis erscheint (Passwoerter, PIN, Sessions, Tokens, SoftAP-Zugangsdaten sind nicht Teil des Zeilenmodells; strukturell durch die Datenquellen ausgeschlossen, durch einen Test belegt).
 - **A6** Service-/Aktoraktionen bleiben gesperrt: kein neuer Slot, kein neuer Intent; bestehende Sperren/Service-Tests bleiben gruen.
 
-### 6.4 Gezielte Host-Regressionen (nur was zu D1 gehoert und hardwarefrei laeuft)
+### 6.4 Gezielte Host-Regressionen (Pflicht; volle Zustandsmatrix mit Fake-Sensorwerten)
 1. `test_local_touch_ui`: Navigation `Status → Diagnose` in Standby und bei aktivem Lauf; Pager ueber alle Zeilen; kein Intent/Mutation durch Druck auf Diagnosezeilen; Service-Slot und Sperrgrund unveraendert.
 2. `test_renderer_boundary`: Zeilenbild je Sprache; `Diagnostics` ohne `deferred-28`, `Service` mit; Reset-Ursachen-Matrix (alle 17 Enumwerte → definierter Text, `nullopt` → `nicht verfuegbar`); Sensorzeilen fuer `Valid/Stale/Failed` und leere optionale Werte; keine `0`-Ersatzwerte; Ueberlappungsfreiheit.
-3. `test_ui_steady_state_allocations`: stationaere Diagnoseseite allokiert nicht.
+3. `test_ui_steady_state_allocations`: bei **unveraendertem** Zustand mit geoeffneter Diagnoseseite null Allokationen im `UiRenderGate`-Pfad **ohne Redraw** (bestehende Invariante); fuer den Redraw selbst nur Begrenzungen (Draw-Command-Zahl, Text-/Rechteckgrenzen), kein Allokationsfreiheitstest.
 4. Text-/Locale-Konsistenz: neue Schluessel in allen drei Sprachen (ueber die vorhandene Textpack-Pruefung in `test_renderer_boundary`; der konkrete Testname wird in der Umsetzung benannt, bei fehlender Abdeckung wird ein gezielter Test ergaenzt).
 5. Strukturtest: Zeilenmodell enthaelt keine Authentifizierungs-/Sitzungs-/Netzzugangsdaten (Quellenliste gegen verbotene Felder).
-Aktualisiert wird `SIM-172-S7-01` (Platzhaltertest fuer `Diagnostics`); neue `SIM-28-D1-*`-Eintraege in `docs/ACCEPTANCE_TESTS.md`. Nicht verlangt: Hardwaretests, Web-/Browsertests, Ressourcenmessung auf dem Geraet.
+6. Pager: neun Zeilen, Fenster verschiebt um eine Zeile (`currentIndex` 0–8), erste/letzte Fensterposition, `canMoveUp/Down` an den Raendern, alle Zeilen erreichbar.
+Aktualisiert wird `SIM-172-S7-01` (Platzhaltertest fuer `Diagnostics`); neue `SIM-28-D1-*`-Eintraege in `docs/ACCEPTANCE_TESTS.md`. Host-Tests ersetzen den Board-Smoke nicht und umgekehrt (§6.4a).
+
+### 6.4a Smoke-Tests auf dem realen ESP32 (nach Implementierung; Ausfuehrung gesondert genehmigt)
+Das ESP32-Board mit Display/Touch und Webzugang steht fuer Software-/UI-Tests zur Verfuegung (manuelle Touch- und Browsertests, Zeit vorhanden).
+1. **Touch-Smoke:** `Status → Diagnose` erreichen; Resetursache-, Fehler- und Zustandszeile, alle neun Zeilen ueber den Pager, DE/EN/ES, fehlende Sensoren wahrheitsgemaess `nicht verfuegbar`; Rueckweg und der bestehende `Diagnose → Service`-Zugang unveraendert. **Keine** neue Aktion, Aktorfreigabe oder Resetfunktion von der Diagnoseseite aus. Zustaende, die ohne Sensoren/aktive Aktoren auf dem Board nicht sicher erreichbar sind (z. B. aktiver Lauf, `Stale`/`Failed` mit Werten), bleiben **Host-Nachweise** und werden **nicht** auf dem Board erzwungen.
+2. **Browser-Smoke (Regression, keine neue Funktion):** bestehende R1-Weboberflaeche im erreichbaren Standby-/Provisioning-Zustand (Anmeldung, Navigation, Status-/Temperaturanzeige, bekannte Fehlzustaende nur soweit gefahrlos ausloesbar). **Keine** Web-Diagnosefunktion, **kein** vollstaendiges Wiederholen von D9, **keine** Lauf-/Aktorkommandos, keine destruktiven Tests allein wegen D1.
+3. **Nachweisgrenzen:** Host, reales Touchdisplay, realer Browser und simulierte Faelle werden getrennt protokolliert. Board-Tests sind **kein** Nachweis fuer DS18B20-Hardware (#190), Aktorik, Run-/Recovery-Qualifikation, vollstaendige RAM-/Stack-Reserve oder `D9=PASS`.
+4. **Ausfuehrungsgates:** Diese Plananpassung ist keine Flash-/Erase-/UART-/Resetfreigabe. Vor jeder konkreten Geraeteaktion gelten die bestehenden Owner-/Hardwaregates (benanntes Firmware-/Messimage, Ziel-HEAD, bestehender Backup-/Restore-Workflow, `docs/AGENT_WORKFLOW.md`, `docs/CI_AND_QUALITY_GATES.md`); keine automatische Erase-/NVS-Veraenderung; `ACTUATOR_RELEASE=NO`.
 
 ### 6.5 Ressourcen- und Coverage-Risiko (ehrlich)
 - **Flash:** wenige zusaetzliche constexpr-Textschluessel (Groessenordnung: ~17 Resetursachen kollabiert auf eine kleine Zahl von Schluesseln + ~8 Labels, je 3 Sprachen); `TBD_IMPLEMENTATION_BUDGET` – Wert wird in der Umsetzung gemessen (`.flash.rodata`-Delta beider Profile), nicht geschaetzt.
-- **RAM/Stack:** Renderer-Pfad ohne Allokation; Stackpfad der Touch-Aufgaben nicht betroffen, aber nicht neu gemessen (`NOT_PROVEN`). Web-/HTTPD-Gates unberuehrt.
-- **Coverage:** Nur Host. Auf dem Geraet sind Sensorzeilen bis #30/#190 `nicht verfuegbar`; `resetCause`-Zeile haengt am ESP-Adapter (bestehend, nicht neu qualifiziert). **Kein** Hardware-/Browserbeleg, **keine** `D9`-/`C5`-Aussage. Passiver Boot-Selbsttest, Journal, Exporte, Charts, Service und Web bleiben sichtbar offen.
+- **RAM/Stack:** `UiRenderGate`-Steady-State ohne Redraw bleibt allokationsfrei (bestehende Invariante, getestet); ein Redraw baut wie bisher begrenzte Draw-Commands auf (nicht als allokationsfrei zugesichert, nicht neu gemessen). Stackpfad der Touch-Aufgaben nicht neu gemessen (`NOT_PROVEN`). Web-/HTTPD-Gates unberuehrt.
+- **Coverage:** Host-Matrix (Pflicht) plus Touch- und Browser-Smoke auf dem Board nach gesonderter Genehmigung (§6.4a). Auf dem Geraet sind Sensorzeilen bis #30/#190 `nicht verfuegbar`; die `resetCause`-Zeile haengt am ESP-Adapter (bestehend, nicht neu qualifiziert). Kein Nachweis fuer Sensor-/Aktorhardware, **keine** `D9`-/`C5`-/RAM-Aussage; ohne das Board-Smoke bleibt die reale Darstellung `NOT_RUN`. Passiver Boot-Selbsttest, Journal, Exporte, Charts, Service und Web bleiben sichtbar offen.
 
 ## 7. In-/Out-/Deferred-Matrix zu Issue #28
 
@@ -150,25 +162,26 @@ Aktualisiert wird `SIM-172-S7-01` (Platzhaltertest fuer `Diagnostics`); neue `SI
 
 **Issue #28 bleibt nach D1 offen.** D1 darf nicht als Abschluss von #28 oder als Erfuellung der Definition of Done gekennzeichnet werden.
 
-## 8. Tatsaechlich offene Ownerentscheide
+## 8. Ownerentscheide
 
-| ID | Entscheidung | Alternativen | Empfehlung |
-|---|---|---|---|
-| **D-28-1** | Darf #28 mit dem rein lesenden Teilschnitt D1 beginnen, obwohl #19 formale Abhaengigkeit bleibt und die formale Vertragsanpassung (O-R3: SSOT/#28/#37) aussteht? D1 beruehrt Journal/Historie/Export/K1 nicht. | **A** D1 darf starten; die #28-Vertragsanpassung bleibt getrennt und spaeter. **B** Kein Start, bis die #28-/SSOT-Anpassung vorliegt (D1 bleibt Plan). | **A** (entspricht der genehmigten fachlichen Entkopplung K2–K7; keine K1-Aenderung) |
-| **D-28-2** | Webbudget: Soll ein Web-Diagnose-Folgeschnitt geplant werden, und wenn ja mit welcher Budgetgrundlage (Asset-Limit/Reserve, getrennter Diagnose-Asset oder Verzicht)? Betrifft Asset (30 B Spielraum), API, ggf. Shell-/HTTPD-Grenzen. | **A** Web bleibt Deferred, bis ein eigener Plan mit Budgetentscheid vorliegt. **B** Folgeplan mit Limitaenderung. **C** Verzicht auf Webdiagnose in R1. | **A** (kein Eingriff in #209-Grenzen) |
+| ID | Entscheidung | Stand |
+|---|---|---|
+| **D-28-1** | Darf #28 mit dem rein lesenden Teilschnitt D1 beginnen, obwohl #19 formale Abhaengigkeit bleibt und die formale Vertragsanpassung (O-R3: SSOT/#28/#37) aussteht? | **Entschieden: A** (Owner, Chat-Anweisung 2026-10-25): D1 darf nach Planfreigabe starten. Die formale #28-/SSOT-Vertragsanpassung bleibt getrennt und spaeter; **K1 bleibt unveraendert offen**; D1 beruehrt Journal/Historie/Export nicht. |
+| **D-28-2** | Web-Diagnosefunktionsumfang und Webbudget | **Entschieden: A** (Owner, Chat-Anweisung 2026-10-25): Web-Diagnose ist **kein Teil von D1** und wird als **Deferral fuer einen spaeteren, eigenen, budgetierten Plan** gefuehrt. **Keine** Umsetzungsvoraussetzung fuer D1. Die Verfuegbarkeit eines Browsers fuer Tests (Browser-Regressions-Smoke, §6.4a) beseitigt das Asset-Budget nicht: JS-Asset 15 330 B bei 16 384 B Limit und 1 024 B Mindestreserve = nur 30 B Spielraum. |
 
-Kein weiterer Ownerentscheid ist fuer D1 noetig: keine neue Persistenz, keine Aktor-/Safety-/Auth-Aenderung, kein neuer Port.
-**Alternative, falls D-28-1 = B:** Es wird nichts implementiert. Entscheidungsreif vorgelegt: die separate #28-/SSOT-Vertragsanpassung (nur Dokumente: Abhaengigkeitsliste von #28, Akzeptanzkriterien zu Historie/Chart/Export auf spaeter, Verweis auf O-R3/K2–K7; K1 unveraendert), danach Neubewertung von D1.
+Beide Entscheide sind keine Freigabe der Plan-SHA, keine Implementierungsfreigabe und keine Geraete-/Flash-/Erase-/UART-/Resetfreigabe. Offen bleibt die **Planreview und Ownerfreigabe der exakten Plan-SHA**.
+Kein weiterer Ownerentscheid ist fuer D1 noetig: keine neue Persistenz, keine Aktor-/Safety-/Auth-Aenderung, kein neuer Port. Die frueher vorgesehene Alternative „D-28-1 = B“ entfaellt.
 
 ## 9. Ausgeschlossen und Risiken
 
-Ausgeschlossen fuer D1: aktive Service-/Aktorpruefungen, PIN-/Auth-Neuentwicklung, Sensor-Commissioning, Hardwareevidence, neue Journale/Historie/Laufexporte, Backup/Import, thermische Kennwerte, Ressourcenqualifikation, neue Web-API/Asset, neue Ports/Frameworks/Diagnose-Orchestratoren/Telemetrie-Busse, neue Persistenz, Aenderungen an `ActuationInterlock`/Regelung/Watchdogs.
+Ausgeschlossen fuer D1: aktive Service-/Aktorpruefungen, PIN-/Auth-Neuentwicklung, Sensor-Commissioning, Sensor-/Aktor-Hardwareevidence (das Board-Smoke §6.4a ist davon getrennt), neue Journale/Historie/Laufexporte, Backup/Import, thermische Kennwerte, Ressourcenqualifikation, neue Web-API/Asset, neue Ports/Frameworks/Diagnose-Orchestratoren/Telemetrie-Busse, neue Persistenz, Aenderungen an `ActuationInterlock`/Regelung/Watchdogs.
 
 Risiken: (1) Resetursachen-Text wird als „Sicherheitsaussage“ missverstanden – Mitigation: Textlabel nennt nur Ursache, Hinweis in Doku/Test, kein Einfluss auf Freigaben. (2) Zeilenmodell wird spaeter zum Parallelmodell – Mitigation: Zeilen nur aus Snapshot-Feldern, keine eigene Datenhaltung. (3) Sensorzeilen wirken auf Hardware leer – dokumentiert (`nicht verfuegbar`), kein Defekt. (4) Textumfang/Renderer-Layout (3 Zeilen, 304 px) begrenzt Lesbarkeit – im Test auf Ueberlappungsfreiheit festgenagelt; ggf. kuerzere Labels, kein Layoutumbau.
 
 ## 10. Governance, Reihenfolge, naechster Schritt
 
 - Dieser Plan wird als Plan-Commit auf dem Branch zur **Planreview und Ownerfreigabe der exakten Plan-SHA** vorgelegt; erst danach Implementierung (`docs/AGENT_WORKFLOW.md`).
+- Board-Smoke (§6.4a) erst nach Implementierung und gesonderter Ausfuehrungsfreigabe fuer das benannte Image; Host-Tests zuerst.
 - Reihenfolge nach Freigabe: (1) Textschluessel + Mapping `resetCause` → Text mit Test, (2) Zeilenmodell/Pager im Workspace, (3) Renderer-Zweig, (4) `SIM-28-D1-*`, `ACCEPTANCE_TESTS.md`/`ROADMAP.md`. Pre-Ready/Ready/Merge nur nach separater Ownerfreigabe.
 - Roadmap-Statuspflege nach PR #209 ist bereits als erster Commit des Branches erledigt und kein Produktscope.
 - `ACTUATOR_RELEASE=NO`; keine Hardware-/Flash-/Aktorfreigabe aus diesem Plan.
