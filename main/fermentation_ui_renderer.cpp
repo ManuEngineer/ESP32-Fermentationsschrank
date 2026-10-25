@@ -2,9 +2,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <iterator>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -258,6 +262,141 @@ std::string celsiusText(const std::optional<double>& value) {
 
 std::string temperatureText(const TemperatureView& temperature) {
     return celsiusText(temperature.valueCelsius);
+}
+
+// Diagnostics page (#28 D1): value text with one decimal ("21.3"), no decimals
+// from |value| >= 100 ("-127") and "--.-" when no value exists. An absent value
+// is never rendered as 0.
+std::string diagnosticValueText(const std::optional<double>& value) {
+    if (!value.has_value() || !std::isfinite(*value)) return "--.-";
+    char buffer[16];
+    const bool wide = *value >= 100.0 || *value <= -100.0;
+    std::snprintf(buffer, sizeof(buffer), wide ? "%.0f" : "%.1f", *value);
+    return buffer;
+}
+
+// Age of the last valid sample in whole seconds, "--" when unknown.
+std::string diagnosticAgeText(const std::optional<std::uint64_t>& ageMs) {
+    if (!ageMs.has_value()) return "--";
+    return std::to_string(*ageMs / 1000U) + " s";
+}
+
+constexpr FermentationTemperatureRole kDiagnosticRoles[] = {
+    FermentationTemperatureRole::CabinetAir,
+    FermentationTemperatureRole::Product,
+    FermentationTemperatureRole::Cooling,
+};
+static_assert(
+    kFermentationUiDiagnosticsRowCount == 3U + 2U * std::size(kDiagnosticRoles),
+    "diagnostics rows: three fixed rows and two per temperature role");
+
+// One visible diagnostics row (absolute row index in [0, row count)). Rows 0-2
+// are label/value rows; every sensor value row (second row per role) carries
+// its short role and its quality text itself, because the pager moves by one
+// row and the role row above it may not be visible.
+void addDiagnosticsRow(
+    std::vector<ScreenDrawCommand>& commands,
+    const std::vector<device_platform::TextPackManifest>& packs,
+    const device_platform::LocaleId& locale,
+    const FermentationUiSnapshot& snapshot, std::size_t row,
+    std::uint16_t top) {
+    using device_platform::ThemeToken;
+    constexpr auto kLine = RepresentativeScreen::kTextLineHeight;
+    const auto textTop =
+        static_cast<std::uint16_t>(top + (kContentRowHeight - kLine) / 2U);
+    addFill(commands,
+            {kContentRowLeft, top, kContentRowWidth,
+             static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+            ThemeToken::Surface);
+    if (row < 3U) {
+        const char* label = row == 0U   ? "label-reset-cause"
+                            : row == 1U ? "label-fault-code"
+                                        : "label-state";
+        addText(commands, packs, locale, fermentationTextKey(label),
+                {12U, textTop, 132U, kLine}, ThemeToken::TextSecondary,
+                ThemeToken::Surface);
+        const device_platform::DisplayRect value{148U, textTop, 160U, kLine};
+        if (row == 0U) {
+            const auto& cause = snapshot.status.presentation.resetCause;
+            addText(commands, packs, locale,
+                    cause.has_value() ? resetCauseTextKey(*cause)
+                                      : fermentationTextKey("unavailable"),
+                    value,
+                    cause.has_value() ? ThemeToken::TextPrimary
+                                      : ThemeToken::TextSecondary,
+                    ThemeToken::Surface);
+        } else if (row == 1U) {
+            const auto code = snapshot.status.presentation.faultCode;
+            if (code == FaultCode::None) {
+                addText(commands, packs, locale,
+                        fermentationTextKey("value-none"), value,
+                        ThemeToken::TextPrimary, ThemeToken::Surface);
+            } else {
+                char text[8];
+                std::snprintf(text, sizeof(text), "0x%04X",
+                              static_cast<unsigned>(code));
+                addRawText(commands, value, text, ThemeToken::StatusError,
+                           ThemeToken::Surface);
+            }
+        } else {
+            addText(commands, packs, locale,
+                    snapshot.status.ready
+                        ? homeModeKey(snapshot.home.mode)
+                        : fermentationTextKey("status-not-ready"),
+                    value,
+                    snapshot.status.ready ? ThemeToken::TextPrimary
+                                          : ThemeToken::StatusWarning,
+                    ThemeToken::Surface);
+        }
+        return;
+    }
+    const auto sensorRow = row - 3U;
+    const auto role = kDiagnosticRoles[sensorRow / 2U];
+    const TemperatureView* view = nullptr;
+    for (const auto& candidate : snapshot.temperatures) {
+        if (candidate.role == role) view = &candidate;
+    }
+    const bool valid =
+        view != nullptr &&
+        view->quality.quality == device_platform::SensorQuality::Valid;
+    const auto tone =
+        valid ? ThemeToken::TextPrimary : ThemeToken::StatusWarning;
+    const auto qualityKey = view != nullptr
+                                ? sensorQualityTextKey(view->quality.quality)
+                                : fermentationTextKey("unavailable");
+    if (sensorRow % 2U == 0U) {
+        addText(commands, packs, locale, temperatureRoleTextKey(role),
+                {12U, textTop, 112U, kLine}, ThemeToken::TextPrimary,
+                ThemeToken::Surface);
+        addText(commands, packs, locale, qualityKey,
+                {128U, textTop, 84U, kLine}, tone, ThemeToken::Surface);
+        addRawText(commands, {216U, textTop, 92U, kLine},
+                   view != nullptr
+                       ? diagnosticAgeText(view->quality.lastValidSampleAgeMs)
+                       : std::string("--"),
+                   ThemeToken::TextSecondary, ThemeToken::Surface);
+        return;
+    }
+    addText(commands, packs, locale, diagnosticRoleShortTextKey(role),
+            {12U, textTop, 44U, kLine}, ThemeToken::TextPrimary,
+            ThemeToken::Surface);
+    addText(commands, packs, locale, qualityKey, {58U, textTop, 76U, kLine},
+            tone, ThemeToken::Surface);
+    const char* const labels[3] = {"value-raw", "value-corrected",
+                                   "value-filtered"};
+    const std::optional<double> values[3] = {
+        view != nullptr ? view->quality.rawCelsius : std::nullopt,
+        view != nullptr ? view->quality.correctedCelsius : std::nullopt,
+        view != nullptr ? view->quality.filteredCelsius : std::nullopt};
+    constexpr std::uint16_t kValueLeft[3] = {136U, 194U, 252U};
+    constexpr std::uint16_t kValueWidth[3] = {56U, 56U, 60U};
+    for (std::size_t index = 0U; index < 3U; ++index) {
+        addLabeledRawText(
+            commands, packs, locale, labels[index],
+            diagnosticValueText(values[index]),
+            {kValueLeft[index], textTop, kValueWidth[index], kLine}, tone,
+            ThemeToken::Surface);
+    }
 }
 
 std::string minutesText(const std::optional<std::uint32_t>& minutes) {
@@ -1383,8 +1522,22 @@ RepresentativeScreen makeRepresentativeScreen(
                      RepresentativeScreen::kTextLineHeight},
                     device_platform::ThemeToken::TextSecondary,
                     device_platform::ThemeToken::Canvas);
-        } else if (screen.workspace.page == FermentationUiPage::Diagnostics ||
-                   screen.workspace.page == FermentationUiPage::Service) {
+        } else if (screen.workspace.page == FermentationUiPage::Diagnostics) {
+            // #28 D1: read-only window over the fixed diagnostics rows, same
+            // geometry as the Technical page (no touch target per row).
+            const auto first = screen.workspace.pager.currentIndex;
+            const auto rowCount = std::min<std::size_t>(
+                kFermentationUiDiagnosticsRowCount > first
+                    ? kFermentationUiDiagnosticsRowCount - first
+                    : 0U,
+                kFermentationUiListVisibleRows);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                addDiagnosticsRow(
+                    commands, textPacks, locale, snapshot, first + index,
+                    static_cast<std::uint16_t>(kContentRowTop +
+                                               index * kContentRowHeight));
+            }
+        } else if (screen.workspace.page == FermentationUiPage::Service) {
             // Content is owned by #28; no function is promised here.
             addText(commands, textPacks, locale,
                     fermentationTextKey("deferred-28"),

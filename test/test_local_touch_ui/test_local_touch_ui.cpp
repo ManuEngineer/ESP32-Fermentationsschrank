@@ -90,6 +90,65 @@ void test_workspace_has_fixed_slots_and_manual_paths_are_separate() {
     TEST_ASSERT_FALSE(completion.startCooling);
 }
 
+// #28 D1: the diagnostics page is reachable in standby and during a run, the
+// pager moves exactly one row at a time over the nine fixed rows, and pressing
+// the rows or paging creates no command, intent or mutation.
+void test_diagnostics_page_scrolls_by_one_row_and_creates_no_intent() {
+    const auto standby =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    const auto active =
+        snapshotFor(ProcessState::Fermenting, FermentationHomeMode::ActiveRun);
+    for (const auto* snapshot : {&standby, &active}) {
+        FermentationTouchWorkspace workspace;
+        workspace.setPage(FermentationUiPage::Home);
+        if (snapshot == &active) {
+            // Active run: Home -> Status (slot 3).
+            const auto toStatus = workspace.press(*snapshot, bottom(3U));
+            TEST_ASSERT_TRUE(toStatus.navigated);
+        } else {
+            workspace.setPage(FermentationUiPage::Status);
+        }
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Status),
+                              static_cast<int>(workspace.page()));
+        const auto toDiagnostics = workspace.press(*snapshot, bottom(2U));
+        TEST_ASSERT_TRUE(toDiagnostics.navigated);
+        TEST_ASSERT_FALSE(toDiagnostics.action.has_value());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Diagnostics),
+                              static_cast<int>(workspace.page()));
+        auto view = workspace.view(*snapshot);
+        TEST_ASSERT_EQUAL_UINT32(kFermentationUiDiagnosticsRowCount,
+                                 view.pager.itemCount);
+        TEST_ASSERT_EQUAL_UINT32(0U, view.pager.currentIndex);
+        TEST_ASSERT_FALSE(view.pager.canMoveUp());
+        for (std::size_t row = 1U; row < kFermentationUiDiagnosticsRowCount;
+             ++row) {
+            const auto down = workspace.press(*snapshot, bottom(2U));
+            TEST_ASSERT_TRUE(down.navigated);
+            TEST_ASSERT_FALSE(down.action.has_value());
+            TEST_ASSERT_FALSE(down.transitionAction.has_value());
+            view = workspace.view(*snapshot);
+            TEST_ASSERT_EQUAL_UINT32(row, view.pager.currentIndex);
+        }
+        TEST_ASSERT_FALSE(view.pager.canMoveDown());
+        TEST_ASSERT_FALSE(workspace.press(*snapshot, bottom(2U)).navigated);
+        const auto up = workspace.press(*snapshot, bottom(1U));
+        TEST_ASSERT_TRUE(up.navigated);
+        TEST_ASSERT_EQUAL_UINT32(kFermentationUiDiagnosticsRowCount - 2U,
+                                 workspace.view(*snapshot).pager.currentIndex);
+        // Rows are no touch targets: pressing the content area does nothing.
+        const auto cell = workspace.press(
+            *snapshot, {device_platform::DeviceUiTargetKind::ContentCell, 0U});
+        TEST_ASSERT_FALSE(cell.action.has_value());
+        TEST_ASSERT_FALSE(cell.transitionAction.has_value());
+        // The existing Diagnose -> Service access is unchanged (slot 3).
+        const auto service = workspace.press(*snapshot, bottom(3U));
+        TEST_ASSERT_TRUE(service.navigated);
+        TEST_ASSERT_FALSE(service.action.has_value());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Service),
+                              static_cast<int>(workspace.page()));
+    }
+}
+
 void test_workspace_navigation_does_not_create_a_command_id() {
     const auto snapshot =
         snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
@@ -2425,7 +2484,7 @@ void test_fermentation_text_packs_are_complete_static_tables() {
     const auto packs = makeFermentationUiTextPacks();
     TEST_ASSERT_EQUAL_UINT32(3U, packs.size());
     const auto& reference = packs.front().translations;
-    TEST_ASSERT_EQUAL_UINT32(205U, reference.size());
+    TEST_ASSERT_EQUAL_UINT32(227U, reference.size());
     for (const auto& pack : packs) {
         TEST_ASSERT_EQUAL_UINT32(reference.size(), pack.translations.size());
         for (const auto& translation : pack.translations) {
@@ -3093,6 +3152,7 @@ int main(int, char**) {
         test_web_access_page_is_reachable_and_slot_follows_application_state);
     RUN_TEST(test_workspace_has_fixed_slots_and_manual_paths_are_separate);
     RUN_TEST(test_workspace_navigation_does_not_create_a_command_id);
+    RUN_TEST(test_diagnostics_page_scrolls_by_one_row_and_creates_no_intent);
     RUN_TEST(test_active_home_press_opens_choice_without_preparing_a_command);
     RUN_TEST(test_shell_wake_is_first_touch_and_frame_is_deterministic);
     RUN_TEST(test_waiting_exposes_transition_intent_without_local_revision);

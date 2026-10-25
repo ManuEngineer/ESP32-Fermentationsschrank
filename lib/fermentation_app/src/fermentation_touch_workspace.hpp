@@ -173,6 +173,10 @@ enum class FermentationUiProgramListIntent : std::uint8_t {
 // Visible content rows of a list page. The platform target only carries row
 // indices; the capacity is owned here and by the renderer.
 inline constexpr std::size_t kFermentationUiListVisibleRows = 3U;
+// Diagnostics page (#28 D1): three fixed rows (reset cause, fault code, state)
+// and two rows per temperature role (role/quality/age, then short role/quality
+// and the raw/corrected/filtered values); the pager moves one row at a time.
+inline constexpr std::size_t kFermentationUiDiagnosticsRowCount = 9U;
 
 enum class FermentationUiSafeBootTarget : std::uint8_t {
     PersistentFactoryReset,

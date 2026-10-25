@@ -169,11 +169,60 @@ device_platform::TextKey sensorQualityTextKey(
     return fermentationTextKey("message-unknown");
 }
 
+device_platform::TextKey resetCauseTextKey(device_platform::ResetCause cause) {
+    switch (cause) {
+        case device_platform::ResetCause::Unknown:
+            return fermentationTextKey("reset-cause-unknown");
+        case device_platform::ResetCause::PowerOn:
+            return fermentationTextKey("reset-cause-power-on");
+        case device_platform::ResetCause::External:
+            return fermentationTextKey("reset-cause-external");
+        case device_platform::ResetCause::Software:
+            return fermentationTextKey("reset-cause-software");
+        case device_platform::ResetCause::Panic:
+            return fermentationTextKey("reset-cause-panic");
+        case device_platform::ResetCause::InterruptWatchdog:
+            return fermentationTextKey("reset-cause-int-wdt");
+        case device_platform::ResetCause::TaskWatchdog:
+            return fermentationTextKey("reset-cause-task-wdt");
+        case device_platform::ResetCause::Watchdog:
+            return fermentationTextKey("reset-cause-wdt");
+        case device_platform::ResetCause::DeepSleep:
+            return fermentationTextKey("reset-cause-deep-sleep");
+        case device_platform::ResetCause::Brownout:
+            return fermentationTextKey("reset-cause-brownout");
+        case device_platform::ResetCause::PowerGlitch:
+            return fermentationTextKey("reset-cause-power-glitch");
+        case device_platform::ResetCause::CpuLockup:
+            return fermentationTextKey("reset-cause-cpu-lockup");
+        case device_platform::ResetCause::Sdio:
+        case device_platform::ResetCause::Usb:
+        case device_platform::ResetCause::Jtag:
+        case device_platform::ResetCause::Efuse:
+        case device_platform::ResetCause::Other:
+            return fermentationTextKey("reset-cause-other");
+    }
+    return fermentationTextKey("reset-cause-unknown");
+}
+
+device_platform::TextKey diagnosticRoleShortTextKey(
+    FermentationTemperatureRole role) {
+    switch (role) {
+        case FermentationTemperatureRole::CabinetAir:
+            return fermentationTextKey("role-short-cabinet-air");
+        case FermentationTemperatureRole::Product:
+            return fermentationTextKey("role-short-product");
+        case FermentationTemperatureRole::Cooling:
+            return fermentationTextKey("role-short-cooling");
+    }
+    return fermentationTextKey("reset-cause-unknown");
+}
+
 namespace {
 
 // Immutable firmware texts: constexpr tables of string-literal views, so they
 // stay in read-only flash and are never copied into the heap.
-constexpr std::size_t kTextCount = 205U;
+constexpr std::size_t kTextCount = 227U;
 using device_platform::TextTranslation;
 
 constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
@@ -385,6 +434,28 @@ constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
     {"factory-reset-handoff", "Reset done, run storage unavailable."},
     {"factory-reset-failed", "Reset failed, nothing changed."},
     {"factory-reset-rejected", "Not allowed right now."},
+    {"label-reset-cause", "Reset cause: "},
+    {"label-state", "State: "},
+    {"value-none", "none"},
+    {"role-short-cabinet-air", "Air"},
+    {"role-short-product", "Prod"},
+    {"role-short-cooling", "Cool"},
+    {"reset-cause-unknown", "unknown"},
+    {"reset-cause-power-on", "Power on"},
+    {"reset-cause-external", "External"},
+    {"reset-cause-software", "Software"},
+    {"reset-cause-panic", "Panic"},
+    {"reset-cause-int-wdt", "Int. watchdog"},
+    {"reset-cause-task-wdt", "Task watchdog"},
+    {"reset-cause-wdt", "Watchdog"},
+    {"reset-cause-deep-sleep", "Deep sleep"},
+    {"reset-cause-brownout", "Brownout"},
+    {"reset-cause-power-glitch", "Power glitch"},
+    {"reset-cause-cpu-lockup", "CPU lockup"},
+    {"reset-cause-other", "Other"},
+    {"value-raw", "R"},
+    {"value-corrected", "C"},
+    {"value-filtered", "F"},
 }};
 
 constexpr std::array<TextTranslation, kTextCount> kGermanTexts{{
@@ -596,6 +667,28 @@ constexpr std::array<TextTranslation, kTextCount> kGermanTexts{{
     {"factory-reset-handoff", "Reset fertig, Laufspeicher fehlt."},
     {"factory-reset-failed", "Reset fehlgeschlagen, nichts geaendert."},
     {"factory-reset-rejected", "Jetzt nicht erlaubt."},
+    {"label-reset-cause", "Resetursache: "},
+    {"label-state", "Zustand: "},
+    {"value-none", "keiner"},
+    {"role-short-cabinet-air", "Luft"},
+    {"role-short-product", "Prod"},
+    {"role-short-cooling", "Kuehl"},
+    {"reset-cause-unknown", "unbekannt"},
+    {"reset-cause-power-on", "Einschalten"},
+    {"reset-cause-external", "Extern"},
+    {"reset-cause-software", "Software"},
+    {"reset-cause-panic", "Panic"},
+    {"reset-cause-int-wdt", "Int.-Watchdog"},
+    {"reset-cause-task-wdt", "Task-Watchdog"},
+    {"reset-cause-wdt", "Watchdog"},
+    {"reset-cause-deep-sleep", "Tiefschlaf"},
+    {"reset-cause-brownout", "Unterspannung"},
+    {"reset-cause-power-glitch", "Spannungsstoerung"},
+    {"reset-cause-cpu-lockup", "CPU-Blockade"},
+    {"reset-cause-other", "Andere"},
+    {"value-raw", "R"},
+    {"value-corrected", "K"},
+    {"value-filtered", "F"},
 }};
 
 constexpr std::array<TextTranslation, kTextCount> kSpanishTexts{{
@@ -808,6 +901,28 @@ constexpr std::array<TextTranslation, kTextCount> kSpanishTexts{{
     {"factory-reset-handoff", "Hecho, sin memoria de proceso."},
     {"factory-reset-failed", "Fallo, sin cambios."},
     {"factory-reset-rejected", "No permitido ahora."},
+    {"label-reset-cause", "Causa reinicio: "},
+    {"label-state", "Estado: "},
+    {"value-none", "ninguno"},
+    {"role-short-cabinet-air", "Aire"},
+    {"role-short-product", "Prod"},
+    {"role-short-cooling", "Frio"},
+    {"reset-cause-unknown", "desconocido"},
+    {"reset-cause-power-on", "Encendido"},
+    {"reset-cause-external", "Externo"},
+    {"reset-cause-software", "Software"},
+    {"reset-cause-panic", "Panic"},
+    {"reset-cause-int-wdt", "Watchdog int."},
+    {"reset-cause-task-wdt", "Watchdog tarea"},
+    {"reset-cause-wdt", "Watchdog"},
+    {"reset-cause-deep-sleep", "Sueno profundo"},
+    {"reset-cause-brownout", "Subtension"},
+    {"reset-cause-power-glitch", "Fallo tension"},
+    {"reset-cause-cpu-lockup", "Bloqueo CPU"},
+    {"reset-cause-other", "Otra"},
+    {"value-raw", "B"},
+    {"value-corrected", "C"},
+    {"value-filtered", "F"},
 }};
 
 }  // namespace
