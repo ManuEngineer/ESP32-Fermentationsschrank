@@ -1681,6 +1681,8 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::Diagnostics:
             view.title = key("diagnostics");
+            view.pager.itemCount = kFermentationUiDiagnosticsRowCount;
+            view.pager.currentIndex = pager_.currentIndex;
             setSlot(view, 1U, "up",
                     FermentationUiWorkspaceSlotAction::MovePagerUp,
                     view.pager.canMoveUp());

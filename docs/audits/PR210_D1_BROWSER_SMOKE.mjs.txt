@@ -1,0 +1,31 @@
+// PR #210 / #28 D1: Browser-Regressions-Smoke der BESTEHENDEN Weboberflaeche (keine neue Web-Funktion, kein D9).
+// Usage: DEVICE=<ip> PWFILE=<600-file> OUT=<private dir> PLAYWRIGHT=<playwright-core path> node smoke.mjs
+// Prueft: Login-Shell, Anmeldung, Navigation, Status/Temperaturanzeige (ohne Sensoren wahrheitsgemaess "Veraltet"/"--"),
+// DE/EN/ES, Abmeldung. Kein Run-/Programm-Intent, kein Namens-Speichern, kein falsches Passwort. Sessions immer abgemeldet.
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+const { DEVICE, PWFILE, OUT, PLAYWRIGHT } = process.env;
+const { chromium } = createRequire(import.meta.url)(PLAYWRIGHT);
+const pw = readFileSync(PWFILE, 'utf8').replace(/\n$/, ''); const BASE = `http://${DEVICE}`;
+mkdirSync(OUT, { recursive: true }); const LOG = `${OUT}/d1_browser_smoke.jsonl`; writeFileSync(LOG, '');
+let failed = 0;
+const ev = (phase, result, detail = '') => { if (result === 'FAIL') failed++; appendFileSync(LOG, JSON.stringify({ wall: new Date().toISOString(), phase, result, detail: String(detail).slice(0, 300) }) + '\n'); console.log(`${result.padEnd(5)} ${phase} ${detail}`); };
+const check = async (phase, fn) => { try { const d = await fn(); ev(phase, d === false ? 'FAIL' : 'PASS', typeof d === 'string' ? d : ''); } catch (e) { ev(phase, 'FAIL', e.message.split('\n')[0]); } };
+const settle = ms => new Promise(r => setTimeout(r, ms));
+const L = { de: ['Uebersicht', 'Meldungen', 'Programme', 'Einstellungen', 'Schrank', 'Veraltet'], en: ['Overview', 'Alerts', 'Programs', 'Settings', 'Cabinet', 'Stale'], es: ['Resumen', 'Alertas', 'Programas', 'Ajustes', 'Armario', 'Anticuado'] };
+const browser = await chromium.launch({ headless: true }); const page = await (await browser.newContext({ viewport: { width: 1000, height: 900 }, locale: 'de-CH' })).newPage();
+const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !/401/.test(m.text())) errors.push(m.text()); });
+try {
+  await check('login shell loads', async () => { await page.goto(BASE + '/'); await page.waitForSelector('#password', { timeout: 15000 }); return 'password field visible'; });
+  await check('login', async () => { await page.fill('#password', pw); await page.click('#login button'); await page.waitForSelector('#logout', { state: 'visible', timeout: 20000 }); return 'logout visible'; });
+  for (const l of ['de', 'en', 'es']) {
+    await page.selectOption('#lang', l); await settle(500);
+    for (let i = 0; i < 4; i++) await check(`${l} nav ${L[l][i]}`, async () => { await page.locator('nav button').nth(i).click(); await settle(1200); const t = await page.evaluate(() => document.body.innerText); if (!t.includes(L[l][i])) throw new Error('label missing'); if (i === 2 && !(await page.locator('#pg option').count())) throw new Error('no programs'); await page.screenshot({ path: `${OUT}/${l}_nav${i}.png` }); return ''; });
+    await check(`${l} status + temperature display`, async () => { await page.locator('nav button').nth(0).click(); await settle(1500); const t = await page.evaluate(() => document.body.innerText); if (!t.includes(L[l][4])) throw new Error('cabinet row missing'); if (!/--|Veraltet|Stale|Anticuado|[0-9]\.[0-9] °C/.test(t)) throw new Error('no value or stale marker'); if (/\b0\.0 °C/.test(t)) throw new Error('fake zero value'); return t.includes(L[l][5]) ? 'sensors shown as stale/unavailable' : 'values shown'; });
+  }
+  await check('logout', async () => { await page.click('#logout'); await settle(1500); await page.waitForSelector('#password', { timeout: 10000 }); return 'login form again'; });
+} finally {
+  try { if (await page.locator('#logout').isVisible()) { await page.click('#logout'); await settle(1500); } } catch {}
+  ev('end', failed === 0 && errors.length === 0 ? 'PASS' : 'FAIL', `failed=${failed} unexpected page errors=${errors.length} ${errors.slice(0, 2).join(' | ')}`);
+  if (failed || errors.length) process.exitCode = 1; await browser.close();
+}

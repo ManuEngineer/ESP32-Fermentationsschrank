@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <algorithm>
+#include <limits>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -2003,15 +2004,17 @@ void test_recovery_page_names_mode_and_unavailable_time_correction() {
 
 void test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason() {
     for (const auto* locale : {"en", "de", "es"}) {
-        for (const auto page : {fermentation::FermentationUiPage::Diagnostics,
-                                fermentation::FermentationUiPage::Service}) {
-            fermentation::FermentationUiSnapshot snapshot;
-            snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
-            fermentation::FermentationTouchWorkspace workspace;
-            workspace.setPage(page);
-            const auto screen = pageScreen(snapshot, workspace, locale);
-            TEST_ASSERT_TRUE(hasText(screen, localized(locale, "deferred-28")));
-        }
+        // #28 D1: Diagnostics now has real content; Service keeps the hint.
+        fermentation::FermentationUiSnapshot snapshot;
+        snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(fermentation::FermentationUiPage::Service);
+        const auto screen = pageScreen(snapshot, workspace, locale);
+        TEST_ASSERT_TRUE(hasText(screen, localized(locale, "deferred-28")));
+        fermentation::FermentationTouchWorkspace diagnostics;
+        diagnostics.setPage(fermentation::FermentationUiPage::Diagnostics);
+        TEST_ASSERT_FALSE(hasText(pageScreen(snapshot, diagnostics, locale),
+                                  localized(locale, "deferred-28")));
     }
     // The Service page keeps the owner's unavailable reason as a second line.
     fermentation::FermentationUiSnapshot snapshot;
@@ -2041,6 +2044,416 @@ void test_messages_page_shows_an_empty_state_only_without_messages() {
 
 // All content pages: bounded command count, deterministic output and no
 // overlapping text below the header, in every locale.
+// ---- #28 D1: read-only diagnostics page ------------------------------------
+constexpr std::uint16_t kDiagnosticsRowTextTop = 75U;  // 64 + (40 - 18) / 2
+constexpr std::uint16_t kDiagnosticsRowPitch = 40U;
+
+fermentation::main_ui::RepresentativeScreen diagnosticsScreenAt(
+    const fermentation::FermentationUiSnapshot& snapshot, std::size_t index,
+    const char* locale) {
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Diagnostics);
+    for (std::size_t press = 0U; press < index; ++press) {
+        const auto result = workspace.press(
+            snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 2U});
+        TEST_ASSERT_TRUE(result.navigated);
+    }
+    return pageScreen(snapshot, workspace, locale);
+}
+
+// Texts of the n-th visible diagnostics row (all draw commands on its line).
+std::vector<fermentation::main_ui::ScreenDrawCommand> diagnosticsRow(
+    const fermentation::main_ui::RepresentativeScreen& screen,
+    std::size_t visibleRow) {
+    std::vector<fermentation::main_ui::ScreenDrawCommand> result;
+    const auto top = static_cast<std::uint16_t>(
+        kDiagnosticsRowTextTop + visibleRow * kDiagnosticsRowPitch);
+    for (const auto& command : screen.commands) {
+        if (command.kind == fermentation::main_ui::ScreenDrawKind::Text &&
+            command.rect.top == top) {
+            result.push_back(command);
+        }
+    }
+    return result;
+}
+
+bool rowHasText(
+    const std::vector<fermentation::main_ui::ScreenDrawCommand>& row,
+    const std::string& text) {
+    return std::any_of(row.begin(), row.end(), [&](const auto& command) {
+        return command.text == text;
+    });
+}
+
+fermentation::FermentationUiSnapshot diagnosticsSnapshot(
+    fermentation::FermentationTemperatureRole role,
+    device_platform::SensorQuality quality, std::optional<double> raw,
+    std::optional<double> corrected, std::optional<double> filtered,
+    std::optional<std::uint64_t> ageMs) {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    for (const auto other :
+         {fermentation::FermentationTemperatureRole::CabinetAir,
+          fermentation::FermentationTemperatureRole::Product,
+          fermentation::FermentationTemperatureRole::Cooling}) {
+        fermentation::TemperatureView view;
+        view.role = other;
+        view.quality.quality = device_platform::SensorQuality::Stale;
+        if (other == role) {
+            view.quality.quality = quality;
+            view.quality.rawCelsius = raw;
+            view.quality.correctedCelsius = corrected;
+            view.quality.filteredCelsius = filtered;
+            view.quality.lastValidSampleAgeMs = ageMs;
+        }
+        snapshot.temperatures.push_back(view);
+    }
+    return snapshot;
+}
+
+void test_diagnostics_fixed_rows_show_reset_cause_fault_and_state() {
+    struct Mapping {
+        device_platform::ResetCause cause;
+        const char* key;
+    };
+    const Mapping mappings[] = {
+        {device_platform::ResetCause::Unknown, "reset-cause-unknown"},
+        {device_platform::ResetCause::PowerOn, "reset-cause-power-on"},
+        {device_platform::ResetCause::External, "reset-cause-external"},
+        {device_platform::ResetCause::Software, "reset-cause-software"},
+        {device_platform::ResetCause::Panic, "reset-cause-panic"},
+        {device_platform::ResetCause::InterruptWatchdog, "reset-cause-int-wdt"},
+        {device_platform::ResetCause::TaskWatchdog, "reset-cause-task-wdt"},
+        {device_platform::ResetCause::Watchdog, "reset-cause-wdt"},
+        {device_platform::ResetCause::DeepSleep, "reset-cause-deep-sleep"},
+        {device_platform::ResetCause::Brownout, "reset-cause-brownout"},
+        {device_platform::ResetCause::Sdio, "reset-cause-other"},
+        {device_platform::ResetCause::Usb, "reset-cause-other"},
+        {device_platform::ResetCause::Jtag, "reset-cause-other"},
+        {device_platform::ResetCause::Efuse, "reset-cause-other"},
+        {device_platform::ResetCause::PowerGlitch, "reset-cause-power-glitch"},
+        {device_platform::ResetCause::CpuLockup, "reset-cause-cpu-lockup"},
+        {device_platform::ResetCause::Other, "reset-cause-other"},
+    };
+    TEST_ASSERT_EQUAL_UINT32(17U, sizeof(mappings) / sizeof(mappings[0]));
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto& mapping : mappings) {
+            fermentation::FermentationUiSnapshot snapshot;
+            snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+            snapshot.status.ready = true;
+            snapshot.status.presentation.resetCause = mapping.cause;
+            const auto screen = diagnosticsScreenAt(snapshot, 0U, locale);
+            const auto row = diagnosticsRow(screen, 0U);
+            TEST_ASSERT_TRUE(
+                rowHasText(row, localized(locale, "label-reset-cause")));
+            TEST_ASSERT_TRUE(rowHasText(row, localized(locale, mapping.key)));
+        }
+        // No reset cause available: "unavailable", never a cause or "0".
+        fermentation::FermentationUiSnapshot unknown;
+        unknown.home.mode = fermentation::FermentationHomeMode::Standby;
+        const auto screen = diagnosticsScreenAt(unknown, 0U, locale);
+        TEST_ASSERT_TRUE(rowHasText(diagnosticsRow(screen, 0U),
+                                    localized(locale, "unavailable")));
+        // Fault row: "none" without a fault, the existing hex code with one.
+        TEST_ASSERT_TRUE(rowHasText(diagnosticsRow(screen, 1U),
+                                    localized(locale, "label-fault-code")));
+        TEST_ASSERT_TRUE(rowHasText(diagnosticsRow(screen, 1U),
+                                    localized(locale, "value-none")));
+        unknown.status.presentation.faultCode =
+            fermentation::FaultCode::SafetySensorUnavailable;
+        const auto faulted = diagnosticsScreenAt(unknown, 0U, locale);
+        TEST_ASSERT_TRUE(rowHasText(diagnosticsRow(faulted, 1U), "0x0301"));
+        TEST_ASSERT_FALSE(rowHasText(diagnosticsRow(faulted, 1U),
+                                     localized(locale, "value-none")));
+    }
+}
+
+void test_diagnostics_state_row_shows_the_established_process_state() {
+    using fermentation::FermentationHomeMode;
+    using fermentation::ProcessState;
+    struct Case {
+        ProcessState state;
+        FermentationHomeMode mode;
+        bool ready;
+        const char* key;
+        device_platform::ThemeToken tone;
+    };
+    using device_platform::ThemeToken;
+    const Case cases[] = {
+        // SAFE_BOOT is never hidden behind "restricted" or "not ready".
+        {ProcessState::SafeBoot, FermentationHomeMode::Restricted, true,
+         "process-state-safe-boot", ThemeToken::StatusWarning},
+        {ProcessState::SafeBoot, FermentationHomeMode::Restricted, false,
+         "process-state-safe-boot", ThemeToken::StatusWarning},
+        {ProcessState::SafeBoot, FermentationHomeMode::Unavailable, false,
+         "process-state-safe-boot", ThemeToken::StatusWarning},
+        // Concrete running states.
+        {ProcessState::Fermenting, FermentationHomeMode::ActiveRun, true,
+         "process-state-fermenting", ThemeToken::TextPrimary},
+        {ProcessState::Standby, FermentationHomeMode::Standby, true,
+         "process-state-standby", ThemeToken::TextPrimary},
+        {ProcessState::Fault, FermentationHomeMode::Restricted, true,
+         "process-state-fault", ThemeToken::StatusWarning},
+        // No established state: the default Boot is NOT presented as a state.
+        // ServiceRequired without a runtime lease: Restricted home, default
+        // Boot, not ready -> "not ready", never Boot as a proven state.
+        {ProcessState::Boot, FermentationHomeMode::Restricted, false,
+         "status-not-ready", ThemeToken::StatusWarning},
+        {ProcessState::Boot, FermentationHomeMode::Unavailable, false,
+         "status-not-ready", ThemeToken::StatusWarning},
+        {ProcessState::Boot, FermentationHomeMode::Unavailable, true,
+         "unavailable", ThemeToken::TextSecondary},
+    };
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto& item : cases) {
+            fermentation::FermentationUiSnapshot snapshot;
+            snapshot.home.mode = item.mode;
+            snapshot.home.processState = item.state;
+            snapshot.status.ready = item.ready;
+            const auto row =
+                diagnosticsRow(diagnosticsScreenAt(snapshot, 0U, locale), 2U);
+            TEST_ASSERT_TRUE(rowHasText(row, localized(locale, "label-state")));
+            TEST_ASSERT_TRUE(rowHasText(row, localized(locale, item.key)));
+            if (item.state == ProcessState::Boot) {
+                TEST_ASSERT_FALSE(
+                    rowHasText(row, localized(locale, "process-state-boot")));
+            }
+            for (const auto& command : row) {
+                if (command.text == localized(locale, item.key)) {
+                    TEST_ASSERT_TRUE(command.token == item.tone);
+                }
+            }
+        }
+    }
+}
+
+void test_diagnostics_numbers_are_never_truncated_and_fit_the_field() {
+    struct Case {
+        double value;
+        const char* text;
+    };
+    const Case cases[] = {
+        {21.34, "21.3"}, {-21.36, "-21.4"}, {99.94, "99.9"},  {-99.94, "-99.9"},
+        {99.95, "100"},  {99.96, "100"},    {-99.96, "-100"}, {-127.0, "-127"},
+        {999.4, "999"},  {-999.4, "-999"},  {999.5, "+OVF"},  {-999.5, "-OVF"},
+        {1e16, "+OVF"},  {-1e16, "-OVF"},   {1e100, "+OVF"},  {-1e100, "-OVF"},
+        {-0.04, "0.0"},  {0.0, "0.0"},      {85.0, "85.0"},
+    };
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto& item : cases) {
+            const auto snapshot = diagnosticsSnapshot(
+                fermentation::FermentationTemperatureRole::Cooling,
+                device_platform::SensorQuality::Failed, item.value, item.value,
+                item.value, 1000U);
+            const auto row =
+                diagnosticsRow(diagnosticsScreenAt(snapshot, 8U, locale), 0U);
+            for (const char* label :
+                 {"value-raw", "value-corrected", "value-filtered"}) {
+                const auto text = localized(locale, label) + item.text;
+                TEST_ASSERT_TRUE_MESSAGE(rowHasText(row, text), text.c_str());
+                // The value (label + at most 5 glyphs, e.g. "R-99.9") stays
+                // inside its fixed rectangle (7 px per glyph bound).
+                for (const auto& command : row) {
+                    if (command.text == text) {
+                        TEST_ASSERT_TRUE(text.size() <= 6U);
+                        TEST_ASSERT_TRUE(text.size() * 7U <=
+                                         command.rect.width);
+                    }
+                }
+            }
+        }
+        // Missing and non-finite values stay "--.-" (never 0, never a prefix).
+        for (const double bad : {std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::infinity(),
+                                 -std::numeric_limits<double>::infinity()}) {
+            const auto snapshot = diagnosticsSnapshot(
+                fermentation::FermentationTemperatureRole::Cooling,
+                device_platform::SensorQuality::Failed, bad, std::nullopt, bad,
+                std::nullopt);
+            const auto row =
+                diagnosticsRow(diagnosticsScreenAt(snapshot, 8U, locale), 0U);
+            TEST_ASSERT_TRUE(
+                rowHasText(row, localized(locale, "value-raw") + "--.-"));
+            TEST_ASSERT_TRUE(
+                rowHasText(row, localized(locale, "value-corrected") + "--.-"));
+            TEST_ASSERT_TRUE(
+                rowHasText(row, localized(locale, "value-filtered") + "--.-"));
+        }
+    }
+}
+
+void test_diagnostics_value_rows_are_self_contained_when_isolated() {
+    using device_platform::SensorQuality;
+    using fermentation::FermentationTemperatureRole;
+    struct RoleCase {
+        FermentationTemperatureRole role;
+        const char* longKey;
+        const char* shortKey;
+        std::size_t valueRow;
+    };
+    const RoleCase roles[] = {
+        {FermentationTemperatureRole::CabinetAir, "temperature-cabinet-air",
+         "role-short-cabinet-air", 4U},
+        {FermentationTemperatureRole::Product, "temperature-product",
+         "role-short-product", 6U},
+        {FermentationTemperatureRole::Cooling, "temperature-cooling",
+         "role-short-cooling", 8U},
+    };
+    struct QualityCase {
+        SensorQuality quality;
+        const char* key;
+    };
+    const QualityCase qualities[] = {{SensorQuality::Valid, "quality-valid"},
+                                     {SensorQuality::Stale, "quality-stale"},
+                                     {SensorQuality::Failed, "quality-failed"}};
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto& role : roles) {
+            for (const auto& quality : qualities) {
+                struct ValueCase {
+                    std::optional<double> raw, corrected, filtered;
+                    const char *rawText, *correctedText, *filteredText;
+                };
+                const ValueCase valueCases[] = {
+                    {21.34, 21.3, 21.26, "21.3", "21.3", "21.3"},
+                    {-127.0, std::nullopt, std::nullopt, "-127", "--.-",
+                     "--.-"},
+                    {85.0, 85.0, 84.9, "85.0", "85.0", "84.9"},
+                    {std::nullopt, std::nullopt, std::nullopt, "--.-", "--.-",
+                     "--.-"},
+                };
+                for (const auto& value : valueCases) {
+                    const auto snapshot = diagnosticsSnapshot(
+                        role.role, quality.quality, value.raw, value.corrected,
+                        value.filtered, 12345U);
+                    // Window starts at the value row: the role row above is NOT
+                    // visible.
+                    const auto screen =
+                        diagnosticsScreenAt(snapshot, role.valueRow, locale);
+                    const auto row = diagnosticsRow(screen, 0U);
+                    TEST_ASSERT_TRUE(
+                        rowHasText(row, localized(locale, role.shortKey)));
+                    TEST_ASSERT_TRUE(
+                        rowHasText(row, localized(locale, quality.key)));
+                    TEST_ASSERT_TRUE(rowHasText(
+                        row, localized(locale, "value-raw") + value.rawText));
+                    TEST_ASSERT_TRUE(
+                        rowHasText(row, localized(locale, "value-corrected") +
+                                            value.correctedText));
+                    TEST_ASSERT_TRUE(
+                        rowHasText(row, localized(locale, "value-filtered") +
+                                            value.filteredText));
+                    // The long role of the row above must not be needed.
+                    TEST_ASSERT_FALSE(
+                        rowHasText(row, localized(locale, role.longKey)));
+                    const auto expected =
+                        quality.quality == SensorQuality::Valid
+                            ? device_platform::ThemeToken::TextPrimary
+                            : device_platform::ThemeToken::StatusWarning;
+                    for (const auto& command : row) {
+                        if (command.text == localized(locale, role.shortKey))
+                            continue;
+                        TEST_ASSERT_TRUE(command.token == expected);
+                    }
+                }
+                // Role row (a): long role, quality and age in seconds.
+                const auto snapshot = diagnosticsSnapshot(
+                    role.role, quality.quality, 21.3, 21.3, 21.3, 12345U);
+                const auto rowA = diagnosticsRow(
+                    diagnosticsScreenAt(snapshot, role.valueRow - 1U, locale),
+                    0U);
+                TEST_ASSERT_TRUE(
+                    rowHasText(rowA, localized(locale, role.longKey)));
+                TEST_ASSERT_TRUE(
+                    rowHasText(rowA, localized(locale, quality.key)));
+                TEST_ASSERT_TRUE(rowHasText(rowA, "12 s"));
+            }
+        }
+        // Role without any TemperatureView: unavailable, never a measurement.
+        fermentation::FermentationUiSnapshot none;
+        none.home.mode = fermentation::FermentationHomeMode::Standby;
+        const auto missing =
+            diagnosticsRow(diagnosticsScreenAt(none, 4U, locale), 0U);
+        TEST_ASSERT_TRUE(rowHasText(missing, localized(locale, "unavailable")));
+        TEST_ASSERT_TRUE(
+            rowHasText(missing, localized(locale, "value-raw") + "--.-"));
+        const auto unknownAge =
+            diagnosticsRow(diagnosticsScreenAt(none, 3U, locale), 0U);
+        TEST_ASSERT_TRUE(rowHasText(unknownAge, "--"));
+    }
+}
+
+void test_diagnostics_rows_stay_within_the_304px_budget_in_every_window() {
+    // Conservative bound taken from the existing Technical layout (16 glyphs in
+    // a 112 px field): at most 7 px per glyph; verified again on the board.
+    constexpr std::size_t kPixelsPerGlyph = 7U;
+    using device_platform::SensorQuality;
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto quality : {SensorQuality::Valid, SensorQuality::Stale,
+                                   SensorQuality::Failed}) {
+            auto snapshot = diagnosticsSnapshot(
+                fermentation::FermentationTemperatureRole::Cooling, quality,
+                -127.0, -127.0, -127.0, 99999000U);
+            snapshot.status.presentation.resetCause =
+                device_platform::ResetCause::PowerGlitch;
+            snapshot.status.presentation.faultCode =
+                fermentation::FaultCode::SafetySensorUnavailable;
+            for (std::size_t index = 0U;
+                 index < fermentation::kFermentationUiDiagnosticsRowCount;
+                 ++index) {
+                const auto screen =
+                    diagnosticsScreenAt(snapshot, index, locale);
+                std::vector<fermentation::main_ui::ScreenDrawCommand> texts;
+                for (std::size_t row = 0U; row < 3U; ++row) {
+                    const auto commands = diagnosticsRow(screen, row);
+                    for (std::size_t a = 0U; a < commands.size(); ++a) {
+                        const auto& rect = commands[a].rect;
+                        TEST_ASSERT_TRUE(rect.left >= 8U);
+                        TEST_ASSERT_TRUE(rect.left + rect.width <= 8U + 304U);
+                        TEST_ASSERT_TRUE(commands[a].text.size() *
+                                             kPixelsPerGlyph <=
+                                         rect.width);
+                        for (std::size_t b = a + 1U; b < commands.size(); ++b) {
+                            TEST_ASSERT_FALSE(overlaps(rect, commands[b].rect));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void test_diagnostics_text_keys_exist_in_all_locales() {
+    const char* keys[] = {"label-reset-cause",
+                          "label-state",
+                          "value-none",
+                          "role-short-cabinet-air",
+                          "role-short-product",
+                          "role-short-cooling",
+                          "reset-cause-unknown",
+                          "reset-cause-power-on",
+                          "reset-cause-external",
+                          "reset-cause-software",
+                          "reset-cause-panic",
+                          "reset-cause-int-wdt",
+                          "reset-cause-task-wdt",
+                          "reset-cause-wdt",
+                          "reset-cause-deep-sleep",
+                          "reset-cause-brownout",
+                          "reset-cause-power-glitch",
+                          "reset-cause-cpu-lockup",
+                          "reset-cause-other",
+                          "value-raw",
+                          "value-corrected",
+                          "value-filtered"};
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto* key : keys) {
+            const auto text = localized(locale, key);
+            TEST_ASSERT_FALSE(text.empty());
+            TEST_ASSERT_TRUE(text != key);
+        }
+    }
+}
+
 void test_content_pages_are_bounded_deterministic_and_do_not_overlap() {
     auto catalog = makeScrollableCatalogForTest();
     fermentation::FermentationUiSnapshot snapshot =
@@ -2987,6 +3400,13 @@ int main() {
     RUN_TEST(
         test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason);
     RUN_TEST(test_messages_page_shows_an_empty_state_only_without_messages);
+    RUN_TEST(test_diagnostics_fixed_rows_show_reset_cause_fault_and_state);
+    RUN_TEST(test_diagnostics_state_row_shows_the_established_process_state);
+    RUN_TEST(test_diagnostics_numbers_are_never_truncated_and_fit_the_field);
+    RUN_TEST(test_diagnostics_value_rows_are_self_contained_when_isolated);
+    RUN_TEST(
+        test_diagnostics_rows_stay_within_the_304px_budget_in_every_window);
+    RUN_TEST(test_diagnostics_text_keys_exist_in_all_locales);
     RUN_TEST(test_content_pages_are_bounded_deterministic_and_do_not_overlap);
     RUN_TEST(test_every_displayed_s7_value_changes_the_refresh_revision);
     RUN_TEST(test_s7_text_packs_define_every_new_key_in_all_locales);

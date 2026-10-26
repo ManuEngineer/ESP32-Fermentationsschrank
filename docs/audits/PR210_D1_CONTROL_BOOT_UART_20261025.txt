@@ -1,0 +1,532 @@
+[host 22:08:52 +   0.001s] ### port opened (DTR/RTS released before open)
+[host 22:08:52 +   0.152s] ### EN reset pulse via RTS (IO0 high) - deliberate, documented
+[+   0.652s] ets Jul 29 2019 12:21:46
+[+   0.652s] 
+[+   0.652s] rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+[+   0.652s] configsip: 0, SPIWP:0xee
+[+   0.652s] clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+[+   0.652s] mode:DIO, clock div:2
+[+   0.652s] load:0x3fff0040,len:6272
+[+   0.652s] load:0x40078000,len:15824
+[+   0.652s] load:0x40080400,len:3988
+[+   0.652s] entry 0x40080644
+[+   0.652s] I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+[+   0.652s] I (27) boot: compile time Oct  9 2026 18:20:16
+[+   0.652s] I (27) boot: Multicore bootloader
+[+   0.653s] I (29) boot: chip revision: v3.1
+[+   0.653s] I (31) boot.esp32: SPI Speed      : 40MHz
+[+   0.653s] I (35) boot.esp32: SPI Mode       : DIO
+[+   0.653s] I (39) boot.esp32: SPI Flash Size : 4MB
+[+   0.653s] I (42) boot: Enabling RNG early entropy source...
+[+   0.653s] I (47) boot: Partition Table:
+[+   0.653s] I (49) boot: ## Label            Usage          Type ST Offset   Length
+[+   0.653s] I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+[+   0.653s] I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+[+   0.653s] I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+[+   0.653s] I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+[+   0.653s] I (82) boot: End of partition table
+[+   0.653s] I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=392ach (234156) map
+[+   0.653s] I (176) esp_image: segment 1: paddr=000492d4 vaddr=3ffb0000 size=04a20h ( 18976) load
+[+   0.653s] I (184) esp_image: segment 2: paddr=0004dcfc vaddr=40080000 size=0231ch (  8988) load
+[+   0.653s] I (188) esp_image: segment 3: paddr=00050020 vaddr=400d0020 size=156244h (1401412) map
+[+   1.153s] I (689) esp_image: segment 4: paddr=001a626c vaddr=4008231c size=16ab8h ( 92856) load
+[+   1.153s] I (727) esp_image: segment 5: paddr=001bcd2c vaddr=50000000 size=00028h (    40) load
+[+   1.153s] I (740) boot: Loaded app from partition at offset 0x10000
+[+   1.153s] I (740) boot: Disabling RNG early entropy source...
+[+   1.153s] I (751) cpu_start: Multicore app
+[+   1.153s] I (759) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+[+   1.153s] I (759) cpu_start: Pro cpu start user code
+[+   1.153s] I (759) cpu_start: cpu freq: 160000000 Hz
+[+   1.153s] I (761) app_init: Application information:
+[+   1.153s] I (765) app_init: Project name:     esp32_fermentationsschrank
+[+   1.153s] I (771) app_init: App version:      a9a1156
+[+   1.153s] I (774) app_init: Compile time:     Oct 16 2026 16:40:57
+[+   1.153s] I (779) app_init: ELF file SHA256:  dca3cc664...
+[+   1.153s] I (784) app_init: ESP-IDF:          v6.1
+[+   1.153s] I (787) efuse_init: Min chip rev:     v0.0
+[+   1.153s] I (791) efuse_init: Max chip rev:     v3.99 
+[+   1.153s] I (795) efuse_init: Chip rev:         v3.1
+[+   1.153s] I (799) heap_init: Initializing. RAM available for dynamic allocation:
+[+   1.153s] I (806) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+[+   1.153s] I (811) heap_init: At 3FFC6D18 len 000192E8 (100 KiB): DRAM
+[+   1.153s] I (816) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+[+   1.153s] I (821) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+[+   1.153s] I (827) heap_init: At 40098DD4 len 0000722C (28 KiB): IRAM
+[+   1.153s] I (834) spi_flash: detected chip: generic
+[+   1.153s] I (836) spi_flash: flash io: dio
+[+   1.153s] I (841) main_task: Started on CPU0
+[+   1.153s] I (841) main_task: Calling app_main()
+[+   1.153s] I (841) app_main: onboard outputs: inner_fan=polarity_unconfirmed_no_gpio_access outer_fan=polarity_unconfirmed_no_gpio_access buzzer=polarity_unconfirmed_no_gpio_access
+[+   1.153s] I (851) app_main: peltier bridge: ready_all_off_not_connected_to_planner
+[+   1.153s] I (871) app_main: default NVS initialized for ESP-IDF PHY system data
+[+   1.654s] I (1241) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=169284 minimum_free_heap_bytes=169284 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=18504 internal_8bit_free_bytes=169284 internal_8bit_minimum_free_bytes=169284 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=169284 dma_minimum_free_bytes=169284 dma_largest_free_block_bytes=110592
+[+   1.654s] I (1341) wifi:wifi driver task: 3ffdc310, prio:23, stack:6656, core=0
+[+   1.654s] I (1341) wifi:wifi firmware version: e12a754
+[+   1.654s] I (1341) wifi:wifi certification version: v7.0
+[+   1.654s] I (1341) wifi:config NVS flash: disabled
+[+   1.654s] I (1341) wifi:config nano formatting: disabled
+[+   1.654s] I (1351) wifi:Init data frame dynamic rx buffer num: 32
+[+   1.654s] I (1351) wifi:Init static rx mgmt buffer num: 5
+[+   1.654s] I (1361) wifi:Init management short buffer num: 32
+[+   1.654s] I (1361) wifi:Init dynamic tx buffer num: 32
+[+   1.654s] I (1361) wifi:Init static rx buffer size: 1600
+[+   1.654s] I (1371) wifi:Init static rx buffer num: 10
+[+   1.654s] I (1371) wifi:Init dynamic rx buffer num: 32
+[+   1.654s] I (1381) wifi_init: rx ba win: 6
+[+   1.654s] I (1381) wifi_init: accept mbox: 6
+[+   1.654s] I (1381) wifi_init: tcpip mbox: 32
+[+   1.654s] I (1391) wifi_init: udp mbox: 6
+[+   1.654s] I (1391) wifi_init: tcp mbox: 6
+[+   1.654s] I (1391) wifi_init: tcp tx win: 5760
+[+   1.654s] I (1391) wifi_init: tcp rx win: 5760
+[+   1.654s] I (1401) wifi_init: tcp mss: 1440
+[+   1.654s] I (1401) wifi_init: WiFi IRAM OP enabled
+[+   1.654s] I (1401) wifi_init: WiFi RX IRAM OP enabled
+[+   1.654s] W (1411) wifi:Password length matches WPA2 standards, authmode threshold changes from OPEN to WPA2
+[+   1.654s] I (1421) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06
+[+   2.155s] I (1511) wifi:mode : sta (20:50:0d:1b:2f:34)
+[+   2.155s] I (1511) wifi:enable tsf
+[+   2.155s] I (1531) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=ConnectingHome free_heap_bytes=71512 minimum_free_heap_bytes=67524 largest_free_block_8bit_bytes=65536 stack_hwm_bytes=11704 internal_8bit_free_bytes=71512 internal_8bit_minimum_free_bytes=67524 internal_8bit_largest_free_block_bytes=65536 dma_free_bytes=71512 dma_minimum_free_bytes=67524 dma_largest_free_block_bytes=65536
+[+   2.155s] I (1561) app_main: ESP32-Fermentationsschrank
+[+   2.155s] I (1561) app_main: profile: esp32_release
+[+   2.155s] I (1561) app_main: source git sha: a9a1156a1d44d4679957526bbc34a30be6422e4e
+[+   2.155s] I (1571) app_main: hardware state: HARDWARE_UNVERIFIED
+[+   2.155s] I (1581) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+[+   2.155s] I (1581) app_main: real actuators: disabled
+[+   2.155s] I (1591) app_main: application: ready
+[+   2.155s] I (1591) ili9341: LCD panel create success, version: 2.1.0
+[+   2.155s] I (1711) LVGL: Starting LVGL task
+[+   2.155s] W (1721) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+[+   2.155s] I (1781) app_main: touch calibration: active_status=Available fallback_status=NotFound
+[+   2.655s] I (2091) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=ConnectingHome free_heap_bytes=46596 minimum_free_heap_bytes=37940 largest_free_block_8bit_bytes=43008 stack_hwm_bytes=11704 internal_8bit_free_bytes=46596 internal_8bit_minimum_free_bytes=37940 internal_8bit_largest_free_block_bytes=43008 dma_free_bytes=46596 dma_minimum_free_bytes=37940 dma_largest_free_block_bytes=43008
+[+   2.655s] I (2131) app_main: resources_lvgl: point=after_ui_init pool_total_bytes=46724 pool_free_bytes=33596 pool_largest_free_bytes=33228 pool_max_used_bytes=13940 pool_used_pct=29 pool_frag_pct=2
+[+   2.655s] I (2131) app_main: ds18b20 sampler: disabled: budget not approved
+[+   2.655s] I (2401) wifi:new:<6,0>, old:<1,0>, ap:<255,255>, sta:<6,0>, prof:1, snd_ch_cfg:0x0
+[+   2.655s] I (2411) wifi:state: init -> auth (0xb0)
+[+   2.655s] I (2441) wifi:state: auth -> assoc (0x0)
+[+   2.655s] I (2451) wifi:state: assoc -> run (0x10)
+[+   3.156s] I (2541) wifi:connected with <ssid>, aid = 1, channel 6, BW20, bssid = <..>
+[+   3.156s] I (2541) wifi:security: WPA2-PSK, phy: bgn, rssi: -47, cipher(pairwise:0x3, group:0x3), pmf:0
+[+   3.156s] I (2551) wifi:pm start, type: 1
+[+   3.156s] 
+[+   3.156s] I (2551) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us
+[+   3.156s] I (2601) wifi:AP's beacon interval = 102400 us, DTIM period = 1
+[+   3.156s] I (2661) wifi:<ba-add>idx:0 (ifx:0, <mac>), tid:0, ssn:0, winSize:64
+[+   3.656s] I (3421) app_main: heartbeat: safe test mode, uptime_ms=2177
+[+   4.657s] I (4431) app_main: heartbeat: safe test mode, uptime_ms=3184
+[+   5.157s] I (4941) esp_netif_handlers: sta ip: <LAN-IP>, mask: 255.255.255.0, gw: <LAN-IP>
+[+   5.658s] I (5171) app_main: resources: point=stable_home_wifi network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=42452 minimum_free_heap_bytes=33780 largest_free_block_8bit_bytes=34816 stack_hwm_bytes=11704 internal_8bit_free_bytes=42260 internal_8bit_minimum_free_bytes=33780 internal_8bit_largest_free_block_bytes=34816 dma_free_bytes=42260 dma_minimum_free_bytes=33780 dma_largest_free_block_bytes=34816
+[+   5.658s] I (5291) app_main: resources_lvgl: point=stable_home_wifi pool=unavailable
+[+   5.658s] I (5431) app_main: heartbeat: safe test mode, uptime_ms=4184
+[+   6.659s] I (6431) app_main: heartbeat: safe test mode, uptime_ms=5184
+[+   7.660s] I (7431) app_main: heartbeat: safe test mode, uptime_ms=6185
+[+   8.661s] I (8441) app_main: heartbeat: safe test mode, uptime_ms=7195
+[+   9.662s] I (9451) app_main: heartbeat: safe test mode, uptime_ms=8204
+[+  10.662s] I (10451) app_main: heartbeat: safe test mode, uptime_ms=9204
+[+  11.663s] I (11451) app_main: heartbeat: safe test mode, uptime_ms=10204
+[+  12.664s] I (12451) app_main: heartbeat: safe test mode, uptime_ms=11204
+[+  13.665s] I (13451) app_main: heartbeat: safe test mode, uptime_ms=12207
+[+  14.666s] I (14461) app_main: heartbeat: safe test mode, uptime_ms=13215
+[+  15.667s] I (15461) app_main: heartbeat: safe test mode, uptime_ms=14215
+[+  16.668s] I (16461) app_main: heartbeat: safe test mode, uptime_ms=15215
+[+  17.669s] I (17461) app_main: heartbeat: safe test mode, uptime_ms=16215
+[+  18.670s] I (18471) app_main: heartbeat: safe test mode, uptime_ms=17225
+[+  19.671s] I (19481) app_main: heartbeat: safe test mode, uptime_ms=18234
+[+  20.672s] I (20481) app_main: heartbeat: safe test mode, uptime_ms=19234
+[+  21.673s] I (21481) app_main: heartbeat: safe test mode, uptime_ms=20234
+[+  22.674s] I (22481) app_main: heartbeat: safe test mode, uptime_ms=21234
+[+  23.675s] I (23481) app_main: heartbeat: safe test mode, uptime_ms=22235
+[+  24.675s] I (24491) app_main: heartbeat: safe test mode, uptime_ms=23245
+[+  25.676s] I (25491) app_main: heartbeat: safe test mode, uptime_ms=24245
+[+  26.677s] I (26491) app_main: heartbeat: safe test mode, uptime_ms=25245
+[+  27.678s] I (27491) app_main: heartbeat: safe test mode, uptime_ms=26245
+[+  28.679s] I (28491) app_main: heartbeat: safe test mode, uptime_ms=27245
+[+  29.680s] I (29491) app_main: heartbeat: safe test mode, uptime_ms=28245
+[+  30.681s] I (30491) app_main: heartbeat: safe test mode, uptime_ms=29245
+[+  31.682s] I (31401) wifi:<ba-add>idx:1 (ifx:0, <mac>), tid:6, ssn:2, winSize:64
+[+  32.183s] I (31761) app_main: heartbeat: safe test mode, uptime_ms=30516
+[+  32.683s] I (32421) app_main: resources: point=periodic_30s network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=42468 minimum_free_heap_bytes=33780 largest_free_block_8bit_bytes=34816 stack_hwm_bytes=11704 internal_8bit_free_bytes=42468 internal_8bit_minimum_free_bytes=33780 internal_8bit_largest_free_block_bytes=34816 dma_free_bytes=42468 dma_minimum_free_bytes=33780 dma_largest_free_block_bytes=34816
+[+  32.683s] I (32441) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=46724 pool_free_bytes=33632 pool_largest_free_bytes=33264 pool_max_used_bytes=13940 pool_used_pct=29 pool_frag_pct=2
+[+  33.183s] I (32771) app_main: heartbeat: safe test mode, uptime_ms=31525
+[+  34.185s] I (33771) app_main: heartbeat: safe test mode, uptime_ms=32525
+[+  35.186s] I (34771) app_main: heartbeat: safe test mode, uptime_ms=33525
+[+  36.187s] I (35771) app_main: heartbeat: safe test mode, uptime_ms=34525
+[+  37.188s] I (36771) app_main: heartbeat: safe test mode, uptime_ms=35525
+[+  38.189s] I (37771) app_main: heartbeat: safe test mode, uptime_ms=36525
+[+  39.190s] I (38771) app_main: heartbeat: safe test mode, uptime_ms=37525
+[+  40.191s] I (39771) app_main: heartbeat: safe test mode, uptime_ms=38525
+[+  41.192s] I (40771) app_main: heartbeat: safe test mode, uptime_ms=39525
+[+  41.693s] I (41081) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)
+[+  42.193s] I (41771) app_main: heartbeat: safe test mode, uptime_ms=40525
+[+  43.195s] I (42771) app_main: heartbeat: safe test mode, uptime_ms=41525
+[+  44.196s] I (43771) app_main: heartbeat: safe test mode, uptime_ms=42526
+[+  45.200s] I (44771) app_main: heartbeat: safe test mode, uptime_ms=43526
+[+  46.201s] I (45781) app_main: heartbeat: safe test mode, uptime_ms=44535
+[+  47.202s] I (46781) app_main: heartbeat: safe test mode, uptime_ms=45535
+[+  48.203s] I (47781) app_main: heartbeat: safe test mode, uptime_ms=46535
+[+  49.204s] I (48781) app_main: heartbeat: safe test mode, uptime_ms=47535
+[+  50.205s] I (49781) app_main: heartbeat: safe test mode, uptime_ms=48536
+[+  51.207s] I (50791) app_main: heartbeat: safe test mode, uptime_ms=49544
+[+  52.208s] I (51791) app_main: heartbeat: safe test mode, uptime_ms=50544
+[+  53.209s] I (52791) app_main: heartbeat: safe test mode, uptime_ms=51544
+[+  54.210s] I (53791) app_main: heartbeat: safe test mode, uptime_ms=52545
+[+  55.211s] I (54801) app_main: heartbeat: safe test mode, uptime_ms=53555
+[+  56.212s] I (55811) app_main: heartbeat: safe test mode, uptime_ms=54565
+[+  56.713s] I (56231) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)
+[+  57.213s] I (56811) app_main: heartbeat: safe test mode, uptime_ms=55565
+[+  58.214s] I (57811) app_main: heartbeat: safe test mode, uptime_ms=56565
+[+  59.215s] I (58811) app_main: heartbeat: safe test mode, uptime_ms=57565
+[+  60.216s] I (59811) app_main: heartbeat: safe test mode, uptime_ms=58566
+[+  61.217s] I (60821) app_main: heartbeat: safe test mode, uptime_ms=59575
+[+  62.219s] I (61821) app_main: heartbeat: safe test mode, uptime_ms=60575
+[+  63.220s] I (62821) app_main: heartbeat: safe test mode, uptime_ms=61575
+[+  64.221s] I (63821) app_main: heartbeat: safe test mode, uptime_ms=62575
+[+  65.222s] I (64821) app_main: heartbeat: safe test mode, uptime_ms=63575
+[+  66.223s] I (65821) app_main: heartbeat: safe test mode, uptime_ms=64575
+[+  67.224s] I (66821) app_main: heartbeat: safe test mode, uptime_ms=65575
+[+  68.225s] I (68061) app_main: heartbeat: safe test mode, uptime_ms=66816
+[+  69.727s] I (69071) app_main: heartbeat: safe test mode, uptime_ms=67825
+[+  70.727s] I (70071) app_main: heartbeat: safe test mode, uptime_ms=68825
+[+  71.728s] I (71071) app_main: heartbeat: safe test mode, uptime_ms=69826
+[+  72.730s] I (72081) app_main: heartbeat: safe test mode, uptime_ms=70835
+[+  73.731s] I (73081) app_main: heartbeat: safe test mode, uptime_ms=71835
+[+  74.732s] I (74081) app_main: heartbeat: safe test mode, uptime_ms=72835
+[+  75.734s] I (75081) app_main: heartbeat: safe test mode, uptime_ms=73835
+[+  76.735s] I (76081) app_main: heartbeat: safe test mode, uptime_ms=74836
+[+  77.737s] I (77091) app_main: heartbeat: safe test mode, uptime_ms=75844
+[+  78.738s] I (78091) app_main: heartbeat: safe test mode, uptime_ms=76844
+[+  79.740s] I (79091) app_main: heartbeat: safe test mode, uptime_ms=77844
+[+  80.741s] I (80091) app_main: heartbeat: safe test mode, uptime_ms=78844
+[+  81.742s] I (81091) app_main: heartbeat: safe test mode, uptime_ms=79844
+[+  82.744s] I (82091) app_main: heartbeat: safe test mode, uptime_ms=80844
+[+  83.745s] I (83091) app_main: heartbeat: safe test mode, uptime_ms=81844
+[+  84.746s] I (84091) app_main: heartbeat: safe test mode, uptime_ms=82844
+[+  85.747s] I (85091) app_main: heartbeat: safe test mode, uptime_ms=83845
+[+  86.748s] I (86101) app_main: heartbeat: safe test mode, uptime_ms=84854
+[+  87.749s] I (87101) app_main: heartbeat: safe test mode, uptime_ms=85854
+[+  88.751s] I (88101) app_main: heartbeat: safe test mode, uptime_ms=86854
+[+  89.752s] I (89101) app_main: heartbeat: safe test mode, uptime_ms=87854
+[+  90.754s] I (90101) app_main: heartbeat: safe test mode, uptime_ms=88855
+[+  91.755s] I (91111) app_main: heartbeat: safe test mode, uptime_ms=89865
+[+  92.757s] I (92111) app_main: heartbeat: safe test mode, uptime_ms=90865
+[+  93.758s] I (93111) app_main: heartbeat: safe test mode, uptime_ms=91865
+[+  94.759s] I (94111) app_main: heartbeat: safe test mode, uptime_ms=92865
+[+  95.761s] I (95111) app_main: heartbeat: safe test mode, uptime_ms=93866
+[+  96.762s] I (96121) app_main: heartbeat: safe test mode, uptime_ms=94875
+[+  97.763s] I (97121) app_main: heartbeat: safe test mode, uptime_ms=95875
+[+  98.765s] I (98121) app_main: heartbeat: safe test mode, uptime_ms=96875
+[+  99.766s] I (99121) app_main: heartbeat: safe test mode, uptime_ms=97875
+[+ 100.768s] I (100121) app_main: heartbeat: safe test mode, uptime_ms=98875
+[+ 101.769s] I (101121) app_main: heartbeat: safe test mode, uptime_ms=99875
+[+ 102.771s] I (102121) app_main: heartbeat: safe test mode, uptime_ms=100875
+[+ 103.772s] I (103121) app_main: heartbeat: safe test mode, uptime_ms=101875
+[+ 104.773s] I (104121) app_main: heartbeat: safe test mode, uptime_ms=102876
+[+ 105.775s] I (105131) app_main: heartbeat: safe test mode, uptime_ms=103884
+[+ 106.776s] I (106131) app_main: heartbeat: safe test mode, uptime_ms=104884
+[+ 107.777s] I (107131) app_main: heartbeat: safe test mode, uptime_ms=105884
+[+ 108.779s] I (108131) app_main: heartbeat: safe test mode, uptime_ms=106884
+[+ 109.780s] I (109131) app_main: heartbeat: safe test mode, uptime_ms=107884
+[+ 110.782s] I (110131) app_main: heartbeat: safe test mode, uptime_ms=108884
+[+ 111.783s] I (111131) app_main: heartbeat: safe test mode, uptime_ms=109884
+[+ 112.784s] I (112131) app_main: heartbeat: safe test mode, uptime_ms=110884
+[+ 113.786s] I (113131) app_main: heartbeat: safe test mode, uptime_ms=111885
+[+ 114.787s] I (114141) app_main: heartbeat: safe test mode, uptime_ms=112894
+[+ 115.789s] I (115141) app_main: heartbeat: safe test mode, uptime_ms=113894
+[+ 116.790s] I (116141) app_main: heartbeat: safe test mode, uptime_ms=114894
+[+ 117.791s] I (117141) app_main: heartbeat: safe test mode, uptime_ms=115894
+[+ 118.792s] I (118141) app_main: heartbeat: safe test mode, uptime_ms=116895
+[+ 119.794s] I (119151) app_main: heartbeat: safe test mode, uptime_ms=117905
+[+ 120.795s] I (120151) app_main: heartbeat: safe test mode, uptime_ms=118905
+[+ 121.797s] I (121151) app_main: heartbeat: safe test mode, uptime_ms=119905
+[+ 122.798s] I (122151) app_main: heartbeat: safe test mode, uptime_ms=120906
+[+ 122.798s] I (122421) app_main: resources: point=idle_120s network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=42612 minimum_free_heap_bytes=25636 largest_free_block_8bit_bytes=34816 stack_hwm_bytes=11704 internal_8bit_free_bytes=42612 internal_8bit_minimum_free_bytes=25636 internal_8bit_largest_free_block_bytes=34816 dma_free_bytes=42612 dma_minimum_free_bytes=25636 dma_largest_free_block_bytes=34816
+[+ 122.798s] I (122441) app_main: resources_lvgl: point=idle_120s pool_total_bytes=46724 pool_free_bytes=33632 pool_largest_free_bytes=33264 pool_max_used_bytes=13940 pool_used_pct=29 pool_frag_pct=2
+[+ 123.799s] I (123161) app_main: heartbeat: safe test mode, uptime_ms=121915
+[+ 124.801s] I (124161) app_main: heartbeat: safe test mode, uptime_ms=122915
+[+ 125.802s] I (125161) app_main: heartbeat: safe test mode, uptime_ms=123915
+[+ 126.804s] I (126161) app_main: heartbeat: safe test mode, uptime_ms=124915
+[+ 127.805s] I (127161) app_main: heartbeat: safe test mode, uptime_ms=125915
+[+ 128.807s] I (128171) app_main: heartbeat: safe test mode, uptime_ms=126925
+[+ 129.808s] I (129181) app_main: heartbeat: safe test mode, uptime_ms=127935
+[+ 130.809s] I (130181) app_main: heartbeat: safe test mode, uptime_ms=128935
+[+ 131.811s] I (131181) app_main: heartbeat: safe test mode, uptime_ms=129935
+[+ 132.812s] I (132181) app_main: heartbeat: safe test mode, uptime_ms=130935
+[+ 133.813s] I (133181) app_main: heartbeat: safe test mode, uptime_ms=131937
+[+ 134.815s] I (134191) app_main: heartbeat: safe test mode, uptime_ms=132945
+[+ 135.816s] I (135191) app_main: heartbeat: safe test mode, uptime_ms=133945
+[+ 136.818s] I (136191) app_main: heartbeat: safe test mode, uptime_ms=134945
+[+ 137.819s] I (137191) app_main: heartbeat: safe test mode, uptime_ms=135945
+[+ 138.820s] I (138191) app_main: heartbeat: safe test mode, uptime_ms=136945
+[+ 139.822s] I (139191) app_main: heartbeat: safe test mode, uptime_ms=137945
+[+ 140.823s] I (140191) app_main: heartbeat: safe test mode, uptime_ms=138945
+[+ 141.824s] I (141191) app_main: heartbeat: safe test mode, uptime_ms=139945
+[+ 142.826s] I (142191) app_main: heartbeat: safe test mode, uptime_ms=140945
+[+ 143.827s] I (143191) app_main: heartbeat: safe test mode, uptime_ms=141945
+[+ 144.828s] I (144191) app_main: heartbeat: safe test mode, uptime_ms=142945
+[+ 145.830s] I (145191) app_main: heartbeat: safe test mode, uptime_ms=143945
+[+ 146.831s] I (146191) app_main: heartbeat: safe test mode, uptime_ms=144945
+[+ 147.833s] I (147191) app_main: heartbeat: safe test mode, uptime_ms=145945
+[+ 148.834s] I (148191) app_main: heartbeat: safe test mode, uptime_ms=146945
+[+ 149.836s] I (149191) app_main: heartbeat: safe test mode, uptime_ms=147945
+[+ 150.837s] I (150191) app_main: heartbeat: safe test mode, uptime_ms=148945
+[+ 151.839s] I (151191) app_main: heartbeat: safe test mode, uptime_ms=149945
+[+ 152.840s] I (152191) app_main: heartbeat: safe test mode, uptime_ms=150945
+[+ 153.842s] I (153191) app_main: heartbeat: safe test mode, uptime_ms=151945
+[+ 154.843s] I (154191) app_main: heartbeat: safe test mode, uptime_ms=152945
+[+ 155.845s] I (155191) app_main: heartbeat: safe test mode, uptime_ms=153945
+[+ 156.846s] I (156191) app_main: heartbeat: safe test mode, uptime_ms=154945
+[+ 157.847s] I (157191) app_main: heartbeat: safe test mode, uptime_ms=155945
+[+ 158.847s] I (158191) app_main: heartbeat: safe test mode, uptime_ms=156945
+[+ 159.848s] I (159191) app_main: heartbeat: safe test mode, uptime_ms=157945
+[+ 160.849s] I (160191) app_main: heartbeat: safe test mode, uptime_ms=158945
+[+ 161.850s] I (161191) app_main: heartbeat: safe test mode, uptime_ms=159945
+[+ 162.350s] I (162191) app_main: heartbeat: safe test mode, uptime_ms=160945
+[+ 163.350s] I (163191) app_main: heartbeat: safe test mode, uptime_ms=161945
+[+ 164.351s] I (164191) app_main: heartbeat: safe test mode, uptime_ms=162945
+[+ 165.853s] I (165201) app_main: heartbeat: safe test mode, uptime_ms=163954
+[+ 166.855s] I (166201) app_main: heartbeat: safe test mode, uptime_ms=164954
+[+ 167.856s] I (167201) app_main: heartbeat: safe test mode, uptime_ms=165954
+[+ 168.856s] I (168201) app_main: heartbeat: safe test mode, uptime_ms=166954
+[+ 169.858s] I (169201) app_main: heartbeat: safe test mode, uptime_ms=167954
+[+ 170.859s] I (170201) app_main: heartbeat: safe test mode, uptime_ms=168954
+[+ 171.860s] I (171201) app_main: heartbeat: safe test mode, uptime_ms=169954
+[+ 172.360s] I (172201) app_main: heartbeat: safe test mode, uptime_ms=170954
+[+ 173.361s] I (173201) app_main: heartbeat: safe test mode, uptime_ms=171955
+[+ 174.863s] I (174211) app_main: heartbeat: safe test mode, uptime_ms=172965
+[+ 175.864s] I (175211) app_main: heartbeat: safe test mode, uptime_ms=173965
+[+ 176.866s] I (176211) app_main: heartbeat: safe test mode, uptime_ms=174965
+[+ 177.866s] I (177211) app_main: heartbeat: safe test mode, uptime_ms=175965
+[+ 178.867s] I (178211) app_main: heartbeat: safe test mode, uptime_ms=176966
+[+ 179.869s] I (179221) app_main: heartbeat: safe test mode, uptime_ms=177974
+[+ 180.870s] I (180221) app_main: heartbeat: safe test mode, uptime_ms=178974
+[+ 181.872s] I (181221) app_main: heartbeat: safe test mode, uptime_ms=179974
+[+ 182.873s] I (182221) app_main: heartbeat: safe test mode, uptime_ms=180974
+[+ 183.875s] I (183221) app_main: heartbeat: safe test mode, uptime_ms=181974
+[+ 184.876s] I (184221) app_main: heartbeat: safe test mode, uptime_ms=182974
+[+ 185.877s] I (185221) app_main: heartbeat: safe test mode, uptime_ms=183974
+[+ 186.878s] I (186221) app_main: heartbeat: safe test mode, uptime_ms=184974
+[+ 187.878s] I (187221) app_main: heartbeat: safe test mode, uptime_ms=185975
+[+ 188.879s] I (188221) app_main: heartbeat: safe test mode, uptime_ms=186975
+[+ 189.880s] I (189221) app_main: heartbeat: safe test mode, uptime_ms=187975
+[+ 190.380s] I (190221) app_main: heartbeat: safe test mode, uptime_ms=188975
+[+ 191.381s] I (191221) app_main: heartbeat: safe test mode, uptime_ms=189975
+[+ 192.382s] I (192221) app_main: heartbeat: safe test mode, uptime_ms=190975
+[+ 193.382s] I (193221) app_main: heartbeat: safe test mode, uptime_ms=191975
+[+ 194.383s] I (194221) app_main: heartbeat: safe test mode, uptime_ms=192975
+[+ 195.384s] I (195221) app_main: heartbeat: safe test mode, uptime_ms=193975
+[+ 196.385s] I (196221) app_main: heartbeat: safe test mode, uptime_ms=194976
+[+ 197.887s] I (197231) app_main: heartbeat: safe test mode, uptime_ms=195984
+[+ 198.888s] I (198231) app_main: heartbeat: safe test mode, uptime_ms=196984
+[+ 199.392s] I (199231) app_main: heartbeat: safe test mode, uptime_ms=197984
+[+ 200.393s] I (200231) app_main: heartbeat: safe test mode, uptime_ms=198984
+[+ 201.394s] I (201231) app_main: heartbeat: safe test mode, uptime_ms=199984
+[+ 202.394s] I (202231) app_main: heartbeat: safe test mode, uptime_ms=200984
+[+ 203.395s] I (203231) app_main: heartbeat: safe test mode, uptime_ms=201984
+[+ 204.396s] I (204231) app_main: heartbeat: safe test mode, uptime_ms=202984
+[+ 205.397s] I (205231) app_main: heartbeat: safe test mode, uptime_ms=203985
+[+ 206.898s] I (206241) app_main: heartbeat: safe test mode, uptime_ms=204995
+[+ 207.899s] I (207241) app_main: heartbeat: safe test mode, uptime_ms=205995
+[+ 208.900s] I (208241) app_main: heartbeat: safe test mode, uptime_ms=206995
+[+ 209.901s] I (209241) app_main: heartbeat: safe test mode, uptime_ms=207995
+[+ 210.902s] I (210241) app_main: heartbeat: safe test mode, uptime_ms=208997
+[+ 211.903s] I (211251) app_main: heartbeat: safe test mode, uptime_ms=210005
+[+ 212.904s] I (212251) app_main: heartbeat: safe test mode, uptime_ms=211005
+[+ 213.905s] I (213251) app_main: heartbeat: safe test mode, uptime_ms=212005
+[+ 214.906s] I (214251) app_main: heartbeat: safe test mode, uptime_ms=213005
+[+ 215.907s] I (215261) app_main: heartbeat: safe test mode, uptime_ms=214015
+[+ 216.909s] I (216271) app_main: heartbeat: safe test mode, uptime_ms=215025
+[+ 217.910s] I (217271) app_main: heartbeat: safe test mode, uptime_ms=216025
+[+ 218.911s] I (218271) app_main: heartbeat: safe test mode, uptime_ms=217025
+[+ 219.912s] I (219271) app_main: heartbeat: safe test mode, uptime_ms=218025
+[+ 220.914s] I (220271) app_main: heartbeat: safe test mode, uptime_ms=219026
+[+ 221.915s] I (221281) app_main: heartbeat: safe test mode, uptime_ms=220035
+[+ 222.917s] I (222281) app_main: heartbeat: safe test mode, uptime_ms=221035
+[+ 223.918s] I (223281) app_main: heartbeat: safe test mode, uptime_ms=222035
+[+ 224.920s] I (224281) app_main: heartbeat: safe test mode, uptime_ms=223035
+[+ 225.921s] I (225281) app_main: heartbeat: safe test mode, uptime_ms=224035
+[+ 226.922s] I (226281) app_main: heartbeat: safe test mode, uptime_ms=225035
+[+ 227.924s] I (227281) app_main: heartbeat: safe test mode, uptime_ms=226035
+[+ 228.925s] I (228281) app_main: heartbeat: safe test mode, uptime_ms=227035
+[+ 229.927s] I (229281) app_main: heartbeat: safe test mode, uptime_ms=228035
+[+ 230.928s] I (230281) app_main: heartbeat: safe test mode, uptime_ms=229035
+[+ 231.929s] I (231281) app_main: heartbeat: safe test mode, uptime_ms=230035
+[+ 232.931s] I (232281) app_main: heartbeat: safe test mode, uptime_ms=231035
+[+ 233.932s] I (233281) app_main: heartbeat: safe test mode, uptime_ms=232035
+[+ 234.933s] I (234281) app_main: heartbeat: safe test mode, uptime_ms=233035
+[+ 235.934s] I (235281) app_main: heartbeat: safe test mode, uptime_ms=234035
+[+ 236.935s] I (236281) app_main: heartbeat: safe test mode, uptime_ms=235035
+[+ 237.936s] I (237281) app_main: heartbeat: safe test mode, uptime_ms=236035
+[+ 238.937s] I (238281) app_main: heartbeat: safe test mode, uptime_ms=237036
+[+ 239.938s] I (239291) app_main: heartbeat: safe test mode, uptime_ms=238044
+[+ 240.940s] I (240291) app_main: heartbeat: safe test mode, uptime_ms=239044
+[+ 241.941s] I (241291) app_main: heartbeat: safe test mode, uptime_ms=240044
+[+ 242.942s] I (242291) app_main: heartbeat: safe test mode, uptime_ms=241044
+[+ 243.944s] I (243291) app_main: heartbeat: safe test mode, uptime_ms=242044
+[+ 244.945s] I (244291) app_main: heartbeat: safe test mode, uptime_ms=243044
+[+ 245.945s] I (245291) app_main: heartbeat: safe test mode, uptime_ms=244044
+[+ 246.946s] I (246291) app_main: heartbeat: safe test mode, uptime_ms=245044
+[+ 247.947s] I (247291) app_main: heartbeat: safe test mode, uptime_ms=246045
+[+ 248.948s] I (248301) app_main: heartbeat: safe test mode, uptime_ms=247054
+[+ 249.950s] I (249301) app_main: heartbeat: safe test mode, uptime_ms=248054
+[+ 250.951s] I (250301) app_main: heartbeat: safe test mode, uptime_ms=249055
+[+ 251.953s] I (251301) app_main: heartbeat: safe test mode, uptime_ms=250055
+[+ 252.954s] I (252301) app_main: heartbeat: safe test mode, uptime_ms=251056
+[+ 253.955s] I (253311) app_main: heartbeat: safe test mode, uptime_ms=252065
+[+ 254.956s] I (254311) app_main: heartbeat: safe test mode, uptime_ms=253065
+[+ 255.958s] I (255311) app_main: heartbeat: safe test mode, uptime_ms=254065
+[+ 256.959s] I (256311) app_main: heartbeat: safe test mode, uptime_ms=255065
+[+ 257.961s] I (257311) app_main: heartbeat: safe test mode, uptime_ms=256065
+[+ 258.962s] I (258311) app_main: heartbeat: safe test mode, uptime_ms=257065
+[+ 259.963s] I (259311) app_main: heartbeat: safe test mode, uptime_ms=258065
+[+ 260.964s] I (260311) app_main: heartbeat: safe test mode, uptime_ms=259065
+[+ 261.965s] I (261311) app_main: heartbeat: safe test mode, uptime_ms=260065
+[+ 262.966s] I (262311) app_main: heartbeat: safe test mode, uptime_ms=261065
+[+ 263.967s] I (263311) app_main: heartbeat: safe test mode, uptime_ms=262065
+[+ 264.968s] I (264311) app_main: heartbeat: safe test mode, uptime_ms=263065
+[+ 265.969s] I (265311) app_main: heartbeat: safe test mode, uptime_ms=264065
+[+ 266.969s] I (266311) app_main: heartbeat: safe test mode, uptime_ms=265065
+[+ 267.469s] I (267311) app_main: heartbeat: safe test mode, uptime_ms=266065
+[+ 268.470s] I (268311) app_main: heartbeat: safe test mode, uptime_ms=267065
+[+ 269.471s] I (269311) app_main: heartbeat: safe test mode, uptime_ms=268065
+[+ 270.472s] I (270311) app_main: heartbeat: safe test mode, uptime_ms=269066
+[+ 271.974s] I (271321) app_main: heartbeat: safe test mode, uptime_ms=270075
+[+ 272.975s] I (272321) app_main: heartbeat: safe test mode, uptime_ms=271075
+[+ 273.976s] I (273321) app_main: heartbeat: safe test mode, uptime_ms=272075
+[+ 274.977s] I (274321) app_main: heartbeat: safe test mode, uptime_ms=273075
+[+ 275.978s] I (275321) app_main: heartbeat: safe test mode, uptime_ms=274075
+[+ 276.978s] I (276321) app_main: heartbeat: safe test mode, uptime_ms=275075
+[+ 277.979s] I (277321) app_main: heartbeat: safe test mode, uptime_ms=276075
+[+ 278.980s] I (278321) app_main: heartbeat: safe test mode, uptime_ms=277075
+[+ 279.981s] I (279321) app_main: heartbeat: safe test mode, uptime_ms=278076
+[+ 280.982s] I (280331) app_main: heartbeat: safe test mode, uptime_ms=279084
+[+ 281.984s] I (281331) app_main: heartbeat: safe test mode, uptime_ms=280084
+[+ 282.985s] I (282331) app_main: heartbeat: safe test mode, uptime_ms=281084
+[+ 283.986s] I (283331) app_main: heartbeat: safe test mode, uptime_ms=282084
+[+ 284.987s] I (284331) app_main: heartbeat: safe test mode, uptime_ms=283086
+[+ 285.988s] I (285341) app_main: heartbeat: safe test mode, uptime_ms=284095
+[+ 286.990s] I (286341) app_main: heartbeat: safe test mode, uptime_ms=285095
+[+ 287.991s] I (287341) app_main: heartbeat: safe test mode, uptime_ms=286095
+[+ 288.992s] I (288341) app_main: heartbeat: safe test mode, uptime_ms=287095
+[+ 289.994s] I (289341) app_main: heartbeat: safe test mode, uptime_ms=288096
+[+ 290.995s] I (290351) app_main: heartbeat: safe test mode, uptime_ms=289105
+[+ 291.997s] I (291351) app_main: heartbeat: safe test mode, uptime_ms=290105
+[+ 292.998s] I (292351) app_main: heartbeat: safe test mode, uptime_ms=291105
+[+ 293.999s] I (293351) app_main: heartbeat: safe test mode, uptime_ms=292105
+[+ 295.000s] I (294351) app_main: heartbeat: safe test mode, uptime_ms=293105
+[+ 296.002s] I (295351) app_main: heartbeat: safe test mode, uptime_ms=294105
+[+ 297.003s] I (296351) app_main: heartbeat: safe test mode, uptime_ms=295105
+[+ 298.005s] I (297351) app_main: heartbeat: safe test mode, uptime_ms=296105
+[+ 299.006s] I (298351) app_main: heartbeat: safe test mode, uptime_ms=297106
+[+ 300.007s] I (299361) app_main: heartbeat: safe test mode, uptime_ms=298114
+[+ 301.009s] I (300361) app_main: heartbeat: safe test mode, uptime_ms=299114
+[+ 302.010s] I (301361) app_main: heartbeat: safe test mode, uptime_ms=300114
+[+ 303.012s] I (302361) app_main: heartbeat: safe test mode, uptime_ms=301114
+[+ 304.013s] I (303361) app_main: heartbeat: safe test mode, uptime_ms=302114
+[+ 305.014s] I (304361) app_main: heartbeat: safe test mode, uptime_ms=303114
+[+ 306.016s] I (305361) app_main: heartbeat: safe test mode, uptime_ms=304114
+[+ 307.017s] I (306361) app_main: heartbeat: safe test mode, uptime_ms=305114
+[+ 308.018s] I (307361) app_main: heartbeat: safe test mode, uptime_ms=306115
+[+ 309.019s] I (308361) app_main: heartbeat: safe test mode, uptime_ms=307115
+[+ 309.519s] I (309361) app_main: heartbeat: safe test mode, uptime_ms=308115
+[+ 310.520s] I (310361) app_main: heartbeat: safe test mode, uptime_ms=309115
+[+ 311.521s] I (311361) app_main: heartbeat: safe test mode, uptime_ms=310115
+[+ 312.522s] I (312361) app_main: heartbeat: safe test mode, uptime_ms=311115
+[+ 313.522s] I (313361) app_main: heartbeat: safe test mode, uptime_ms=312115
+[+ 314.523s] I (314361) app_main: heartbeat: safe test mode, uptime_ms=313115
+[+ 315.524s] I (315361) app_main: heartbeat: safe test mode, uptime_ms=314115
+[+ 316.525s] I (316361) app_main: heartbeat: safe test mode, uptime_ms=315118
+[+ 318.027s] I (317371) app_main: heartbeat: safe test mode, uptime_ms=316124
+[+ 319.027s] I (318371) app_main: heartbeat: safe test mode, uptime_ms=317124
+[+ 320.028s] I (319371) app_main: heartbeat: safe test mode, uptime_ms=318124
+[+ 321.029s] I (320371) app_main: heartbeat: safe test mode, uptime_ms=319125
+[+ 322.031s] I (321381) app_main: heartbeat: safe test mode, uptime_ms=320135
+[+ 323.032s] I (322391) app_main: heartbeat: safe test mode, uptime_ms=321145
+[+ 324.034s] I (323391) app_main: heartbeat: safe test mode, uptime_ms=322145
+[+ 325.035s] I (324391) app_main: heartbeat: safe test mode, uptime_ms=323145
+[+ 326.036s] I (325391) app_main: heartbeat: safe test mode, uptime_ms=324145
+[+ 327.038s] I (326391) app_main: heartbeat: safe test mode, uptime_ms=325146
+[+ 328.039s] I (327401) app_main: heartbeat: safe test mode, uptime_ms=326154
+[+ 329.040s] I (328401) app_main: heartbeat: safe test mode, uptime_ms=327154
+[+ 330.041s] I (329401) app_main: heartbeat: safe test mode, uptime_ms=328155
+[+ 331.042s] I (330401) app_main: heartbeat: safe test mode, uptime_ms=329155
+[+ 332.044s] I (331401) app_main: heartbeat: safe test mode, uptime_ms=330155
+[+ 333.045s] I (332401) app_main: heartbeat: safe test mode, uptime_ms=331155
+[+ 334.046s] I (333401) app_main: heartbeat: safe test mode, uptime_ms=332155
+[+ 335.048s] I (334401) app_main: heartbeat: safe test mode, uptime_ms=333155
+[+ 336.049s] I (335401) app_main: heartbeat: safe test mode, uptime_ms=334156
+[+ 337.051s] I (336411) app_main: heartbeat: safe test mode, uptime_ms=335164
+[+ 338.052s] I (337411) app_main: heartbeat: safe test mode, uptime_ms=336164
+[+ 339.053s] I (338411) app_main: heartbeat: safe test mode, uptime_ms=337164
+[+ 340.055s] I (339411) app_main: heartbeat: safe test mode, uptime_ms=338164
+[+ 341.056s] I (340411) app_main: heartbeat: safe test mode, uptime_ms=339166
+[+ 342.057s] I (341421) app_main: heartbeat: safe test mode, uptime_ms=340174
+[+ 343.059s] I (342421) app_main: heartbeat: safe test mode, uptime_ms=341174
+[+ 344.060s] I (343421) app_main: heartbeat: safe test mode, uptime_ms=342175
+[+ 345.062s] I (344421) app_main: heartbeat: safe test mode, uptime_ms=343175
+[+ 346.063s] I (345421) app_main: heartbeat: safe test mode, uptime_ms=344175
+[+ 347.064s] I (346421) app_main: heartbeat: safe test mode, uptime_ms=345175
+[+ 348.065s] I (347421) app_main: heartbeat: safe test mode, uptime_ms=346175
+[+ 349.067s] I (348421) app_main: heartbeat: safe test mode, uptime_ms=347175
+[+ 350.068s] I (349421) app_main: heartbeat: safe test mode, uptime_ms=348176
+[+ 351.069s] I (350431) app_main: heartbeat: safe test mode, uptime_ms=349185
+[+ 352.071s] I (351431) app_main: heartbeat: safe test mode, uptime_ms=350185
+[+ 353.072s] I (352431) app_main: heartbeat: safe test mode, uptime_ms=351185
+[+ 354.073s] I (353431) app_main: heartbeat: safe test mode, uptime_ms=352185
+[+ 355.075s] I (354431) app_main: heartbeat: safe test mode, uptime_ms=353186
+[+ 356.076s] I (355441) app_main: heartbeat: safe test mode, uptime_ms=354194
+[+ 357.077s] I (356441) app_main: heartbeat: safe test mode, uptime_ms=355194
+[+ 358.079s] I (357441) app_main: heartbeat: safe test mode, uptime_ms=356194
+[+ 359.080s] I (358441) app_main: heartbeat: safe test mode, uptime_ms=357195
+[+ 360.081s] I (359451) app_main: heartbeat: safe test mode, uptime_ms=358206
+[+ 361.082s] I (360461) app_main: heartbeat: safe test mode, uptime_ms=359215
+[+ 362.084s] I (361461) app_main: heartbeat: safe test mode, uptime_ms=360215
+[+ 363.085s] I (362461) app_main: heartbeat: safe test mode, uptime_ms=361215
+[+ 364.087s] I (363461) app_main: heartbeat: safe test mode, uptime_ms=362215
+[+ 365.088s] I (364461) app_main: heartbeat: safe test mode, uptime_ms=363215
+[+ 366.090s] I (365461) app_main: heartbeat: safe test mode, uptime_ms=364215
+[+ 367.091s] I (366461) app_main: heartbeat: safe test mode, uptime_ms=365215
+[+ 368.092s] I (367461) app_main: heartbeat: safe test mode, uptime_ms=366215
+[+ 369.094s] I (368461) app_main: heartbeat: safe test mode, uptime_ms=367215
+[+ 370.095s] I (369461) app_main: heartbeat: safe test mode, uptime_ms=368215
+[+ 371.096s] I (370461) app_main: heartbeat: safe test mode, uptime_ms=369215
+[+ 372.097s] I (371461) app_main: heartbeat: safe test mode, uptime_ms=370215
+[+ 373.099s] I (372461) app_main: heartbeat: safe test mode, uptime_ms=371215
+[+ 374.100s] I (373461) app_main: heartbeat: safe test mode, uptime_ms=372216
+[+ 375.101s] I (374471) app_main: heartbeat: safe test mode, uptime_ms=373225
+[+ 376.103s] I (375471) app_main: heartbeat: safe test mode, uptime_ms=374225
+[+ 377.104s] I (376471) app_main: heartbeat: safe test mode, uptime_ms=375225
+[+ 378.106s] I (377471) app_main: heartbeat: safe test mode, uptime_ms=376225
+[+ 379.108s] I (378471) app_main: heartbeat: safe test mode, uptime_ms=377225
+[+ 380.109s] I (379481) app_main: heartbeat: safe test mode, uptime_ms=378234
+[+ 381.111s] I (380481) app_main: heartbeat: safe test mode, uptime_ms=379234
+[+ 382.112s] I (381481) app_main: heartbeat: safe test mode, uptime_ms=380234
+[+ 383.113s] I (382481) app_main: heartbeat: safe test mode, uptime_ms=381234
+[+ 384.115s] I (383481) app_main: heartbeat: safe test mode, uptime_ms=382234
+[+ 385.116s] I (384481) app_main: heartbeat: safe test mode, uptime_ms=383234
+[+ 386.118s] I (385481) app_main: heartbeat: safe test mode, uptime_ms=384234
+[+ 387.119s] I (386481) app_main: heartbeat: safe test mode, uptime_ms=385234
+[+ 388.120s] I (387481) app_main: heartbeat: safe test mode, uptime_ms=386234
+[+ 389.122s] I (388481) app_main: heartbeat: safe test mode, uptime_ms=387234
+[+ 390.123s] I (389481) app_main: heartbeat: safe test mode, uptime_ms=388234
+[+ 391.124s] I (390481) app_main: heartbeat: safe test mode, uptime_ms=389234
+[+ 392.126s] I (391481) app_main: heartbeat: safe test mode, uptime_ms=390235
+[+ 393.127s] I (392491) app_main: heartbeat: safe test mode, uptime_ms=391244
+[+ 394.129s] I (393491) app_main: heartbeat: safe test mode, uptime_ms=392244
+[+ 395.130s] I (394491) app_main: heartbeat: safe test mode, uptime_ms=393244
+[+ 396.131s] I (395491) app_main: heartbeat: safe test mode, uptime_ms=394244
+[+ 397.133s] I (396491) app_main: heartbeat: safe test mode, uptime_ms=395245
+[+ 398.134s] I (397501) app_main: heartbeat: safe test mode, uptime_ms=396255
+[+ 399.136s] I (398501) app_main: heartbeat: safe test mode, uptime_ms=397255
+[+ 400.137s] I (399501) app_main: heartbeat: safe test mode, uptime_ms=398255
+[+ 401.138s] I (400501) app_main: heartbeat: safe test mode, uptime_ms=399255
+[+ 402.140s] I (401501) app_main: heartbeat: safe test mode, uptime_ms=400255
+[+ 403.140s] I (402501) app_main: heartbeat: safe test mode, uptime_ms=401255
+[+ 404.142s] I (403501) app_main: heartbeat: safe test mode, uptime_ms=402255
+[+ 405.143s] I (404501) app_main: heartbeat: safe test mode, uptime_ms=403255
+[+ 406.145s] I (405501) app_main: heartbeat: safe test mode, uptime_ms=404256
+[+ 407.146s] I (406511) app_main: heartbeat: safe test mode, uptime_ms=405265
+[+ 408.148s] I (407521) app_main: heartbeat: safe test mode, uptime_ms=406274
+[+ 409.149s] I (408521) app_main: heartbeat: safe test mode, uptime_ms=407274
+[+ 410.150s] I (409521) app_main: heartbeat: safe test mode, uptime_ms=408274
+[+ 411.151s] I (410521) app_main: heartbeat: safe test mode, uptime_ms=409274
+[host 22:15:43 + 411.652s] ### STOP seen

@@ -31,6 +31,13 @@ namespace fermentation {
     FermentationTemperatureRole role);
 [[nodiscard]] device_platform::TextKey sensorQualityTextKey(
     device_platform::SensorQuality quality);
+// Diagnostics page (#28 D1): reset cause as evidence text only (Sdio, Usb,
+// Jtag, Efuse and Other share one text) and a short sensor role for value rows
+// that can be visible without their role row.
+[[nodiscard]] device_platform::TextKey resetCauseTextKey(
+    device_platform::ResetCause cause);
+[[nodiscard]] device_platform::TextKey diagnosticRoleShortTextKey(
+    FermentationTemperatureRole role);
 [[nodiscard]] std::vector<device_platform::TextPackManifest>
 makeFermentationUiTextPacks();
 
