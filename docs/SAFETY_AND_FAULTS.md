@@ -21,7 +21,8 @@ historischen allgemeinen Fehlerklassen- und Recoverynotizen dieses Dokuments:
   keine zusätzliche Safety-Wahrheit.
 - Der stateless `ActuationInterlock` bewertet aktuelle Evidenz gegen die
   endliche, typisierte FaultCode-Menge und liefert daraus die Permission.
-  Ack ist nur Anzeige/Journaling und loescht weder Ursache noch Gate.
+  Ack ist in R1 Anzeige und loescht weder Ursache noch Gate; persistentes
+  Journaling ist Future und keine Voraussetzung fuer die Safety-Reaktion.
 - Es gibt in #24 keinen generischen persistenten Safety-Latch, keinen
   Restart-Zaehler, kein Resetzeitfenster, keine Service-PIN-Pflicht und keine
   automatische `SAFETY_RECOVERY`-Gegenrichtung.
@@ -47,8 +48,9 @@ nicht als Release-1-#24-Laufzeitvertrag umgesetzt.
   verwendet keine universelle Fehlerklassenhierarchie und keine zweite
   Fehlerzustandsmaschine.
 - Aktive Ursachen bleiben in einer endlichen, festen FaultCode-Maske
-  nachvollziehbar; Historie und Journaling bleiben beim bestehenden
-  `IEventJournal`, nicht im `ActuationInterlock`.
+  nachvollziehbar. Persistente Historie und Journaling sind Future; der
+  vorhandene Port `IEventJournal` ist kein implementierter oder qualifizierter
+  Journaldienst und kein kritischer Durability-Contract.
 - Sicherheitsreaktionen funktionieren ohne WLAN, Weboberflaeche, Netzwerkzeit
   oder Heimserver.
 - Sicherheitslogik und Fehlerdaten muessen innerhalb der Zielhardware mit 4 MB
@@ -77,7 +79,9 @@ deterministisch, alle anderen aktiven Bits bleiben bis zu ihrem eigenen
 Clear-Vertrag erhalten. `Ack` quittiert hoechstens den einzelnen Code und
 veraendert weder Gate noch Clear-Zustand. Safety-Reaktion und Gate werden vor
 Journal/Notification bestimmt; deren Fehler koennen keine Abschaltung
-rollbacken.
+rollbacken. R1 verlangt kein persistentes Journal als Start-, Abschalt- oder
+Recovery-Gate. Die aktuelle Fault-/Sensorevidenz, kritische Persistenz und
+positiven Clear-Regeln bleiben unveraendert verbindlich.
 
 ## C2-Legacy/Future – historische Vierklassenbeschreibung, nicht #24-R1
 

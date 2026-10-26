@@ -62,7 +62,8 @@ unbestaetigte Hardware niemals freigeben.
 - Transaktionsabsicht vor aktorwirksamer Zustandsaenderung;
 - kritischer Persistenzfehler-Latch und Bootauswertung;
 - sichere Unterbrechungs- und Wiederanlauflogik;
-- Journale, Aufbewahrung, Backup und Import.
+- Journal, Aufbewahrung, Bereinigung/Archiv, Backup und Import: R2 vorgemerkt;
+  kein R1-Implementierungs- oder B0/O-BI-Gate (Releasegrenze siehe Spezifikationsreview).
 
 ### SW3 – Sensor, Regelung und Safety
 
@@ -87,13 +88,13 @@ Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mocks.
 - Mehrsprachigkeit, Branding und Themevertraege;
 - PIN-unabhaengiger lokaler Vollreset als Recoveryablauf.
 
-### SW5 – Diagnose, Exporte und Service
+### SW5 – R1-Diagnose und abgegrenzter R2-Ausbau
 
-- Diagnosemodelle und Fehlerberichte;
-- Lauf-, Diagnose- und Serviceexporte;
-- gefuehrter Serviceablauf mit gesperrtem Mockbackend;
-- passive `SAFE_BOOT`-Diagnose;
-- Ressourcen- und Aufbewahrungsnachweise.
+- vorhandene lokale D1-Diagnose und verbindliche R1-Webstatuswerte erhalten;
+- Lauf-/Diagnose-/Serviceberichtsexporte und erweiterte Webdiagnose: R2 vorgemerkt;
+- Zusatz-Boot-Dashboard und gefuehrte Service-UI/Mocksequenz: R2-Kandidaten;
+- passive `SAFE_BOOT`-Diagnose und notwendige reale Hardware-/Safetytests bleiben R1;
+- R1-Ressourcennachweise bleiben Pflicht, Historienaufbewahrung ist R2-Referenz.
 
 Softwarephasen werden in kleinen vertikalen Funktionsscheiben umgesetzt.
 Parallelitaet ist nur zulaessig, wenn Abhaengigkeiten, Schnittstellen und
@@ -190,7 +191,9 @@ Bedienung und Standardprogramme am realen Aufbau validieren.
 ### C3 – Dauer- und Releaseabnahme
 
 Mindestens sieben zusammenhaengende Tage unter paralleler Regelungs-, UI-,
-Web-, Speicher- und Exportlast testen und alle Release-Gates bewerten.
+Web-, Touch-/WLAN- und kritischer Speicherlast testen und alle R1-Release-Gates
+bewerten. Kein vorausgesetzter Journal-/Historien-/Exportausbau; reale
+Hardware-/Safety-/Powercut-/Recovery- und Ressourcenpflichten bleiben erhalten.
 
 ## Meilensteine
 
@@ -198,7 +201,7 @@ Web-, Speicher- und Exportlast testen und alle Release-Gates bewerten.
 |---|---|
 | M0 | Softwaregrundlage und simuliertes System |
 | M1 | getesteter fachlicher, persistenter und sicherer Softwarekern |
-| M2 | bedienbarer Simulator mit Diagnose und Exportschnittstellen |
+| M2 | bedienbarer Simulator mit vorhandener Diagnose; Exportausbau R2 vorgemerkt |
 | M3 | dokumentierte aktorfreie und schrittweise freigegebene Hardwarebaseline |
 | M4 | sichere reale Temperatursteuerung |
 | M5 | vollstaendige Integration und praktische Programmvalidierung |

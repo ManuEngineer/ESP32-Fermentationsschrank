@@ -2,9 +2,14 @@
 
 ## Status
 
-Dieses Dokument definiert die Release-1-Regeln fuer Diagnoseansichten,
-Boot-Selbsttests, gefuehrte Servicepruefungen, begrenzte Peltier-Tests und
-Exporte. Firmwareupdates stehen in `FIRMWARE_UPDATE_AND_ROLLBACK.md`, Ressourcen
+Dieses Dokument beschreibt aktuelle Diagnose und notwendige reale
+Hardware-/Safetypruefungen sowie die ausdruecklich abgegrenzten R2-Ausbauregeln.
+Die Releasezuordnung steht in `SPECIFICATION_REVIEW.md`. Neue technische
+Webdiagnose/Detail-APIs und alle Lauf-/Diagnose-/Serviceberichtsexporte sind
+R2 vorgemerkt. Zusatz-Boot-Dashboard und gefuehrte Service-UI/Mocksequenz sind
+R2-Kandidaten nur bei konkretem Zusatznutzen. D1, aktuelle Fault-/Run-/Recovery-
+Information und alle notwendigen realen Hardware-/Peltierpruefungen bleiben.
+Firmwareupdates stehen in `FIRMWARE_UPDATE_AND_ROLLBACK.md`, Ressourcen
 in `RESOURCE_BUDGET_AND_MAINTENANCE.md`.
 
 UART dient in Release 1 nur dem Flashen, der technischen Entwicklung und der
@@ -58,9 +63,11 @@ Mindestens sichtbar:
 - Resetursache und `SAFE_BOOT`
 - Firmware- und Konfigurationsrevision
 
-### Weboberflaeche
+### Zusaetzliche technische Webdiagnose (R2 vorgemerkt)
 
-Zusaetzlich mindestens:
+Kein neuer R1-API-/Asset-Ausbau. Vor Aktivierung ist ein neues Budget
+erforderlich (D-28-2=A). Bestehende R1-Webstatuswerte bleiben unveraendert.
+Der folgende Detailkatalog ist die Referenz fuer spaetere Planung:
 
 - Roh-, korrigierte und gefilterte Sensordaten
 - Sensoralter, CRC und Plausibilitaet
@@ -68,7 +75,8 @@ Zusaetzlich mindestens:
 - Mindest-Einschaltzeit, Mindest-Ausschaltzeit, Totzeit und Richtungswechsel
 - Luefterzustand und Nachlauf
 - Programmschnappschuss und Laufrevision
-- Fehler-, Persistenz-, Reset-, Brownout- und Watchdogjournal
+- aktueller Fehler-/Persistenz-/Recoverystatus und aktuelle Resetursache;
+  persistentes Fehler-/Brownout-/Watchdog-/Resetjournal ist Future
 - Netzwerk-, NTP-, Flash-, Heap- und Ressourcenwerte
 - erlaubte Exporte
 - Servicepruefungen nur nach Service-PIN und gueltigem Zustand; E5/Future,
@@ -78,11 +86,12 @@ Zusaetzlich mindestens:
 
 Erlaubt:
 
-- Temperaturen und Historie ansehen
+- aktuelle Temperaturen und vorhandene Run-/Recoveryinformationen ansehen
+  (persistente Laufhistorie ist Future)
 - Sensorstatus und Messwertalter ansehen
 - Regleranforderung und Aktorfreigabe ansehen
 - Fehler und Warnungen ansehen
-- Lauf- und Diagnoseexport erstellen
+- Lauf-/Diagnoseexport erst mit spaeterer R2-Implementierung erstellen
 - Netzwerkdiagnose und WLAN-Neuverbindung
 - Ressourcen- und Speicherdaten ansehen
 
@@ -149,16 +158,22 @@ Mindestens sichtbar:
   oder implementiert; eine spätere Nutzung ist `FUTURE_RELEASE` mit eigenem
   Issue, Plan und Owner-Gate
 
-## Passiver Boot-Selbsttest
+## Boot-Revalidierung und optionales Zusatz-Dashboard
 
-Der Boot-Selbsttest prueft ohne Aktoraktivierung:
+Boot-, Config-, Run-, Sensor-, Planner- und Safety-Revalidierung ohne
+Aktorfreigabe bleiben R1-Pflicht. Die folgende Checkliste ist kein Auftrag
+fuer ein zweites Dashboard, Modell oder einen weiteren Safety-Owner. Ein
+solches Zusatz-Dashboard ist nur R2-Kandidat bei konkretem Nutzen; notwendige
+Messungen und Ressourcenpruefungen werden dadurch nicht verschoben.
+
+Geprueft werden die jeweils vorhandenen und erforderlichen Daten:
 
 1. Resetcause als Diagnose und `SAFE_BOOT`
 2. aktuell gelesenen System-/Config-/Persistenzzustand
 3. Firmware-, Schema- und Partitionsdaten
 4. Konfigurationsintegritaet und Rueckfallrevision
 5. Laufkontrollpunkt, Transaktionsmarker und Persistenzgesundheit
-6. Fehler- und Resetjournal
+6. aktuelle Fehler-/Resetdiagnose (kein persistentes Journal als R1-Gate)
 7. 1-Wire-Busse und feste Sensoridentitaeten
 8. aktuelle Sensorwerte und Plausibilitaet
 9. Flash-, Heap- und Ressourcenreserven
@@ -182,7 +197,8 @@ Recoveryentscheidung bleibt erforderlich.
 In `SAFE_BOOT` erlaubt:
 
 - passive Diagnose
-- Lesen und Exportieren von Fehler-, Reset- und Persistenzinformationen
+- Lesen aktueller Fehler-, Reset- und Persistenzinformationen;
+  zusaetzlicher Diagnoseexport ist R2 vorgemerkt
 - Netzwerkrecovery ohne Aktorwirkung
 - UART-Recovery beziehungsweise erneutes Flashen als spaeteres Hardware-/Boot-
   Gate, nicht als #24-Safety-Clear
@@ -196,7 +212,12 @@ In `SAFE_BOOT` gesperrt:
 Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
 `STANDBY` zurueckkehren. Erst dort kann der Servicebereich geoeffnet werden.
 
-## Spaeteres E5-Service-/Hardware-Gate (nicht #24-R1)
+## Reale Hardware-/Safetygates und zusaetzliche Service-UI
+
+Notwendige reale R1-Service-/Peltier-/Thermikpruefungen bleiben Pflicht
+(#32/#33/#34/#35/#36/#37). Nur die zusaetzliche gefuehrte UI/Mock-Aktor-Sequenz
+ist R2-Kandidat. Vorhandene lokale Service-PIN-/Resetpfade bleiben erhalten.
+Die folgenden Schutzregeln begruenden keine neue R1-Komfortoberflaeche.
 
 ### Voraussetzungen
 
@@ -290,9 +311,14 @@ PIN nicht voraussetzt.
 Die konkrete Geste oder Taste bleibt `TBD_HARDWARE`. #24 fuehrt keine
 Service-PIN- oder Vollresetlogik ein.
 
-## Exporte
+## Exporte (R2 vorgemerkt, keine R1-Implementierungs-/Abnahmepflicht)
 
-### Laufexport
+### Laufexport (R2 vorgemerkt)
+
+Journal, Laufhistorie, deren Bereinigung und Laufexport aus #19 sind fuer R1
+zurueckgestellt. Aktuelle Fehleranzeige, Resetursache und vorhandene
+Run-/Recoveryinformationen bleiben erhalten; sie sind kein historisches Archiv.
+Die folgenden Laufexportregeln erzeugen kein R1-Abnahmekriterium.
 
 - Laufkennung und Programmschnappschuss
 - Firmware-, Konfigurations- und Tuningrevision
@@ -363,7 +389,8 @@ Nicht enthalten:
 
 ## Akzeptierte Entscheidungen
 
-- [x] kompakte lokale und vollstaendige Webdiagnose
+- [x] vorhandene lokale Diagnose und R1-Webstatuswerte erhalten
+- R2 vorgemerkt: vollstaendige technische Webdiagnose und neue Detail-APIs
 - [x] lesende Diagnose waehrend eines Laufes
 - [x] keine Aktortests waehrend eines Laufes
 - [x] normaler Boot fuehrt nur passive Tests aus
@@ -372,7 +399,7 @@ Nicht enthalten:
 - [x] Temperatursicherung vor dem ersten Peltier-Puls
 - [x] jederzeitiger sicherer Testabbruch
 - [x] Peltier nur als begrenzter gefuehrter Puls
-- [x] getrennte Lauf-, Diagnose- und Serviceexporte
+- R2 vorgemerkt: getrennte Lauf-, Diagnose- und Serviceberichtsexporte
 - [x] keine Geheimnisse in Diagnose oder Export
 - [ ] Service-/Vollreset-Gate fuer ein spaeteres Hardware-/Service-Issue
 - [x] UART in Release 1 nur fuer Flashen, Entwicklung und Recovery

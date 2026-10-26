@@ -18,7 +18,8 @@ Regelparameter und Ressourcenschwellen bleiben bis zu den jeweiligen Messungen
 - Ein Test darf keine unkontrollierte Aktorfreigabe oder Umgehung der normalen
   Sicherheitslogik verlangen.
 - Hardwaretests verwenden den bestaetigten Hardwarestand, die dokumentierte
-  Verdrahtung und einen gespeicherten Servicebericht.
+  Verdrahtung und einen gespeicherten versionierten Testnachweis. Ein neuer
+  Produkt-Serviceberichtsexport ist dafuer keine R1-Voraussetzung.
 - Ein nicht ausgefuehrter Test ist `BLOCKED` oder `NOT_RUN`, nicht bestanden.
 - Ein bestandener Einzeltest hebt keinen anderen aktiven Sicherheitsfehler auf.
 - Ein Neustart gilt nie als Fehlerreset.
@@ -429,8 +430,9 @@ Native Simulationen fuer den lokalen Werksreset-Ablauf (Plan
 `docs/tasks/issue-19-journals-retention-backup-import-plan.md`, Abschnitt 4,
 Ownerfreigabe `6fbf130`). Sie sind **kein** Hardwarenachweis; die physischen
 Eintraege stehen auf `NOT_RUN`. Journal, Laufhistorie, Bereinigung, Laufexport
-sowie Backup/Import sind **nicht** Teil dieser Nachweise (`DEFERRED` bzw.
-bedingt, Plan Abschnitte 5–7).
+sowie Backup/Import sind **nicht** Teil dieser Nachweise. Ihre aktuelle
+Releasezuordnung steht in `SPECIFICATION_REVIEW.md`; die urspruenglichen
+Planbedingungen bleiben historische Referenz, kein neues R1-B0/O-BI-Gate.
 
 | ID | Nachweis |
 |---|---|
@@ -735,6 +737,23 @@ Vor echten Fermentationslaeufen:
 - Temperatursicherung thermisch bewertet und dokumentiert
 - keine unbekannte sicherheitsrelevante thermische Abweichung
 
+### Browserabnahme: bekannte Nebenressource und funktionale Fehler
+
+Der bekannte `GET /favicon.ico` mit Status `404` (#204) wird in kuenftigen
+R1-Browsernachweisen als `KNOWN_OPTIONAL_RESOURCE_404` separat aufgezeichnet;
+er ist allein kein R1-Releasefehler und verlangt keine Favicon-Implementierung.
+Die Ausnahme gilt nur fuer diese bekannte Methode/Pfad/Status-Kombination.
+Unbekannte URL-Pfade duerfen regulaer 404 liefern und sind keine behaupteten
+Produktfunktionen. Erwartete Negativtests werden mit ihrem konkreten Orakel
+bewertet. Ein unerwarteter Fehler von Shell/Login, Status, benoetigten Assets,
+Konfigurations- oder Laufcommands bleibt ein funktionaler Befund; keine
+pauschale 4xx-/404-Allowlist und keine Abschwaechung von Auth/CSRF/Replay.
+
+Historische Browser-Stopps, FAIL/PARTIAL/NOT_RUN und das PR209-D9-Ergebnis
+werden nicht nachtraeglich geaendert. Vor Wiederverwendung alter Runner oder
+Testplaene muss deren konkreter Vertrag auf diese Regel geprueft werden;
+Runner-/Testcode wird in diesem Dokumentationsauftrag nicht geaendert.
+
 ### Gate 4: Dauer- und Belastungstest
 
 Vor Release 1:
@@ -743,17 +762,21 @@ Vor Release 1:
 - keine unerklaerten Resets, Watchdogs oder Brownouts
 - keine unerlaubte Aktorfreigabe
 - keine relevante fortschreitende RAM-Leckage
-- Speicherbereinigung innerhalb der Budgets
+- Ressourcen und tatsaechlich vorhandene R1-Daten innerhalb nachgewiesener Budgets
 - kritische Persistenz und Sperren nach Unterbrechung wiederherstellbar
-- Web, Display, Sensoren, Exporte und Regelung parallel stabil
-- Fehler- und Resetjournal innerhalb des Budgets
+- echte Web-, Touch-/Display-, WLAN-, Sensor- und Regellast parallel stabil;
+  zusaetzliche Lauf-/Diagnose-/Serviceberichtsexporte, Journal/Historie,
+  Bereinigung und Archiv sind keine R1-Abnahmepflicht
+- aktuelle Fehler-/Resetdiagnose und vorhandene Run-/Recoverydaten geprueft;
+  kein Journal-PASS fuer einen nicht implementierten Dienst
 
 ### Gate 5: Releasekandidat
 
 - Standardprogramme praktisch geprueft
 - lokale und Webbedienung geprueft
 - Stromunterbrechungs- und Recoveryablaeufe geprueft
-- Exporte und Diagnose geprueft
+- aktuelle Diagnose und vorhandene verbindliche R1-Bedienung geprueft;
+  R2-vorgemerkte Exporte/Backup/Import und Zusatz-Dashboards sind kein R1-Gate
 - bekannte Abweichungen bewertet
 - keine offene unbekannte Sicherheitsursache
 - alle sicherheits- und kernfunktionsrelevanten Tests `PASS`
@@ -807,8 +830,8 @@ Vor Release 1:
   `CommittedHead` injizieren; Teiltransaktionen bleiben unknown-safe
 - `Success` ohne zweiten Readback sowie `CommitOutcomeUnknown` mit allen drei
   vorhandenen `writeExact()`-Aufloesungen pruefen
-- Historienspeicher bis zur Bereinigung fuellen
-- nichtkritischen RAM- oder Exportfehler erzeugen
+- Future: Historienspeicher bis zur Bereinigung fuellen (kein R1-Gate)
+- nichtkritischen RAM-Fehler erzeugen; Produkt-Exportfehler erst im R2-Ausbau
 
 ### Bedienung und Berechtigungen
 
@@ -871,8 +894,9 @@ Belastungsprofil:
 - kontinuierliche Sensorerfassung
 - Displaybetrieb und wiederholte Bedienung
 - parallele Webzugriffe und Live-Aktualisierung
-- wiederholte Exporte
-- periodische Kontrollpunkte und Bereinigung
+- vorhandene verbindliche R1-Web-/Touchbedienung wiederholt unter realer Last;
+  kein vorausgesetzter Produkt-Lauf-/Diagnose-/Serviceberichtsexport
+- periodische kritische Laufkontrollpunkte; Historienbereinigung ist Future
 - mehrere Heiz-, Kuehl- und Richtungswechsel
 - WLAN- und NTP-Ausfall
 - mindestens eine kontrollierte Stromunterbrechung
@@ -881,13 +905,14 @@ Belastungsprofil:
 Aufzuzeichnen:
 
 - freier und niedrigster Heap
+- Main-/HTTPD-/relevante Task-Stackreserven
 - groesster zusammenhaengender Block
 - Task-, Watchdog- und Resetereignisse
 - Sensor- und Busfehler
 - Regler- und Aktorereignisse
-- Flash- und Historienbelegung
-- Bereinigungen und Schreibfehler
-- Web- und Exportfehler
+- Flashbelegung der vorhandenen R1-Daten; Historienbelegung erst im spaeteren Ausbau
+- kritische Schreibfehler; Historienbereinigungen erst im spaeteren Ausbau
+- funktionale Webfehler; Exportfehler erst bei spaeterer Produktimplementierung
 - Temperaturstabilitaet und Richtungswechsel
 
 Der Test besteht nur ohne unerlaubte Aktorfreigabe, unerklaerten Reset,

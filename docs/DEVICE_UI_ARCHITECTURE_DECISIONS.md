@@ -68,7 +68,10 @@ Standardbranding: **ManuEngineer**.
 
 Branding wird zentral und anwendungsunabhängig konfiguriert und nicht in Screens oder Fachlogik hart codiert.
 
-Dazu gehören mindestens Markenname, Headerlogo, Bootlogo, Theme-Grundwerte sowie Web-Favicon/Web-Branding.
+Dazu gehoeren Markenname, Headerlogo, Bootlogo und Theme-Grundwerte sowie
+bestehendes Web-Branding. Web-Favicon (#204) ist `FUTURE_BEI_BEDARF`, keine
+R1-Lieferpflicht und kein Grund fuer neue Branding-/LittleFS-Infrastruktur.
+Vorhandene Assets und rendererunabhaengige Brandingvertraege bleiben erhalten.
 
 Die konkrete rendererunabhaengige R1-Definition fuer ManuEngineer-Assets,
 Headergeometrie, Boot-Splash und semantische Theme-Tokens steht in

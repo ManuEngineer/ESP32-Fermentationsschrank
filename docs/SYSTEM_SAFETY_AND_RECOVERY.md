@@ -330,7 +330,8 @@ Reaktion:
 
 - Prozess darf weiterlaufen, sofern kritische Laufpersistenz weiterhin sicher ist,
 - sichtbare Warnung,
-- Ereignis im verbleibenden Fehlerjournal erfassen,
+- aktuelle Warnung und vorhandene Run-/Recoveryinformation erhalten; ein
+  spaeteres Diagnosejournal ist dafuer keine R1-Voraussetzung,
 - Historienaufzeichnung begrenzen oder deaktivieren,
 - aktiven Laufkontrollpunkt priorisieren.
 
@@ -339,7 +340,6 @@ Reaktion:
 Beispiele:
 
 - aktueller Laufkontrollpunkt kann nicht mehr atomar gespeichert werden
-- Fehlerjournal fuer verriegelte Ereignisse ist nicht mehr verlaesslich
 - Konfigurationsspeicher oder Rueckfallrevision ist kritisch beschaedigt
 - keine sichere Speicherrevision mehr aktivierbar
 
@@ -382,7 +382,18 @@ Current-Boot-RAM-Latch und wird ausschliesslich ueber
 `applyExternalWatchdogFaultReset()` mit aktueller Evidenz geloescht; #24 fuehrt
 keinen neuen persistenten Latch ein.
 
-## Fehler- und Resetprotokoll
+## Fehler- und Resetprotokoll (Future, kein R1-Safety-Gate)
+
+R1 verlangt kein persistentes Ereignisjournal als Start- oder Safety-Gate. Zulässige Starts und Recovery richten sich ausschliesslich nach den bestehenden vertrauenswürdigen Config-/Run-/Transaktionszuständen und den erforderlichen aktuellen Sensor-/Planner-/Safetyfreigaben. Kann eine notwendige kritische Persistenz oder diese Evidenz nicht sichergestellt werden, bleibt der bestehende fail-closed-Pfad verbindlich. Journal/Historie werden nicht als vorhanden oder zuverlässig behauptet.
+
+Ein spaeterer Ausfall oder Platzmangel des Diagnosearchivs allein ist kein
+kritischer R1-Persistenzfehler. Die vorstehenden fail-closed-Regeln fuer
+notwendige Config-/Run-/Transaktionsdaten bleiben verbindlich. Ohne Archiv
+existiert keine vollstaendige Fehler-/Brownout-/Watchdog-Chronik ueber mehrere
+Neustarts; aktuelle Resetursache und vorhandene Daten ersetzen kein Archiv.
+
+Die folgenden Record-, Aufbewahrungs- und Exportregeln sind spaeter zu
+spezifizieren und keine Behauptung eines vorhandenen R1-Dienstes.
 
 Das Fehlerprotokoll ist begrenzt und verwendet ein append-only-, Journal- oder
 Ringpufferprinzip. Es darf den 4-MB-Flash nicht unbegrenzt fuellen.
@@ -474,7 +485,7 @@ Verbindliche Regeln:
       unknown-safe
 - [x] unvollstaendige Transaktionen sperren Recovery; kein neuer Safety-Latch
 - [x] #23-Watchdog-Reset nur explizit im aktuellen Boot nach frischer Evidenz
-- [x] begrenztes priorisiertes Fehler- und Resetjournal
+- Future: begrenztes priorisiertes Fehler- und Resetjournal (kein R1-Gate)
 - [x] nach jedem relevanten Neustart vollstaendig validierter Wiederanlauf
 - [x] alte GPIO-Zustaende werden niemals wiederhergestellt
 
