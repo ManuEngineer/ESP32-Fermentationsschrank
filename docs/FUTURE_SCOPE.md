@@ -35,6 +35,31 @@ nativen ESP-IDF-HTTP-Pfad integrieren](https://github.com/ManuEngineer/ESP32-Fer
 angelegt. PR #165 ist auf `main` integriert; der offene lokale
 Touch-Abschluss wird ueber PR #171 plan- und owner-gesteuert weitergefuehrt.
 
+## R2-/Future-Referenzen aus dem YAGNI-Zuschnitt
+
+Nicht normativ. Massgeblich ist ausschliesslich die Releasezuordnung in
+[SPECIFICATION_REVIEW](SPECIFICATION_REVIEW.md#r1r2-zuschnitt-nach-yagni).
+Die folgenden Referenzen halten den Bedarf sichtbar; sie enthalten weder eine
+R2-Lieferzusage noch eine Implementierungsfreigabe, neue Schemas oder Reserven.
+
+| Spaeter zu bewertender Bedarf | Einordnung / bestehender Owner |
+|---|---|
+| Webeditor fuer Benutzerprogramme | R2 vorgemerkt, #27 (D6) |
+| Zusaetzliche Web-Manuelloberflaeche | R2 vorgemerkt, #27; reale Laufgrenzen #34/#35 |
+| Vollstaendige technische Webdiagnose / Detail-APIs samt zugehoeriger Diagnose-/Systemnavigation | R2 vorgemerkt, #28, D-28-2=A; neues Budget vor Aktivierung |
+| Zusatz-Boot-Selbsttest-Dashboard/-modell | R2-Kandidat bei konkretem Nutzen, #28; keine zweite Safetyentscheidung |
+| Persistentes Ereignis-/Fehler-/Resetjournal | R2 vorgemerkt, #19/#28; rein diagnostisch, gesonderter K1-Normentscheid |
+| Lauf-/Messhistorie, Bereinigung und Archiv | R2 vorgemerkt, #19; historisches 5/50 erneut pruefen |
+| Aktueller Web-Laufchart / historische Diagramme | R2 vorgemerkt, #28/#19; keine erfundenen Verlaeufe |
+| JSON/CSV-Laufexport, Diagnoseexport, Serviceberichtsexport | R2 vorgemerkt, #19/#28; Geheimnisschutz bleibt |
+| Portables Backup und atomarer Import | R2 vorgemerkt, #19; neuer Ressourcen-/Security-/Schema-Plan |
+| Zusaetzliche gefuehrte Service-UI / Mock-Aktor-Sequenz | R2-Kandidat bei konkretem Nutzen, #28; echte R1-Pruefungen bleiben Pflicht |
+| Web-Favicon | Future bei Bedarf, #204; keine vorsorgliche LittleFS-/Branding-Infrastruktur |
+
+Reale R1-Hardware-, Safety-, Commissioning-, Ressourcen- und Siebentagegates
+bleiben in ihren vorhandenen Vertraegen. Lizenz/Distribution #177 ist ein
+R1-Gate vor offizieller Weitergabe, keine optionale Future-Funktion.
+
 ## WLAN: bewusst nicht R1
 
 ### Automatisches Ersatz-WLAN

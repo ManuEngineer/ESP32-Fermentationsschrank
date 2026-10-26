@@ -21,8 +21,9 @@ Bestandteil des ersten Releases darstellen.
 ## Begruendung fuer UART im ersten Release
 
 Die Zielhardware besitzt 4 MB Flash ohne vorausgesetzte PSRAM. Gleichzeitig
-werden Firmware, Weboberflaeche, drei Sprachen, Konfiguration, Laufpersistenz,
-Fehlerjournal und Messhistorie benoetigt.
+werden Firmware, Weboberflaeche, drei Sprachen, Konfiguration und kritische
+Laufpersistenz benoetigt. Journal/Messhistorie sind R2 vorgemerkt und erhalten
+keine vorsorgliche R1-Speicherreserve.
 
 In der aktuellen Entwicklungs- und Einzelnutzerphase ist UART der praktischste
 Updateweg:
@@ -69,8 +70,10 @@ Vor einem geplanten Update:
 - aktiven Prozess sicher beenden
 - Peltier und H-Bruecke sicher deaktivieren
 - notwendige Luefternachlaeufe beenden
-- Konfigurations- und Laufexport erstellen, sofern eine Migration oder ein
-  vollstaendiger Flash-Loeschvorgang vorgesehen ist
+- vor Migration oder vollstaendigem Loeschen einen konkret geeigneten,
+  freigegebenen Sicherungs-/Recoveryweg fuer vorhandene Daten festlegen;
+  fehlt er, nicht loeschen. Portables Backup/Import und Laufexport sind
+  R2 vorgemerkt, keine behauptete R1-Funktion
 - bestaetigen, dass die Binärdatei zum ESP32-32E mit 4 MB Flash und zur
   vorgesehenen Partitionstabelle passt
 
@@ -102,7 +105,8 @@ Der Rueckfall erfolgt physisch und bewusst:
 3. Konfigurationsschema und gespeicherte Revisionen validieren
 4. falls erforderlich eine kompatible Sicherung oder alte Konfigurationsrevision
    wiederherstellen
-5. vollstaendigen passiven Boot-Selbsttest durchfuehren
+5. bestehende vollstaendige Boot-/Config-/Run-/Sensor-/Planner-/Safety-
+   Revalidierung ausfuehren; kein zusaetzliches Dashboard/-modell voraussetzen
 
 Ein Firmware-Downgrade darf keine neueren Konfigurations- oder Laufdaten still
 mit einem inkompatiblen Schema verwenden. Nicht verstandene Daten werden nicht
@@ -358,10 +362,11 @@ Ein Downgrade wird abgelehnt, wenn es die einzigen vorhandenen neueren Daten
 still beschaedigen, teilweise interpretieren oder unkontrolliert ueberschreiben
 wuerde.
 
-## Updatejournal
+## Updateinformationen und spaeteres Journal
 
-Release 1 protokolliert mindestens physisch erkennbare relevante Firmware- und
-Resetinformationen, soweit verfuegbar:
+R1 behaelt verfuegbare aktuelle Firmware-/Resetdiagnose und den externen
+versionierten Updatenachweis. Dies verlangt kein persistentes Diagnosearchiv
+und kein zusaetzliches Boot-Dashboard. Soweit verfuegbar werden erfasst:
 
 - Firmwareversion
 - Buildkennung
@@ -420,7 +425,8 @@ protokolliert.
 
 - konkreter Release-1-Partitionsplan fuer 4 MB
 - maximal zulaessige Firmwaregroesse im Single-App-Layout
-- reservierter Platz fuer Konfiguration, Laufpersistenz, Journal und Historie
+- nachgewiesener Platz fuer Konfiguration und kritische Laufpersistenz;
+  Journal/Historie erst bei spaeterer Aktivierung budgetieren
 - dokumentierte PlatformIO- und FT232RL-Flashprozedur
 - Sicherungs- und Wiederherstellungsablauf vor einem vollstaendigen Flash-Loeschen
 - spaeterer dualer OTA-Partitionsentwurf und Mindest-Sicherheitsabstand

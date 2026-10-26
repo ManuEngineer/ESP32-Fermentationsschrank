@@ -170,21 +170,26 @@ Nachverfolgung: #36
 ### Flash und Partition
 
 - [ ] Single-App-Partitionsplan fuer Release 1 festlegen
-- [ ] App-, Konfigurations-, Journal-, Lauf- und Historienbudget dokumentieren
-- [ ] notwendigen freien Sicherheitsabstand definieren
-- [ ] Webressourcen und drei Sprachen messen
-- [ ] Exportgroessen und temporaeren Speicher begrenzen
-- [ ] NVS-Partitionsgroesse fuer Konfiguration, Slots und Secrets bestimmen
-      (Backend gemaess ADR-016)
+- [ ] Appgroesse sowie tatsaechlich vorhandene R1-Konfigurations- und
+      Laufpersistenz dokumentieren; kein Journal-/Historienbudget als R1-Gate
+- [ ] notwendigen freien Flash-/Partitionssicherheitsabstand definieren
+- [ ] vorhandene Webressourcen und drei Sprachen messen
+- [ ] NVS-Partitionsgroesse fuer vorhandene Konfiguration, Slots und Secrets
+      bestimmen (Backend gemaess ADR-016)
 
-Nachverfolgung: #9, #10, #19 und #28; #29/#90 bleiben geschlossene
-historische Nachweise, keine offenen Owner.
+`R2_VORGEMERKT / historische Referenz, kein R1-Abnahme- oder Ressourcen-Gate:`
+Journal, Lauf-/Messhistorie, Bereinigung/Archiv, Exporte samt Groessen und
+parallel temporaerem Speicher, portables Backup/Import sowie das historische
+5-Detail-/50-Zusammenfassungsmodell. Die Vormerkung ist keine R2-Lieferzusage.
+
+Nachverfolgung der aktiven R1-Werte: #9, #10 und #37; #29/#90 bleiben
+geschlossene historische Nachweise, keine offenen Owner.
 
 ### RAM und Laufzeit
 
 - [ ] Warn- und kritische Schwellen fuer freien Heap festlegen
 - [ ] Mindestwert fuer den groessten freien Block festlegen
-- [ ] Ringpuffer- und Warteschlangengroessen dokumentieren
+- [ ] Groessen vorhandener R1-Ringpuffer und Warteschlangen dokumentieren
 - [ ] `CommandDecision` mit maximalem 48/96/1024-Kandidaten auf dem realen
       ESP32 ohne PSRAM messen: Task-Stack-High-Water-Mark fuer die produktiv
       verwendeten Kommandowege
@@ -192,42 +197,49 @@ historische Nachweise, keine offenen Owner.
       nach `CommandDecision`-Erzeugung und -Anwendung messen
 - [ ] Verhalten bei fehlgeschlagener Allokation nachweisen: keine Teilmutation,
       keine unvollstaendige Persistenzfreigabe und keine neue Aktorfreigabe
-- [ ] Web, Display, Export und Regelung unter Parallelbelastung messen
-- [ ] Betriebszaehler je nach verbleibendem Budget vollstaendig, reduziert oder
-      nicht persistent umsetzen
+- [ ] vorhandene Web-, Touch-/Display- und Regelpfade unter realer
+      Parallelbelastung messen
+- [ ] aktuelle Fehlerdiagnose und erforderliche Laufzeitzaehler innerhalb des
+      gemessenen R1-Budgets bewerten; kein Journalarchiv voraussetzen
 
 Nachverfolgung: #10, #28 und #37; #29 dokumentiert hierzu historische reale
-ESP32-Evidenz, ist aber kein offener Owner. #37 bestätigt unter Last
-abschließend, soweit sein späterer Scope dies verlangt.
+ESP32-Evidenz, ist aber kein offener Owner. #37 bestaetigt die reale Last und
+Reserven gemaess seinem bestehenden Abnahmescope.
 
 ### Lokaler Werksreset (Issue #19, R1-Pflicht)
 
 - [x] Dauer des langen Gedrueckthaltens: Ownerentscheid 5000 ms, durchgehend
       auf dem Halteziel, fest (`kApprovedFactoryResetHoldMillis` in
       `main/app_main.cpp`; keine separate Laufzeitkonfiguration)
-- [ ] Ablauf A (PIN-geschuetzt, **R1-Pflicht**): Ownerentscheid O-R2 = B –
-      wird erst gemeinsam mit dem produktiven lokalen Service-UI/PIN-Zugang
-      umgesetzt (bestehende `PinEntryModel`-/`verifyServicePin`-Vertraege
-      wiederverwenden, keine provisorische parallele PIN-Loesung); bis dahin
-      wird nur der PIN-unabhaengige Ablauf B angeboten
+- [x] Ablauf A (PIN-geschuetzt, **R1-Software umgesetzt**): in PR #202
+      gemergt (`b903de8`); die zugehoerigen realen Hardwarenachweise bleiben
+      gemaess #192 separat offen und werden durch diesen Softwarestand nicht
+      als bestanden bewertet
 - [x] Werksreset im `ResetEligibleNoRuntime` (Ownerentscheid S1 = B, Plan
       Revision 8, Ownerfreigabe `aa665f1`): software-seitig umgesetzt
       (`SIM-19-S1-01..06`); Hardwarenachweis in #192 (`HW-19-R03` `BLOCKED`, siehe unten)
 - [ ] Hardwarenachweise `HW-19-R01..R03` (`ACCEPTANCE_TESTS.md`) in einem
       separaten Hardware-Folgeissue #192 (Ownerentscheid O-HW = A); Stand 2026-10-11: `HW-19-R01` `PASS` mit akzeptierter Abweichung (zuvor am 2026-10-10 `FAIL`: Stack Overflow beim vollen Hold, Bootloop; Offline-Diagnose in der #192-Evidence 3b, Fix im PR #200 nach freigegebener Plan Revision 3 (`43a65d3`) umgesetzt, statischer Stacknachweis in Evidence 3c, Review akzeptiert; G5 erteilt und ausgefuehrt: App-only-Flash `b9564e6` ohne Erase, Geraet bootet stabil, Display normal und Einstellungen zurueckgestellt (Ownerbeobachtung, `PASS_OWNER_OBSERVED`); G5/P3b `PASS`, interner Handoff-Pfad `NOT_RESOLVED`, Evidence 3d, kein Reset-Nachweis, FOLLOW-UP: UI-Command-Stackpfad (`UNVERIFIED_STATIC`) und Aufnahme von `scripts/analyze_issue_192_handoff_stack.py` in die Gates; G2-R3/P3c am 2026-10-11 ausgefuehrt, Evidence 3e: Reset funktional durchgefuehrt, `stack_hwm_bytes` nach dem Reset 5 432 B < Ziel 6 144 B, Heap-Minimum 4 084 B, vom Owner am 2026-10-11 als begruendete Abweichung akzeptiert, Heap-Minimum als Messbefund ohne Softwarefix; deshalb `HW-19-R01` `PASS` mit akzeptierter Abweichung, kein zusaetzlicher Hardwaretest/keine Implementierung allein wegen dieser Werte), `HW-19-R02` `NOT_RUN` (Teilaspekte beobachtet), `HW-19-R03` `BLOCKED`
-- [ ] Journal, Laufhistorie, Bereinigung, Laufexport: `DEFERRED_BY_OWNER_PENDING_
-      R1_CONTRACT_RECONCILIATION`; R1-Vertragskonflikte K1–K7 im Plan, kein
-      R1-`PASS` ohne Ownerentscheid O-R3
+### R1-Persistenz und Aufbewahrung
 
-### Aufbewahrung
+- [ ] Kritische Config-/Run-Persistenz, atomare Transaktionen, Write-before-Apply,
+      Fehlerfaelle und Wiederanlauf gemaess den bestehenden R1-Vertraegen und
+      `ACCEPTANCE_TESTS.md` nachweisen
+- [ ] aktuelle Fehlerdiagnose und tatsaechlich vorhandene R1-Daten auf dem
+      realen Ziel pruefen; kein persistentes Journal als Start-, Safety- oder
+      Recovery-Voraussetzung behaupten
 
-- [ ] Standard `aktiver Lauf + 5 detaillierte Laeufe + 50 Zusammenfassungen`
-      am realen Budget pruefen
-- [ ] maximale Detailaufloesung der aktuellen Laufhistorie festlegen
-- [ ] proaktive Bereinigung und Reserve praktisch testen
-- [ ] Schreibzaehler und ungewoehnliche Schreibrate diagnostisch bewerten
+`O-R3/K1=B` ist am 2026-10-26 ausdruecklich entschieden: ein persistentes
+Ereignisjournal ist kein R1-Start-, Safety- oder Recovery-Gate. Kritische
+Persistenz-, Interlock-, Safety- und Recovery-Gates bleiben unveraendert.
 
-Nachverfolgung: #19 und #37
+`R2_VORGEMERKT / historische Referenz, kein R1-Abnahme- oder Ressourcen-Gate:`
+Journal, Lauf-/Messhistorie, Bereinigung/Archiv, Laufexporte, Backup/Import und
+5-Detail-/50-Zusammenfassungs-Aufbewahrung. Die historische 5/50-Vorgabe ist
+bei Wiederaufnahme neu zu bewerten; daraus folgt keine R2-Lieferzusage.
+
+Nachverfolgung der bestehenden R1-Persistenz: #19 und #37; die R2-Vormerkung
+hebt keine bestehenden Hardware- oder Releaseabnahme auf.
 
 ## Hardware- und Releaseabnahme
 

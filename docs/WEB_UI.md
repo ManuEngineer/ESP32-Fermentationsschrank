@@ -9,6 +9,23 @@ gleichzeitige Bedienung.
 Die Netzwerkbereitstellung und grundlegenden Sicherheitsgrenzen stehen in
 [`NETWORK.md`](NETWORK.md).
 
+## R1/R2-Geltungsgrenze
+
+Die verbindliche Releasegrenze steht in
+[SPECIFICATION_REVIEW](SPECIFICATION_REVIEW.md#r1r2-zuschnitt-nach-yagni).
+Gemeinsame Fachzustaende/Commands verlangen keinen identischen Funktionsumfang
+von Touch und Web. In R1 bleiben alle vorhandenen sicheren Webslices erhalten:
+Anmeldung/Setup, Auth/CSRF/Replay, Programme anzeigen und starten, Laufaktionen,
+Meldungen, Einstellungen, Browserstatus, Sessions und DE/EN/ES. Das ist keine
+pauschale Vollstaendigkeits- oder Ressourcenqualifikation.
+
+Web-Programmeditor (D6), zusaetzliche Web-Manuelloberflaeche, vollstaendige
+technische Webdiagnose/Detail-APIs, Laufcharts/Historie, Exporte und portables
+Backup/Import sind `R2_VORGEMERKT` (#27/#28/#19). Neue Service-/Systemseiten
+und eine gefuehrte Service-UI werden fuer R1 nicht vorausgesetzt; der gefuehrte
+Zusatzablauf bleibt R2-Kandidat. Bereits implementierte Settings, lokale
+Servicefunktionen, Laufcommands und ihre fachlichen Gates bleiben unveraendert.
+
 ## Grundsaetze
 
 - Die Weboberflaeche bietet auf Mobiltelefon, Tablet und Computer denselben
@@ -63,7 +80,7 @@ Mindestens sichtbar:
 - aktive Meldungen
 - Netzwerk- und Zeitstatus in kompakter Form
 - `Programm starten`
-- `Manueller Betrieb`
+- zusaetzliche Ansicht `Manueller Betrieb`: R2 vorgemerkt (#27)
 
 Beispiel:
 
@@ -74,7 +91,7 @@ Produkt       nicht angeschlossen
 Schrank       22,4 °C
 
 [Programm starten]
-[Manueller Betrieb]
+[Manueller Betrieb: R2 vorgemerkt]
 ```
 
 ### Laufender Prozess
@@ -105,7 +122,8 @@ Restzeit      06:14
 
 ### Abgeschlossener Prozess
 
-Die Weboberflaeche bietet dieselben fachlichen Aktionen wie das Display:
+Die Weboberflaeche behaelt ihre vorhandenen sicheren Laufaktionen. Die
+folgende Liste fordert keine zusaetzliche R1-Manuelloberflaeche:
 
 - Abschluss quittieren
 - Laufdetails anzeigen
@@ -113,16 +131,16 @@ Die Weboberflaeche bietet dieselben fachlichen Aktionen wie das Display:
 
 ## Navigation
 
-Die fachlichen Hauptbereiche sind:
+Die vorhandene R1-Shell-Navigation umfasst:
 
 1. Uebersicht
 2. Programme
-3. Manueller Betrieb
-4. Meldungen und Protokolle
-5. Einstellungen
-6. Diagnose
-7. Service
-8. System
+3. Meldungen
+4. Einstellungen
+
+Zusaetzliche Manuell-, Diagnose-, Service- und Systemseiten sind kein neues
+R1-Muss. Historische Protokolle und Diagramme sind R2 vorgemerkt; notwendige
+aktuelle Meldungen und Statuswerte bleiben erhalten.
 
 Auf breiten Bildschirmen kann dies als Seitenmenue dargestellt werden. Auf
 Mobiltelefonen wird eine kompakte, klar beschriftete Navigation verwendet.
@@ -625,7 +643,11 @@ vollstaendige Laufprofil, aktiver Lauf (S4) `NOT_RUN`, Produktimage nicht
 hardwarequalifiziert. Die dynamischen Reihenfolge-/Stale-Szenarien sind nur im
 ausfuehrenden Fake-Fetch-Test, nicht gegen Hardware belegt.
 
-## Servicebereich in der Weboberflaeche
+## Servicebereich: Sicherheitsvertrag fuer spaetere Verbraucher
+
+Eine zusaetzliche Web-Service-Seite/-Route ist keine R1-Pflicht. Die folgenden
+PIN-, Sitzungs-, Frist- und Bestaetigungsregeln bleiben fuer vorhandene und
+spaetere Verbraucher verbindlich; sie erteilen keine Aktorfreigabe.
 
 Der Web-Servicebereich wird durch dieselbe vierstellige Service-PIN geschuetzt
 wie der lokale Servicebereich.
@@ -733,9 +755,11 @@ Programm wurde inzwischen an einer anderen Oberflaeche geaendert.
 [Aenderungen vergleichen]
 ```
 
-## Temperaturdiagramm des aktuellen Laufes
+## Temperaturdiagramm des aktuellen Laufes (R2 vorgemerkt)
 
-Die Weboberflaeche zeigt fuer den aktuellen Lauf ein Diagramm mit mindestens:
+Kein R1-Chart und keine R1-Speicherreserve sind erforderlich. Die folgenden
+Darstellungsregeln bleiben fuer eine spaetere Planung erhalten; fehlende
+Messungen werden nie erfunden. Ein spaeteres Diagramm zeigt mindestens:
 
 - Produkttemperatur, sofern verfuegbar
 - Schranktemperatur
@@ -762,19 +786,21 @@ Phase 6 und Phase 9 festgelegt.
 - [x] gleicher Funktionsumfang auf Handy, Tablet und Computer
 - [x] responsive, mobil optimierte Darstellung
 - [x] zustandsabhaengige Web-Startseite
-- [x] getrennte Navigation fuer Uebersicht, Programme, manuellen Betrieb,
-      Meldungen, Einstellungen, Diagnose, Service und System
+- [x] vorhandene R1-Navigation fuer Uebersicht, Programme, Meldungen und Einstellungen
+- R2/Future: zusaetzliche Manuell-, Diagnose-, Service- und Systemseiten nach Releasegrenze
 - [x] Sprache je Browser unabhaengig von der Displaysprache
 - [x] Deutsch, Spanisch und Englisch auch im Web
 - [x] gemaess ADR-017 keine dauerhafte Anmeldung in Release 1
 - [x] fluechtige serverseitige Sessions mit 30 Minuten Inaktivitaet,
       12 Stunden absoluter Dauer und Widerruf beim Geraeteneustart; ein reiner
       Browserneustart ist kein garantiertes Widerrufsereignis
-- [x] Service-PIN entsperrt nur die jeweilige Sitzung fuer begrenzte Zeit
-- [x] kritische Serviceaktionen verlangen eine eigene Bestaetigung
+- Sicherheitsvertrag bei Serviceverbrauchern: PIN entsperrt nur die jeweilige
+  Sitzung fuer begrenzte Zeit; kein R1-Auftrag fuer neue Serviceoberflaechen
+- Sicherheitsvertrag bei Serviceverbrauchern: kritische Aktionen verlangen
+  eine eigene Bestaetigung
 - [x] Live-Aktualisierung ohne manuelles Neuladen
 - [x] Revisionsschutz gegen stilles Ueberschreiben konkurrierender Aenderungen
-- [x] Temperaturdiagramm fuer den aktuellen Lauf
+- R2 vorgemerkt: Temperaturdiagramm fuer den aktuellen Lauf
 
 ## Noch offen fuer Phase 5C und spaeter
 

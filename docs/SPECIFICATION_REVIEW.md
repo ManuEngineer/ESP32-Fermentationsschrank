@@ -146,6 +146,47 @@ Kein TBD-Wert darf als gueltiger produktiver Laufzeitwert oder bestaetigte
 Tatsache verwendet werden. Die nachweisgebundene Checkliste steht in
 `OPEN_POINTS.md`.
 
+## R1/R2-Zuschnitt nach YAGNI
+
+R1 konzentriert sich auf die sichere, bedienbare und real qualifizierte
+Fermenter-Kernfunktion. Vier Standardprogramme, lokaler Programmeditor,
+lokaler manueller Betrieb, Touch-Grundbedienung, vorhandene Webbedienung
+(einschliesslich Start/Stop) und DE/EN/ES bleiben R1. Bestehende sichere
+Implementierungen werden nicht entfernt; technische Laufgrenzen und reale
+Freigaben bleiben bei #34/#35 und den jeweiligen Hardware-/Safety-Ownern.
+
+- `R2_VORGEMERKT`: Web-Programmeditor und zusaetzliche Weboberflaeche fuer
+  manuellen Betrieb (#27); vollstaendige technische Webdiagnose und neue
+  Detail-APIs, aktueller Web-Laufchart und historische Diagramme (#28);
+  persistentes Ereignis-/Fehler-/Resetjournal, Lauf-/Messhistorie mit
+  Bereinigung/Archiv und Lauf-, Diagnose- und Serviceberichtsexporte (#19/#28);
+  portables Backup und atomarer Import (#19). B0/O-BI ist kein R1-Gate mehr.
+- `R2_KANDIDAT`: zusaetzliches Boot-Selbsttest-Dashboard/-modell und gefuehrte
+  Service-UI/Mock-Aktor-Sequenz (#28), nur bei konkretem Zusatznutzen; keine
+  zweite Boot-/Safetyentscheidung und keine Ersatzqualifikation fuer Hardware.
+- `FUTURE_BEI_BEDARF`: Web-Favicon (#204), keine R1-Releasepflicht.
+
+`R2_VORGEMERKT` benennt eine spaetere Bewertung, keine automatische R2-Pflicht.
+`R2_KANDIDAT` und `FUTURE_BEI_BEDARF` enthalten keine Release-Zusage. Es werden
+keine Schnittstellen, Schemas oder Ressourcenreserven vorgebaut. Die historische
+5-Detail-/50-Zusammenfassungs-Aufbewahrung bleibt eine bei Wiederaufnahme erneut
+zu pruefende Referenz. Die Sammlung in [FUTURE_SCOPE](FUTURE_SCOPE.md) ist
+nicht normativ; die Releasegrenze steht ausschliesslich hier, Detailvertraege
+bleiben bei ihren Fach-SSOTs und bestehenden Issues.
+
+Die Journal-Start-/Safety-/Recoverygrenze wird ausschliesslich durch den
+konkret freigegebenen K1-Normentscheid und den Fachvertrag
+[SYSTEM_SAFETY_AND_RECOVERY](SYSTEM_SAFETY_AND_RECOVERY.md) bestimmt; ein
+fehlendes Journal wird weder als verlaesslich noch als Safety-Nachweis behauptet.
+
+Boot-/Config-/Run-/Sensor-/Planner-/Safety-Revalidierung, SAFE_BOOT,
+Write-before-Apply, kritische Persistenz und Watchdog bleiben Pflicht. Reale
+Hardware-Service-/Peltier-/Thermikpruefungen und mindestens sieben Tage
+Abnahme bleiben Pflicht (#32/#33/#34/#35/#36/#37), ebenso echte Web-/Touch-/
+WLAN-Last und RAM-/Stack-/Flash-Reserven. Ein zusaetzliches Dashboard oder
+Exportwerkzeug ist dafuer keine Voraussetzung. Lizenz/Distribution muss vor
+offizieller R1-Weitergabe entschieden sein (#177, [LICENSE_STATUS](LICENSE_STATUS.md)).
+
 ## Zukunftsfunktionen ausserhalb von Release 1
 
 - Web-OTA, duale OTA-Slots, automatischer Firmwaredownload und automatisches

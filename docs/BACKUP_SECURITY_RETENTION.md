@@ -66,14 +66,20 @@ Authentifizierung. Alte Flashbytes werden durch StorageEpoch und
 Referenzwechsel logisch unerreichbar; eine kryptografisch sichere physische
 Loeschung wird ohne konkreten Plattformnachweis nicht zugesichert.
 
-## Normales Backup
+## Portables Backup (R2 vorgemerkt)
+
+Backup und atomarer Import sind kein bedingtes R1-Ziel; B0/O-BI ist kein
+R1-Gate mehr. Spaetere Umsetzung verlangt einen neuen Ressourcen-/Security-/
+Schema-Plan. Keine Formate oder Speicherreserven werden vorsorglich eingebaut.
+Bestehende kritische Config-/Run-Persistenz und Werksreset bleiben unberuehrt.
 
 Ein normales Backup ist ein vollstaendiges, bewusst versioniertes Bundle aus
 einem portablen Manifest und allen von ihm referenzierten dekodierten
 Konfigurationsdokumenten. Das portable Manifest ist eine secret-freie Projektion
 der Konfigurationsgeneration und enthaelt keine Connectivity- oder
 Authentication-Bindung. Es werden keine rohen internen Envelopes exportiert.
-Das konkrete portable Format und sein Import werden mit Issue #19 implementiert.
+Das konkrete portable Format und sein Import bleiben unter #19 zur spaeteren
+Bewertung vorgemerkt, ohne Implementierungs- oder R2-Lieferzusage.
 
 Enthalten:
 
@@ -113,7 +119,7 @@ Eine rohe Flashkopie:
 - kann Geheimnisse enthalten
 - darf nicht über die Weboberfläche angeboten werden
 
-## Laufexport
+## Laufexport (R2 vorgemerkt, kein R1-Gate)
 
 Jeder Lauf kann einzeln exportiert werden.
 
@@ -137,7 +143,7 @@ Jeder Lauf kann einzeln exportiert werden.
 
 Kein Laufexport enthält Geheimnisse.
 
-## Import
+## Atomarer Import (R2 vorgemerkt)
 
 Verbindlicher Ablauf:
 
@@ -169,9 +175,16 @@ Regeln:
   es entsteht kein Pending oder paralleler Active-Zweig
 - das interne binaere Revisionsformat ist kein portables Backupformat
 
-## Aufbewahrungsmodell
+## Aufbewahrungsmodell (R2-Referenz)
 
-Werkseinstellung:
+Die historische 5-Detail-/50-Zusammenfassungs-Aufbewahrung und die folgende
+Historienbereinigung sind R2 vorgemerkt; 5/50 ist eine bei Wiederaufnahme
+erneut zu pruefende Referenz, keine automatisch verbindliche R2-Vorgabe.
+R1 besitzt kein
+persistentes Journal-/Historienarchiv und reserviert dafuer keinen Speicher.
+Aktiver Run und notwendige Recoverydaten bleiben kritische R1-Persistenz.
+
+Historischer 5/50-Referenzwunsch fuer spaetere Bewertung:
 
 ```text
 Aktiver Lauf:                 vollständig
@@ -214,9 +227,9 @@ Ein vollständiger lokaler Werksreset löscht:
 - Webpasswort
 - Service-PIN
 - Sitzungen und Tokens
-- Laufhistorie und Zusammenfassungen
+- Laufhistorie und Zusammenfassungen, sobald spaeter vorhanden
 - aktive Laufdaten
-- Fehler- und Komforthistorie soweit für den Reset vorgesehen
+- Fehler- und Komforthistorie, sobald spaeter vorhanden und fuer Reset vorgesehen
 
 Er stellt wieder her:
 
@@ -256,10 +269,10 @@ Der Ablauf:
 1. sichere Firmware und Bootfähigkeit
 2. gültige Konfiguration und Rückfallrevision
 3. aktiver Lauf und Wiederherstellung
-4. Sicherheits- und Resetjournal
+4. notwendige aktuelle Fehleranzeige und vorhandene Diagnose-/Recoverydaten
 5. notwendige Web- und UI-Ressourcen
-6. Laufzusammenfassungen
-7. alte detaillierte Historie
+6. Laufzusammenfassungen (Future)
+7. alte detaillierte Historie (Future)
 
 Web-OTA ist eine mögliche Zukunftsfunktion und erhält in Release 1 weder
 Partitionen noch Speicherreserve.

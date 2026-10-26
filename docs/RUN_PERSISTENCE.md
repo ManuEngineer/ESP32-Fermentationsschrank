@@ -13,10 +13,16 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
   vor `STANDBY` oder einem Resume-Angebot bewertet; #24 zaehlt keine Bootschleifen.
 - Laufdaten, Sensoren, Sicherheitszustand und Wiederanlaufaktion werden vor jeder
   Freigabe validiert.
-- Wichtige Ereignisse werden sofort gespeichert.
+- Erforderliche kritische Run-Zustandsaenderungen werden transaktional
+  gespeichert; ein separates Ereignisarchiv ist fuer R1 nicht erforderlich.
 - Periodische Kontrollpunkte ergaenzen die ereignisgesteuerten Speicherungen.
 - Es wird nicht in jedem Sensorzyklus geschrieben.
-- Kritische Laufdaten und Sicherheitsjournale haben Vorrang vor Historien.
+- Kritische Laufdaten haben Vorrang vor Komfortdaten. Journal, Laufhistorie,
+  deren Bereinigung und Laufexport sind Future; die darauf bezogenen
+  Detailregeln erzeugen kein R1-Start-, Recovery- oder Abnahmegate.
+  Releasezuordnung und die
+  erneut zu pruefende historische 5/50-Referenz stehen in
+  `SPECIFICATION_REVIEW.md`; aktiver Lauf und Recovery bleiben Pflicht.
 - Release 1 funktioniert mit 4 MB Flash ohne PSRAM.
 - Release 1 reserviert keine dualen OTA-Slots.
 - Ein Neustart ist kein Fehlerreset; #24 fuehrt keine allgemeine persistente
@@ -450,7 +456,10 @@ Fuehren beide Grenzen nicht zur gleichen Fortschritts- oder Phasenentscheidung,
 wird kein automatischer Abschluss ausgeloest. Beide Grenzen und die Konfidenz
 werden angezeigt und exportiert.
 
-## Messhistorie
+## Zusaetzliche Messhistorie (R2 vorgemerkt)
+
+Vorhandene aktuelle Sensor-/Run-/Recoveryinformationen bleiben erhalten. Die
+folgenden Live-Puffer-/Aggregatregeln verlangen keinen neuen R1-Puffer.
 
 ### Live-Ringpuffer im RAM
 
@@ -474,9 +483,11 @@ werden getrennt mit genauer verfuegbarer Zeit markiert.
 Ein Minutenfenster ist der bevorzugte Ausgangspunkt fuer den aktuellen Lauf, aber
 keine Garantie fuer unbegrenzte minutengenaue Langzeitarchivierung.
 
-## Aufbewahrung
+## Historische Aufbewahrungsreferenz (R2 neu zu pruefen)
 
-Werkseinstellung innerhalb eines festen Budgets:
+Die aktive Lauf-/Recoverypersistenz bleibt R1-Pflicht. Die folgenden 5/50-Werte
+sind ein historischer Referenzwunsch und keine R1-Werkseinstellung oder
+automatische R2-Pflicht; bei Wiederaufnahme erneut mit gemessenem Budget pruefen:
 
 - aktiver Lauf vollstaendig
 - letzte 5 abgeschlossene Laeufe detailliert
@@ -642,8 +653,8 @@ Verbindlich:
   - Webressourcen und Sprachen
   - Konfiguration
   - aktiven Lauf und Rueckfall
-  - Sicherheitsjournal und Persistenzfehler-Latch
-  - Historie und Zusammenfassungen
+  - Diagnosearchiv und allgemeiner Persistenzfehler-Latch (Future, nicht R1)
+  - Historie und Zusammenfassungen (Future)
   - temporaere Exporte
 - Sicherheits- und Regelungslogik haben Vorrang
 

@@ -23,6 +23,23 @@ FINAL_SYSTEM_RESOURCE_QUALIFICATION_AFTER_INTEGRATION=YES
 FRAMEWORK_DEFAULT_IS_PRODUCT_BUDGET=NO
 ```
 
+## R1-Grenze Journal und Historie
+
+Fuer Start-/Safety-/Recovery-Gates gilt der R1-Journalvertrag in
+`SYSTEM_SAFETY_AND_RECOVERY.md`, Abschnitt Fehler- und Resetprotokoll.
+
+Journal, Laufhistorie, deren Bereinigung und Laufexport sind Future. Die
+nachfolgenden Journal-/Historienbudgets, Aufbewahrungs-, Bereinigungs- und
+Wear-Leveling-Regeln beschreiben diesen spaeteren Ausbau; sie erzeugen keine
+R1-Reserve und kein R1-Abnahmekriterium. Vorhandene kritische Persistenz,
+aktuelle Fehleranzeige, Ressourcenmessung und Inbetriebnahmegates bleiben Pflicht.
+
+Die Releasezuordnung steht in `SPECIFICATION_REVIEW.md`: Journal/Historie,
+Bereinigung/Archiv, Charts, Exporte und Backup/Import sind R2 vorgemerkt.
+B0/O-BI ist kein R1-Gate; fuer diese Funktionen wird kein Vorab-Budget
+reserviert. Reale R1-Heap-/Stack-/Flash-/WLAN-/Touch-/Web-Lastqualifikation
+bleibt Pflicht. Kein PARTIAL/FAIL/NOT_RUN wird durch Scopebereinigung zu PASS.
+
 ## Grundsaetze
 
 - Ressourcenknappheit soll durch begrenzte Strukturen, angemessene
@@ -69,9 +86,7 @@ Firmwaregroesse
 freier Flash-/Dateisystembereich
 Belegung der Konfiguration
 Belegung der kritischen Laufpersistenz
-Belegung des Fehler- und Resetjournals
-Belegung der Laufzusammenfassungen
-Belegung der Diagrammhistorie
+Belegung tatsaechlich vorhandener R1-Daten
 ```
 
 Zusaetzlich darf die Diagnose anzeigen:
@@ -207,7 +222,8 @@ Ein neuer Lauf darf nicht gestartet werden, wenn:
 
 - kein sicherer aktiver Laufkontrollpunkt garantiert werden kann
 - keine gueltige Konfigurations- und Rueckfallrevision erhalten werden kann
-- das Fehlerjournal fuer verriegelte Ereignisse nicht verlaesslich ist
+- erforderliche aktuelle Config-/Run-/Transaktions- oder Safety-Evidenz nicht
+  verlaesslich ist; ein persistentes Ereignisjournal ist kein R1-Startgate
 - der freie Heap oder groesste zusammenhaengende Block die nachgewiesene
   Mindestreserve unterschreitet
 
@@ -222,7 +238,9 @@ Er wird nur sicher gestoppt und verriegelt, wenn:
 
 - Regel- oder Sicherheitsaufgaben nicht mehr verlaesslich ausgefuehrt werden
 - kritische Laufpersistenz nicht mehr garantiert ist
-- eine notwendige Fehlerrevision nicht mehr sicher gespeichert werden kann
+- eine fuer die sichere Run-/Recovery-Transaktion erforderliche Revision nicht
+  mehr sicher gespeichert werden kann; ein spaeteres Diagnosearchiv gehoert
+  nicht zu dieser kritischen Persistenz
 - Speicherbeschaedigung die aktive Konfiguration oder Sicherheitsdaten betrifft
 
 Damit hat die Fortsetzung eines sicher regelbaren Prozesses Vorrang vor alten
@@ -241,10 +259,10 @@ Prioritaetsreihenfolge:
 2. Factory-Daten und notwendige Hardwarekonfiguration
 3. aktive Konfiguration und letzte gueltige Rueckfallrevision
 4. aktiver Lauf, Kontrollpunkte und Wiederherstellungsdaten
-5. Fehler-, Brownout-, Watchdog- und Resetjournal
+5. notwendige aktuelle Fehleranzeige und vorhandene Diagnose-/Recoverydaten
 6. notwendige lokale Bedienung und Weboberflaeche
-7. abgeschlossene Laufzusammenfassungen
-8. detaillierte alte Diagramm- und Komfortdaten
+7. abgeschlossene Laufzusammenfassungen (Future)
+8. detaillierte alte Diagramm- und Komfortdaten (Future)
 9. optionale Betriebs- und Wartungsstatistiken
 
 Release 1 reserviert keine dualen OTA-Slots. Ein realer Build muss dennoch einen
@@ -324,8 +342,8 @@ Moegliche Stufen:
 
 ### Stufe C: keine persistenten Komfortzaehler
 
-Nur bereits sicherheits- und fehlerbedingt notwendige Ereignisse werden im
-bestehenden Journal gespeichert.
+R1 besitzt kein persistentes Ereignisjournal. Stufe C fuehrt keine persistenten
+Komfortzaehler ein; vorhandene kritische Run-/Recoverypersistenz bleibt erhalten.
 
 Entscheidungsregel:
 
@@ -399,13 +417,13 @@ MATERIAL_FUTURE_INTEGRATIONS_REQUIRE_RAM_DELTA_CHECK=YES
       pro Minute
 - [x] feste oder begrenzte Strukturen im Regel- und Sicherheitskern
 - [x] dynamische Web- und JSON-Nutzung nur mit festen Grenzen
-- [x] alte nichtkritische Protokolle und Diagrammdaten proaktiv automatisch
-      bereinigen
+- R2 vorgemerkt: alte nichtkritische Protokolle und Diagrammdaten proaktiv
+  bereinigen; keine neue R1-Funktion oder Speicherreserve
 - [x] Ressourcenwarnung erst, wenn normale Speicherpflege die Reserve nicht
       wiederherstellt
 - [x] laufenden Prozess bei reiner Historienknappheit nicht stoppen
 - [x] neuen Lauf bei gefaehrdeter kritischer Persistenz nicht starten
-- [x] Firmware, aktive Konfiguration, Laufwiederherstellung und Fehlerjournal vor
+- [x] Firmware, aktive Konfiguration, Laufwiederherstellung und aktuelle Fehlerdaten vor
       Komforthistorie priorisieren
 - [x] keine OTA-Slots im Release-1-Flashbudget
 - [x] keine Einzelmessung im Zwei-Sekunden-Zyklus in Flash schreiben

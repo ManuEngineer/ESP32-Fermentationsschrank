@@ -226,9 +226,8 @@ Bereiche:
 - Geheimnisse in getrenntem Speicherbereich
 - aktiver Laufschnappschuss und Laufrevisionen
 - Kontrollpunkte
-- Fehler- und Resetjournal
-- begrenzte Messhistorie
-- Laufzusammenfassungen
+- Fehler-/Resetjournal, Messhistorie und Laufzusammenfassungen: R2 vorgemerkt;
+  keine R1-Schemas oder Ressourcenreserven vorbauen
 
 Schreibvorgaenge sind atomar, versioniert und besitzen mindestens eine gueltige
 Rueckfallrevision.
@@ -328,9 +327,10 @@ nicht (siehe ADR-013).
 
 Persistenzports melden Fehler explizit: `IStateStore::read()` unterscheidet
 erfolgreiches Lesen, einen fehlenden Schluessel und einen Speicherfehler.
-`IEventJournal::record()` meldet fehlgeschlagene Schreibvorgaenge. Dadurch
-koennen spaetere Sicherheits- und Recoverylogik kritische Speicherfehler von
-normalen, noch nicht vorhandenen Daten unterscheiden.
+`IEventJournal::record()` ist ein vorhandener Port ohne produktiven Adapter
+und ohne kritischen Durability-Vertrag. Journal ist diagnostischer R2-Scope,
+kein zweiter Safety-/Recovery-Owner. Kritische Config-/Run-Durability bleibt
+beim bestehenden `IStateStore`- und Gesamttransaktionsvertrag.
 
 ## Bedienung
 
@@ -388,7 +388,8 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 - zeitlich und leistungsmassig begrenzte Aktortests
 - jederzeitiger sicherer Abbruch
 - automatische Sensor- und Sicherheitsueberwachung
-- versionierter Servicebericht
+- versionierter Nachweis der realen Pruefung; ein zusaetzlicher
+  Produkt-Serviceberichtsexport ist R2 vorgemerkt
 
 ## Zeit und Wiederanlauf
 
@@ -438,10 +439,10 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 - 4 MB Flash als harte Planungsbasis
 - keine PSRAM-Abhaengigkeit
 - feste oder begrenzte Puffer im Regel- und Sicherheitspfad
-- proaktive Bereinigung nichtkritischer Historien
-- Prioritaet: Firmware und sichere Bootfaehigkeit, Konfiguration, aktiver Lauf,
-  Sicherheitsjournal, notwendige UI/Webressourcen, Zusammenfassungen, alte
-  Diagrammdaten
+- Historienbereinigung und Archiv: R2 vorgemerkt
+- R1-Prioritaet: sichere Bootfaehigkeit/Firmware, Konfiguration, aktiver Lauf
+  und Recovery, aktuelle Fehlerdaten und notwendige lokale UI/Webressourcen;
+  keine vorsorglichen Reserven fuer R2-Historie/Journal/Exporte
 - Web-OTA und duale OTA-Slots sind nicht Teil des Release-1-Layouts
 
 ## Erweiterungspunkte nach Release 1

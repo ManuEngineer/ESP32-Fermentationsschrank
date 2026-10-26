@@ -19,8 +19,9 @@ die normale Nutzung nicht erforderlich sein.
    aktive Internetverbindung.
 2. Programme koennen lokal am Touchdisplay ausgewaehlt, gestartet, ueberwacht
    und gestoppt werden.
-3. Eine lokale Weboberflaeche bietet zusaetzlich die vollstaendige Bedienung,
-   Konfiguration und Ueberwachung.
+3. Eine lokale Weboberflaeche bietet die fuer R1 festgelegte sichere Bedienung,
+   Konfiguration und Ueberwachung. Der langfristige Ausbau bleibt nach
+   `SPECIFICATION_REVIEW.md` fuer R2/Future vorgemerkt.
 4. Sicherheitsfunktionen und laufende Temperaturregelung bleiben auch bei
    Ausfall von Display, Touch, Weboberflaeche, Internet oder Heimserver
    funktionsfaehig.
@@ -162,11 +163,12 @@ Programme. Direkte Aktorsteuerung gehoert ausschliesslich in den Servicemodus.
 
 ## Weboberflaeche und Fernbedienung
 
-Die Weboberflaeche soll im lokalen Netzwerk die vollstaendige Bedienung
-erlauben:
+Die Weboberflaeche behaelt im lokalen Netzwerk ihre vorhandenen R1-Funktionen.
+Der langfristige Bedienumfang bleibt erhalten; die Releasezuordnung richtet
+sich nach `SPECIFICATION_REVIEW.md`:
 
 - Status und Temperaturen anzeigen
-- Programme anzeigen und bearbeiten
+- Programme anzeigen; zusaetzlicher Web-Programmeditor R2 vorgemerkt
 - Programme starten und stoppen
 - Einstellungen verwalten
 - Meldungen und Wiederanlaufdetails anzeigen
@@ -269,7 +271,8 @@ umgehen.
 - [x] erster Release mit einer Fermentationstemperatur pro Programm
 - [x] Architektur soll spaetere mehrstufige Programme nicht verhindern
 - [x] Verhalten nach Programmende pro Programm konfigurierbar
-- [x] vollstaendige Bedienung ueber die lokale Weboberflaeche
+- [x] vorhandene sichere Webbedienung in R1 erhalten
+- R2/Future: weitergehender Webumfang gemaess `SPECIFICATION_REVIEW.md`
 - [x] #124-Current-`FERMENTING`-Recovery nur mit exakter Evidenz und trusted
       UTC automatisch logisch, stets ohne Aktorfreigabe
 - [x] gewichtete Verlängerung nach Stromunterbrechung bleibt C2/#18-Legacy

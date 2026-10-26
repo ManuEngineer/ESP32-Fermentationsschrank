@@ -10,6 +10,11 @@ Aktueller Status, laufende Pull Requests, naechste Arbeit und Blocker stehen in
 [`ROADMAP.md`](ROADMAP.md) und den jeweiligen GitHub-Issues. Der technische
 Phasenablauf steht in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 
+Die bestehenden Issue-Titel umfassen teilweise langfristigen Bedarf. Fuer ihre
+R1-Anteile und die R2-/Future-Vormerkungen gilt ausschliesslich die Abgrenzung in
+`SPECIFICATION_REVIEW.md`; der gesamte Rest eines offenen #19/#27/#28 ist
+keine pauschale Release-1-Abschlussvoraussetzung.
+
 ## Epic-Uebersicht
 
 | Epic | Tracking-Issue | Verantwortung |
@@ -114,7 +119,8 @@ C2-Legacy/deprecated und werden separat bereinigt.
 #12/#14/#15/#20/#24 -> #25
 #25/#12/#14/#15/#20/#24 -> #26
 #25/#12/#15/#16 -> #27
-#19/#20/#22/#23/#24/#25 -> #28
+#20/#22/#23/#24/#25 -> #28 (konkret benoetigte R1-Datenpfade)
+#19 -> #28 nur fuer spaetere Journal-/Historien-/Exportfunktionen
 ```
 
 E4 arbeitet gegen gemeinsame Fach- und Plattformvertraege. Reale Display-,
@@ -163,7 +169,8 @@ bestehende Persistenzformate still ersetzen.
 ```text
 #29-#33 -> #34
 #22/#23/#24/#33/#34 -> #35
-#28/#29-#35 -> #36
+#29-#35 und erforderliche vorhandene Diagnose -> #36
+#28-R2-/Future-Funktionen sind keine #36-Abschlussvoraussetzung
 #36 -> #37
 ```
 
@@ -175,11 +182,11 @@ Messungen und Release-Gates bestanden sind.
 | Meilenstein | Issues |
 |---|---|
 | M0 – Softwaregrundlage und Simulator | #9–#11 |
-| M1 – fachlicher, persistenter und sicherer Softwarekern | #12–#24 sowie #54–#57 |
-| M2 – bedienbarer Simulator | #25–#28 |
+| M1 – fachlicher, persistenter und sicherer Softwarekern | verbindlicher R1-Teil von #12–#24 sowie #54–#57; kein #19-R2-Ausbau |
+| M2 – bedienbarer Simulator | verbindlicher R1-Teil von #25–#28, ohne R2/Future |
 | M3 – Hardware-Bring-up | #29–#33, #90 |
 | M4 – sichere Temperatursteuerung | #30, #32–#35 |
-| M5 – vollstaendige Integration | #26–#36 sowie #89 |
+| M5 – vollstaendige R1-Integration | verbindlicher R1-Teil von #26–#36 sowie #89 |
 | M6 – Release 1 | #34–#37 |
 
 ## Strukturelle Regeln

@@ -24,7 +24,8 @@ Dokumente Vorrang.
 - Release 1 unterstuetzt Deutsch, Spanisch und Englisch.
 - Die vier Standardprogramme sind Joghurt mild, Joghurt stichfest, Milchkefir und
   Wasserkefir.
-- Benutzerprogramme koennen erstellt, kopiert, bearbeitet und geloescht werden.
+- Benutzerprogramme koennen lokal erstellt, kopiert, bearbeitet und geloescht
+  werden. Ein zusaetzlicher Web-Programmeditor ist R2 vorgemerkt (#27).
 - Das erste Release verwendet eine Fermentationstemperatur pro Programm; das
   Datenmodell darf spaetere mehrstufige Programme nicht verhindern.
 
@@ -41,8 +42,9 @@ Dokumente Vorrang.
 - Kurze Temperaturabweichungen pausieren den Timer nicht automatisch.
 - Das Verhalten nach der Fermentation ist pro Programm waehlbar: beenden,
   kuehlen, zeitlich halten oder bis zur manuellen Beendigung halten.
-- Es gibt einen manuellen Zeit-/Temperaturlauf und einen manuellen Haltebetrieb
-  ohne Timer.
+- Lokal gibt es einen manuellen Zeit-/Temperaturlauf und einen manuellen
+  Haltebetrieb ohne Timer. Eine zusaetzliche Weboberflaeche ist R2 vorgemerkt;
+  vorhandene Commands und reale technische Laufgrenzen bleiben unveraendert.
 - Direkte Aktorsteuerung ist nur als geschuetzte, begrenzte Servicepruefung
   zulaessig.
 - Ein aktiver Lauf verwendet einen unveraenderlichen Programmschnappschuss.
@@ -189,11 +191,17 @@ weder Resume noch `Allowed`.
 
 ## Diagnose, Export und Updates
 
-- Das Display bietet kompakte, das Web vollstaendige technische Diagnose.
+- Lokale Diagnose D1 und vorhandene Webstatuswerte bleiben erhalten.
+  Vollstaendige technische Webdiagnose und zusaetzliche Detail-APIs sind
+  R2 vorgemerkt (#28); gemeinsame Fachzustaende bedeuten keine UI-Paritaet.
 - Lesende Diagnose bleibt waehrend eines Laufes verfuegbar.
 - Hardwaretests sind nur im Standby, PIN-geschuetzt und zeitlich begrenzt.
-- Lauf-, Diagnose- und Servicebericht-Exporte enthalten keine Passwoerter, PINs,
-  Tokens oder erfundenen Werte.
+- Lauf-, Diagnose- und Serviceberichtsexport, portables Backup und atomarer
+  Import sind R2 vorgemerkt (#19/#28), kein bedingtes R1-Ziel. Geheimnisschutz
+  und das Verbot erfundener Werte bleiben fuer spaetere Angebote verbindlich.
+- Zusatz-Dashboard fuer Boot-Selbsttests und gefuehrte Service-UI sind nur
+  R2-Kandidaten; bestehende Boot-Revalidierung und echte Hardware-/Peltier-/
+  Safetypruefungen bleiben R1-Pflicht.
 - UART/FT232RL ist der verbindliche Update- und Wiederherstellungsweg fuer
   Release 1.
 - Release 1 benoetigt keine OTA-Slots und kein Web-OTA.
@@ -201,10 +209,15 @@ weder Resume noch `Allowed`.
 ## Ressourcen
 
 - Ziel sind 4 MB Flash ohne vorausgesetzte PSRAM.
-- Firmware, Konfiguration, Laufpersistenz, Journal und Historie erhalten feste
-  Budgets.
+- R2-/Future-Status und unveraenderte R1-Gates richten sich nach
+  `SPECIFICATION_REVIEW.md`; fuer nicht implementierte Ausbauten werden
+  keine Schnittstellen, Schemas oder Ressourcenreserven vorgebaut.
+- Ressourcenbudgets gelten fuer tatsaechlich vorhandene R1-Funktionen und
+  deren gemessene Systemreserven. Journal, Laufhistorie, deren Bereinigung und
+  Laufexport sind Future; daraus entstehen keine vorsorglichen R1-Reserven.
 - Puffer, Programme, Meldungen und Exporte besitzen feste Maximalgroessen.
-- Alte nichtkritische Protokolle und Diagrammdaten werden proaktiv bereinigt.
+- Proaktive Bereinigung alter Protokoll-/Historien-/Diagrammdaten gehoert zum
+  spaeteren Ausbau. R1 behaelt kritische Persistenz und aktuelle Fehleranzeige.
 - Kritische Daten haben immer Vorrang vor Komfortdaten.
 - Heap, niedrigster Heap, groesster freier Block, Firmwaregroesse und
   Flashbelegung werden ueberwacht.

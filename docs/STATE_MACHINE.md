@@ -206,10 +206,12 @@ Safety-Wahrheit.
 ### Erlaubte Funktionen
 
 - passive Diagnose
-- Fehler- und Resetjournal lesen
-- Berichte exportieren
+- aktuelle Fehleranzeige, Resetursache und vorhandene Run-/Recoverydaten lesen
+  (persistentes Journal/Historie sind Future und kein SAFE_BOOT-Ausgangsgate)
+- vorhandene sichere Diagnosefunktionen nutzen; zusaetzlicher Lauf-,
+  Diagnose- und Serviceberichtsexport ist R2 vorgemerkt, kein R1-Gate
 - Netzwerkwiederherstellung ohne Aktorwirkung
-- passive Diagnose und Export ohne Aktorwirkung
+- passive Diagnose ohne Aktorwirkung; Exporte erst bei spaeterer Implementierung
 - physischer Vollreset, UART-Recovery und erneutes Flashen bleiben spaetere
   E5-/Service-/Hardware-Gates und sind kein #24-R1-Resetvertrag
 
