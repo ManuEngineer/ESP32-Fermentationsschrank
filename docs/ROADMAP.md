@@ -18,12 +18,19 @@ eine Hardware-, Safety- oder Aktorfreigabe.
 abgeschlossene Basis: #29 -> #90 -> #121 -> #124 -> #126 -> #25 -> #144 -> #152
                       -> #26 -> #31 -> #172 -> #164/#174 -> #178/#181 -> #27 (Foundation)
                       -> #30 (Software)
-hardwareunabhaengig:  #19 Werksreset (R1-Pflicht, Plan) | #19 Backup/Import (bedingt)
-                      -> weitere #27-Mutationspfade; #28 (formale #19-Abhaengigkeit: Ownerklaerung offen)
-reale Hardware:       #190 (DS18B20) -> #32 -> #33
+abgeschlossene R1-Software: lokaler Werksreset A/B (#191/#202 gemergt)
+reale Hardware/Safety: #190 (DS18B20) -> #32 -> #33
                       -> erste real bedienbare Fermenter-Hardwareintegration
-                      -> #106 strukturell (erledigt) -> #34 -> #35 -> #106 produktiv
+                      -> #34 -> #35 -> #106 produktiv
+separater Hardwaregate: #192 (Werksreset-Evidence; Ergebnisse unveraendert)
                       -> #36 -> #37 (Abnahme-/Releasegates)
+R1-Ressourcen/Abnahme: reale Web-/Touch-/Regellast, Heap/Stack/Flashreserven,
+                      Commissioning, Powercut/Recovery und siebentaegiger Test
+                      bleiben in den owning Issues und #36/#37 aktiv.
+R2_VORGEMERKT:        #19 Backup/Import, Historie/Journal/Export; zusaetzliche
+                      Weboberflaechen und weiterfuehrende Diagnosefunktionen.
+                      #19 ist keine pauschale Voraussetzung fuer bestehende
+                      R1-Diagnose in #28.
 ```
 
 Es entsteht keine separate Wegwerf-Testsoftware und kein zweiter temporaerer

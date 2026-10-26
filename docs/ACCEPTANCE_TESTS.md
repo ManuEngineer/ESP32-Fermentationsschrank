@@ -132,7 +132,9 @@ Mindestens:
   `CommitOutcomeUnknown` bleiben `Unresolved`
 - normaler `Success` benoetigt keinen zweiten Readback; Readback erfolgt nur
   zur Aufloesung von `CommitOutcomeUnknown` durch `writeExact()`
-- Aufbewahrung und Bereinigung
+- bestehende kritische R1-Persistenz- und Recoverytests (atomare Revisionen,
+  Fehlerfaelle, Boot und fail-closed Verhalten); historische Aufbewahrung und
+  Bereinigung von Journal-/Laufhistorie sind R2-Ausbau, kein R1-Unit-Test-Gate
 - physische Vollreset-/Service-PIN-Tests gehoeren zu spaeteren E4/E5-/Service-
   Gates und sind kein #24-R1-`ActuationInterlock`-Gate
 - Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
