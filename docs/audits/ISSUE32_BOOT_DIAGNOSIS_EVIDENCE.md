@@ -4,9 +4,11 @@ Stand 2026-11-17. Ownerfreigabe Plan `67f40f82b875fb4864247895971aee9fa1f4c180` 
 
 ## Beobachtung und Aufbau
 
-Owner nennt MOSFET 1 und 4 mit Lueftern und entsprechendes Verhalten bei MOSFET 3. Die Luefter an 1 und 4 liefen laut Owner waehrend der UART-Aufnahme unveraendert; Klemmen, Last an 3 und Verhalten vor `app_main` sowie bei nachgewiesenem Reset sind `NOT_VERIFIED`. Vermutete Zuordnung MOSFET 1/3/4 zu GPIO16/26/27 ist kein Funktionsnachweis. Alle auffaelligen physischen Kanaele einschliesslich MOSFET 4 sind Gegenstand der Untersuchung; GPIO27 bleibt softwareseitig Reserve. `ACTUATOR_RELEASE=NO`.
+Owner bestaetigt Luefter an MOSFET 1 und 4; MOSFET 2 und 3 sind nicht angeschlossen. Die Luefter an 1 und 4 liefen laut Owner waehrend der UART-Aufnahme unveraendert und laufen bei schwarzem Display weiter. Klemmen und Verhalten vor `app_main` sowie bei nachgewiesenem Reset sind `NOT_VERIFIED`. Vermutete Zuordnung MOSFET 1/4 zu GPIO16/27 ist kein Funktionsnachweis. Alle auffaelligen physischen Kanaele einschliesslich MOSFET 4 sind Gegenstand der Untersuchung; GPIO27 bleibt softwareseitig Reserve. `ACTUATOR_RELEASE=NO`.
 
-Owner bestaetigt `/dev/ttyUSB0` als verbundenen UART-Adapter und Beobachtungsbereitschaft. [Fruehere Evidence](PR210_D1_SMOKE_RESULT_20261025.md) dokumentiert einen Reset beim Oeffnen. Am 2026-11-17 wurde der Port nach Koordination fuer 20 Sekunden lesend mit 115200 Baud geoeffnet; kein expliziter DTR-/RTS-Puls, aber ein Reset durch das Oeffnen ist nicht ausgeschlossen. Empfang: 278 Nullbytes, keine lesbare Boot-/Firmwaremeldung. Ob ein Reset stattfand, ist aus dem Mitschnitt nicht bestimmbar; Ursache der Nullbytes unbekannt. **Ownerbeobachtung:** Luefter an MOSFET 1 und 4 liefen waehrend der UART-Oeffnung ohne erkennbare Aenderung weiter. Diese Beobachtung belegt weder einen Reset noch das Verhalten vor `app_main`; geschaltete Last an MOSFET 3 und sichtbarer Neustart sind nachgefragt. Gueltiger Bootlog und nachgewiesener neuer Boot/Reset `NOT_VERIFIED`. BTS7960 laut Auftrag ohne 12-V-Leistungsversorgung und ohne Peltier.
+Owner bestaetigt `/dev/ttyUSB0` als verbundenen UART-Adapter und Beobachtungsbereitschaft. [Fruehere Evidence](PR210_D1_SMOKE_RESULT_20261025.md) dokumentiert einen Reset beim Oeffnen. Am 2026-11-17 wurde der Port nach Koordination fuer 20 Sekunden lesend mit 115200 Baud geoeffnet; kein expliziter DTR-/RTS-Puls, aber ein Reset durch das Oeffnen ist nicht ausgeschlossen. Empfang: 278 Nullbytes, keine lesbare Boot-/Firmwaremeldung. Ob ein Reset stattfand, ist aus dem Mitschnitt nicht bestimmbar; Ursache der Nullbytes unbekannt. **Ownerbeobachtung:** Luefter an MOSFET 1 und 4 liefen waehrend der UART-Oeffnung ohne erkennbare Aenderung weiter; das Display wurde schwarz und blieb schwarz. Diese Beobachtung belegt weder einen Reset noch das Verhalten vor `app_main`; Zustand des Displays vor der Aufnahme ist nachgefragt. Ein ROM-Bootloader ist eine Moeglichkeit, aber nicht belegt.
+
+Der Builder oeffnete den Port anschliessend unbeabsichtigt erneut durch `stty -F /dev/ttyUSB0 -a` zur Abfrage der Einstellungen; kein Steuerimpuls wurde bewusst gesendet, ein durch Oeffnung ausgeloester Reset ist nicht ausgeschlossen. Diese zweite Oeffnung war nicht separat mit dem Owner koordiniert. Einstellungen zeigten 115200 Baud, 8 Datenbits, kein Parity, ein Stopbit; kein Zustands- oder Image-Nachweis. Gueltiger Bootlog und nachgewiesener neuer Boot/Reset `NOT_VERIFIED`. BTS7960 laut Auftrag ohne 12-V-Leistungsversorgung und ohne Peltier.
 
 ## Quellenbefund
 
@@ -20,7 +22,8 @@ Owner bestaetigt `/dev/ttyUSB0` als verbundenen UART-Adapter und Beobachtungsber
 | Nachweis | Status |
 |---|---|
 | Luefter an MOSFET 1 und 4 bei UART-Oeffnung aktiv | Ownerbeobachtung, keine verifizierte GPIO-Zuordnung |
-| Uebrige Lasten, Klemmen und Bootphasen | NOT_VERIFIED |
+| MOSFET 2 und 3 ohne angeschlossene Last | Ownerbeobachtung |
+| Klemmen und Bootphasen | NOT_VERIFIED |
 | Aktuelles Image und tatsaechlicher Firmwarepfad | NOT_VERIFIED |
 | Gate-/Treiberbias, aktive Polaritaet und Resetverhalten | NOT_VERIFIED |
 | Ursachenklassen Image, Software oder vor Firmwarestart aktive Stufe | NOT_PROVEN; Kombination moeglich |
