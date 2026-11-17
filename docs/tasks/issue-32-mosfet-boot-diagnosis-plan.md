@@ -10,29 +10,38 @@ Safety-Befund aendert weder diese Reihenfolge noch den Scope von #190.
 
 ## Ziel und Grenzen
 
-Die gemeldeten zwei bereits beim Einschalten laufenden Verbraucher zeitlich
-und kanalbezogen identifizieren, die Firmwareidentitaet und Ursache soweit
+Alle tatsaechlich auffaelligen physisch vorhandenen MOSFET-Kanaele und ihre
+Verbraucher zeitlich und kanalbezogen untersuchen, die Firmwareidentitaet und Ursache soweit
 moeglich belegen und eine minimale Massnahme fuer sichere Inaktivitaet bei
 Power-On, Reset und Standby bestimmen. Keine Polaritaet oder Beschaltung raten.
 Keine Peltier-Leistung, BTS7960-Freigabe, Planneranbindung, neue Pinliste,
-neue Ausgangsabstraktion oder Wegwerf-Testfirmware; GPIO27 bleibt Reserve.
+neue Ausgangsabstraktion oder Wegwerf-Testfirmware. GPIO27 bleibt
+softwareseitige Reserve und wird nicht zur Aktorsteuerung freigegeben; der
+moeglicherweise betroffene physische MOSFET-4-Ausgang ist Teil der Diagnose.
 `ACTUATOR_RELEASE=NO`. Allgemeine elektrische Pegelmessungen bleiben gemaess
 ADR-002 nicht pauschal vorgeschrieben; eine konkret fuer die Ursachenfindung
 erforderliche Messung bedarf geeigneter Mittel und Ownerentscheidung.
 
 ## Ausgangsbefund und Quellen
 
-Die Nutzerbeobachtung zweier aktiver Verbraucher ist ein funktionaler Befund;
-Klemmen, Zeitfenster und installierte Firmware sind nicht verifiziert. Board
-12 V; USB am Board nicht zugaenglich; FTDI/UART als moeglicher Zugang; BTS7960
+Der Owner nennt MOSFET 1 und 4 sowie ein entsprechendes Verhalten bei MOSFET 3;
+Anzahl tatsaechlich aktiver Lasten, Klemmen, geschaltete Lasten und Zeitfenster
+sind nicht verifiziert. Die Zuordnung 1/3/4 zu GPIO16/26/27 ist eine
+unbestaetigte Vermutung, kein funktionaler Kanalnachweis. Die installierte
+Firmware ist nicht verifiziert. Board 12 V; USB am Board nicht zugaenglich;
+Owner bestaetigt `/dev/ttyUSB0` als verbundenen FTDI/UART-Zugang; BTS7960
 ohne 12-V-Leistung und Peltier. Die externen 10-kOhm-Pulldowns von GPIO13/14/25
-belegen nichts ueber die internen MOSFET-Gates. Ein lokal sichtbarer FTDI-Port
-belegt keine Verbindung zum konkreten Board.
+belegen nichts ueber die internen MOSFET-Gates. Eine fruehere Evidence
+(`docs/audits/ISSUE192_FACTORY_RESET_HW_20261010_EVIDENCE.md`) dokumentiert
+einen Reset beim Oeffnen des Ports; keine unkoordinierte Portoeffnung.
 
 Boardprofil `config/board_profiles/esp32_32e_quad_mosfet_r1.yaml` und
 generierter Header fuehren GPIO16/17/26 mit unbestaetigter Polaritaet; GPIO27
 ist Reserve. `EspIdfBinaryOutputSink::begin()` fuehrt bei `Unconfirmed` keine
 GPIO-Operation aus; `app_main` bindet die Ausgaenge nicht an den Planner.
+Ein produktiver Aufrufer von `setEnabled(true)` ist dort nicht vorhanden;
+ein anderer geeigneter, sicherer und autorisierter bestehender Aufrufpfad ist
+bislang nicht nachgewiesen. Aktive AUS/EIN-Pruefungen sind daher `NOT_RUN`.
 Dies beschreibt den Quellstand, nicht das installierte Image oder eine
 physische Inaktivitaet. Das Lieferanten-PDF
 `references/datasheets/esp32-32e-quad-mosfet-board-supplier.pdf` nennt auf
@@ -49,8 +58,10 @@ konkreten Platine. Relevante Quellen: `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`,
    unbeaufsichtigten Schalt- oder Resetaktionen. Bestehende Diagnosezugriffe
    nur lesend und ohne automatisches DTR/RTS-Reset verwenden. Bootlog nur mit
    koordiniertem Power-On/Reset sichern; Geheimnisse aus Evidence entfernen.
-   Fuer jedes Ereignis Quelle, Zeitpunkt, Kanal, Beobachtung vor `app_main`,
-   waehrend Boot und im stabilen Standby dokumentieren. Ohne passenden Zugang
+   Fuer jeden auffaelligen physischen Kanal Kanalnummer, Klemmen, geschaltete
+   Last, exakte GPIO-Zuordnung und Zustand je Bootphase getrennt erfassen;
+   Quelle, Zeitpunkt und Beobachtung vor `app_main`, waehrend Boot, bei Reset
+   und im stabilen Standby dokumentieren. Ohne passenden Zugang
    oder Beobachtung `NOT_VERIFIED` statt eines Schlusses aus `main`.
 2. Installiertes Image/Buildprofil anhand vorhandener zuverlaessiger
    Identitaetsmerkmale, vorhandener Flash-/Build-Evidence und gegebenenfalls
@@ -77,12 +88,21 @@ konkreten Platine. Relevante Quellen: `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`,
    vorhandene Tests erweitern. Keine angenommene Sicherheit im Resetfenster.
    Konkrete Aenderungspfade und Ownerentscheid im PR festhalten.
 6. Gezielt Generatorpruefung und unmittelbar betroffene bestehende Hosttests
-   ausfuehren; Kommandos, Ergebnis und HEAD dokumentieren. Reale Einzelpruefung
-   nur mit sicher angeschlossenem Pruefverbraucher und abgestimmtem Verfahren:
-   korrekte Klemmen-/Kanalzuordnung, AUS/EIN, Power-On, ESP32-Reset und stabiler
-   Standby. Beobachtung muss den Zeitraum vor `app_main` einschliessen;
+   nach einer Aenderung ausfuehren; Kommandos, Ergebnis und HEAD dokumentieren.
+   Gesicherte Beobachtung von Power-On, ESP32-Reset und stabilem Standby sowie
+   Image-/Quellstandszuordnung und ursachenbezogene Diagnose sind nach
+   Planfreigabe mit abgestimmtem sicherem Aufbau durchfuehrbar. Fuer alle
+   auffaelligen physischen Kanaele gegebenenfalls sicher angeschlossenen
+   Einzelpruefverbraucher und Klemmen-/Kanalzuordnung dokumentieren.
+   Beobachtung muss den Zeitraum vor `app_main` einschliessen;
    ungeeignete zeitliche Aufloesung oder fehlender Zugriff ist `NOT_PROVEN`,
    nicht PASS. Aktive Ausgaenge im geforderten AUS-Fenster sind FAIL.
+   Aktive AUS/EIN-Funktionspruefungen bleiben ohne nachgewiesenen sicheren,
+   vorhandenen und autorisierten Aufrufpfad `NOT_RUN`. Falls ein solcher Pfad
+   festgestellt wird, vor Verwendung konkret mit Quelle und Autorisierung
+   dokumentieren. Falls nicht, einen kleinsten produktionsnahen Pruefpfad als
+   spaetere, separat konkret zu planende Ownerentscheidung vorlegen; keine
+   pauschale Planner- oder Peltierfreigabe und keine Wegwerf-Testfirmware.
    `SSOT_CONFORMANCE` und `FUNCTIONAL_HARDWARE_VERIFICATION` nur fuer wirklich
    nachgewiesenen Umfang aktualisieren; restliche #32-Abnahmekriterien bleiben
    offen. Kein Pre-Ready-Lauf ohne dessen getrennte Ownerfreigabe und Review.
