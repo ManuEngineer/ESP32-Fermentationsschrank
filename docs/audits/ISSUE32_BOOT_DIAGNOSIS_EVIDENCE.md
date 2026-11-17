@@ -6,7 +6,7 @@ Stand 2026-11-17. Ownerfreigabe Plan `67f40f82b875fb4864247895971aee9fa1f4c180` 
 
 Owner nennt MOSFET 1 und 4 mit Lueftern und entsprechendes Verhalten bei MOSFET 3. Anzahl tatsaechlich aktiver Lasten, deren genaue Zuordnung und Verhalten vor `app_main`, bei Reset und im Standby sind `NOT_VERIFIED`. Vermutete Zuordnung MOSFET 1/3/4 zu GPIO16/26/27 ist kein Funktionsnachweis. Alle auffaelligen physischen Kanaele einschliesslich MOSFET 4 sind Gegenstand der Untersuchung; GPIO27 bleibt softwareseitig Reserve. `ACTUATOR_RELEASE=NO`.
 
-Owner bestaetigt `/dev/ttyUSB0` als verbundenen UART-Adapter. Port in dieser Diagnose bisher nicht geoeffnet: [fruehere Evidence](PR210_D1_SMOKE_RESULT_20261025.md) dokumentiert einen Reset beim Oeffnen. Koordinierte Beobachtung von Kanal, Last und Bootzeitfenster durch den Owner angefragt; UART-Log und neuer Boot/Reset `NOT_RUN`. BTS7960 laut Auftrag ohne 12-V-Leistungsversorgung und ohne Peltier.
+Owner bestaetigt `/dev/ttyUSB0` als verbundenen UART-Adapter und Beobachtungsbereitschaft. [Fruehere Evidence](PR210_D1_SMOKE_RESULT_20261025.md) dokumentiert einen Reset beim Oeffnen. Am 2026-11-17 wurde der Port nach Koordination fuer 20 Sekunden lesend mit 115200 Baud geoeffnet; kein expliziter DTR-/RTS-Puls, aber ein Reset durch das Oeffnen ist nicht ausgeschlossen. Empfang: 278 Nullbytes, keine lesbare Boot-/Firmwaremeldung. Ob ein Reset stattfand, ist aus dem Mitschnitt nicht bestimmbar; Ursache der Nullbytes unbekannt. Ownerbeobachtung zu Lasten und Reset angefragt. Gueltiger Bootlog und nachgewiesener neuer Boot/Reset `NOT_VERIFIED`. BTS7960 laut Auftrag ohne 12-V-Leistungsversorgung und ohne Peltier.
 
 ## Quellenbefund
 
