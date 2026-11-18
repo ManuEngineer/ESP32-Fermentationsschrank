@@ -65,6 +65,18 @@ Fuer den fehlenden aktiven Funktionsnachweis ist ein konkreter Kandidat ein einz
 
 ## Bewertung und offene Nachweise
 
+### Einmaliger GPIO16-/OUT1-LOW-Test und DEV-Ownerentscheid, 2026-11-18
+
+Der Owner autorisiert den begrenzten DEV-Test trotz bekannten elektrischen Restrisikos, ohne dass dies elektrische Konformitaet oder Zuverlaessigkeit nachweist. Luefterbetrieb waehrend Boot und gehaltenem EN-Reset, auch bei anhaltendem MCU-Ausfall, akzeptiert der Owner fuer diesen DEV-Luefter-Scope als **OWNER_ACCEPTED_DEVIATION**. Der bisher beobachtete Reset-FAIL bleibt historisch FAIL und wird nicht als PASS umetikettiert. Fuer diesen begrenzten DEV-Schnitt fordert der Owner keinen Umbau auf Luefter-AUS bei Reset. Keine allgemeine Safety-, BTS7960-, Peltier- oder Produktfreigabe; `ACTUATOR_RELEASE=NO`.
+
+Owner bestaetigte 12 V und UART angeschlossen, BTS7960-/Peltier-Leistung getrennt und Beobachtungs-/Abschaltmoeglichkeit. Einmaliger lokaler ROM-Helfer `/tmp/issue32_gpio16_rom_once.py`, SHA-256 `e396bc351c7f14e10b83f091d6db26ab79314c56ea7a6a7829a80e9657a342ec`, esptool 5.4.0, nach Owner-IO0-/EN-Sequenz eine bestehende UART-Verbindung; kein Flash. Offline-Fake-ROM-Pruefung fuer GPIO16-Bit, Reihenfolge, Hold-Abbruch und Cleanup PASS. Waehrend der ROM-Eintrittsvorbereitung wurde laut Owner der UART kurz getrennt; ROM-Synchronisierung und Registerzugriff danach erfolgreich.
+
+Vorher: `GPIO_OUT=0x00000000`, `GPIO_ENABLE=0x00000000`, `PIN16=0x00000000`, `FUNC16=0x00000100`, `IO_MUX16=0x00000a00`, `DIG_HOLD=0x00000000`, `DIG_ISO=0xaaaa5000`. Aktiv: `GPIO_OUT=0x00000000`, `GPIO_ENABLE=0x00010000`, `GPIO_IN=0x08628feb` (Bit 16 LOW), `PIN16=0x00000000`, `FUNC16=0x00000500`, `IO_MUX16=0x00002a00`; Holdwerte unveraendert. Nach 20 s `GPIO_ENABLE=0x00000000`, Ausgang deaktiviert. Kein HIGH-/PWM-Befehl und keine analoge Pegelmessung.
+
+**`GPIO16_LOW=CONFIRMED`, `OUT1_LOW=PASS`:** Der Owner beobachtete OUT1 AUS und anschliessend wieder EIN; OUT4 lief weiter. Der genaue Zeitpunkt des Wiedereinschaltens relativ zum Cleanup ist nicht separat synchronisiert. Nach erneuter UART-Oeffnung wurde normaler Boot `SPI_FAST_FLASH_BOOT`, App-Version `a9a1156`, unbestaetigte Polaritaeten und Heartbeats erfasst; Owner bestaetigt Display normal. Rohlog `/tmp/issue32-out1-restore-20261118.raw`, SHA-256 `3881337df9209f22b3baa58a6b06879dc3c42081bada15256fbe5e5df49adaab`; Rohlog nicht veroeffentlichen. Kein Flash; vollstaendiger Image-Hash nach Test nicht verifiziert.
+
+Funktionaler LOW=AUS-Nachweis ist auf OUT1/GPIO16 und zuvor OUT4/GPIO27 begrenzt. HIGH=EIN, OUT2/GPIO17, Summer/GPIO26 und vollstaendiges AUS/EIN/AUS sind `NOT_RUN`; GPIO27 bleibt produktive Reserve. `POST_BOOT_OUT1_OFF=NOT_RUN`: die noch installierte Firmware meldet weiterhin fuer den Innenluefter `polarity_unconfirmed_no_gpio_access`. Die vorgeschlagene SSOT-Aenderung auf `gpio16.active_level: high` und erzeugter Header erfordern Freigabe der exakten Planrevision; separater Flash-/Hardwaregate folgt.
+
 ### Einmaliger GPIO27-/OUT4-LOW-Test, 2026-11-18
 
 Owner autorisierte ausdruecklich einen einmaligen DEV-Board-Test und akzeptierte das bekannte elektrische Risiko. Owner bestaetigte bei getrennter 12-V- und FT232-USB-Versorgung ca. 0,2 Ohm jeweils G26-Header zu Modulpad 11 sowie G27-Header zu Modulpad 12; G16/G17 wurden wegen schlechter Erreichbarkeit nicht gemessen. Der zuvor gemeldete G27-Headerwert bei gehaltenem Reset betraegt 4,11 V; die Messung ist keine Produktfreigabe oder Aussage ueber Langzeitbelastbarkeit.
@@ -85,7 +97,7 @@ Dieser begrenzte Funktionsnachweis zeigt LOW=AUS fuer den getesteten Pfad unter 
 
 [Espressif esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/advanced-commands.html) kann Speicher-/Registerwoerter schreiben; dies allein treibt keinen Pin nachweislich LOW. Das [ESP32-TRM, Kapitel 6](https://documentation.espressif.com/ESP32_Technical_Reference_Manual_en.pdf) nennt IO-MUX, Ausgangsmatrix und Output-Enable als getrennte Voraussetzungen. Registerreihenfolge, Ausgangszustand, Beschraenkung auf einen Kanal und Restore/ROM-Verlassen wurden nicht auf dem Geraet verifiziert. ROM ist damit **NOT_PROVEN** als sicherer reproduzierbarer Testpfad; die elektrische Sperre gilt ebenso fuer ihn und fuer den bestehenden ESP-IDF-Sink. Ein materieller produktionnaher Diagnoseschnitt bleibt nur ein Kandidat und braucht gesonderte Plan-/Ownerfreigabe.
 
-**Kleinster naechster Schritt:** Bei vollstaendig spannungsfreiem Aufbau den konkreten Pfad vom Header G16 zum zugehoerigen WROOM-Modulpad und zur 5-V-Kopplung anhand eindeutiger Schaltungsunterlagen oder sicher zugaenglicher Durchgangs-/Bauteilidentifikation bestimmen; das Gleiche spaeter separat fuer G27. So wird festgestellt, ob das Modulpad direkt oder ueber welche Bauteile an der 5-V-Seite liegt. Falls das Pad ungeschuetzt gekoppelt ist, ist als Owner-Hardwareentscheidung eine zum nachgewiesenen Pfad passende 5-V-tolerante Trennung/Schutzbeschaltung erforderlich, die zugleich den Treibereingang definiert und den sicheren Reset-Zustand herstellt. Bauteil und Werte erst nach Schaltpfad-/Stromnachweis festlegen und Padspannung in allen Versorgungs-/Resetzustaenden innerhalb der Herstellerbedingungen sowie LOW-Funktion vor erneutem Test nachweisen. Ohne sichere Erreichbarkeit des Pads kein Messversuch und kein LOW-Test. Keine Annahme, dass eine solche Massnahme bereits eingebaut oder ausreichend ist.
+**Aktueller naechster Schritt:** GPIO16-SSOT-/Header-Schnitt nur nach Freigabe der exakten Planrevision; anschliessender Flash und DEV-Beobachtung nur nach dem gesonderten Gate. Die Owner-Messung von G27-Header zu Modulpad 12 (ca. 0,2 Ohm) ist oben dokumentiert; eine Wiederholung wird nicht verlangt. Die akzeptierte DEV-Abweichung beseitigt weder den historischen Reset-FAIL noch das ungeklaerte elektrische Restrisiko.
 
 | Nachweis | Status |
 |---|---|
@@ -104,7 +116,8 @@ Dieser begrenzte Funktionsnachweis zeigt LOW=AUS fuer den getesteten Pfad unter 
 | Gehaltener EN-Reset, betroffene Luefter | **FAIL**: Owner beobachtet beide Luefter waehrend des gehaltenen Resets aktiv; vollstaendige Resetqualifikation offen |
 | Sicherer stabiler Standby | NOT_VERIFIED |
 | OUT4/GPIO27 LOW schaltet Luefter AUS | PASS, einmaliger Owner-autorisierter DEV-Test; GPIO-IN LOW, Ownerbeobachtung |
-| OUT1/GPIO16 LOW und vollstaendiges AUS/EIN/AUS | NOT_RUN |
+| OUT1/GPIO16 LOW schaltet Luefter AUS | PASS, einmaliger Owner-autorisierter DEV-Test; GPIO-IN LOW, Ownerbeobachtung |
+| OUT1/GPIO16 HIGH und vollstaendiges AUS/EIN/AUS | NOT_RUN |
 | `SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` | PENDING |
 
 Falls ein Ausgang bereits vor `app_main` aktiv ist, kann ein spaeteres `begin()` diese Zeit nicht absichern. Hardwareeingriff oder neuer produktionsnaher aktiver Pruefpfad erfordern die im Plan vorgesehenen separaten Entscheidungen. Keine Polaritaet oder Massnahme wird vorweggenommen.
