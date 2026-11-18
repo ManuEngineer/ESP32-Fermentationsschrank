@@ -39,7 +39,7 @@ inline constexpr device_platform::DisplayRotation kR1DisplayRotation =
 // performs no GPIO operation. The reserve channel is not generated.
 inline constexpr int kInternalFanPin = 16;
 inline constexpr device_platform::OutputPolarity kInternalFanPolarity =
-    device_platform::OutputPolarity::Unconfirmed;
+    device_platform::OutputPolarity::ActiveHigh;
 inline constexpr int kOuterFanPin = 17;
 inline constexpr device_platform::OutputPolarity kOuterFanPolarity =
     device_platform::OutputPolarity::Unconfirmed;

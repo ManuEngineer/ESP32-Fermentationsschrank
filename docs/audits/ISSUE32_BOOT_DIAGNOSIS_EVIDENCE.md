@@ -63,6 +63,14 @@ Fuer den fehlenden aktiven Funktionsnachweis ist ein konkreter Kandidat ein einz
 - Lieferanten-PDF `references/datasheets/esp32-32e-quad-mosfet-board-supplier.pdf`: Seite 1 nennt N-Kanal-MOSFETs; Seite 5 beschreibt einen softwaregesteuerten Testmodus der zweikanaligen Variante. Weder elektrische Polaritaet noch Gate-/Treiberbias oder Ausgangszustand der realen vierkanaligen Revision vor Firmwarestart sind damit belegt. PCB-Schaltpfad `NOT_VERIFIED`.
 - Historischer Nachweis [PR210 D1 Smoke](PR210_D1_SMOKE_RESULT_20261025.md): am 2026-10-25 wurde Original-App mit Readback-Hash-Praefix `3b907b25…` wiederhergestellt und beim [Kontrollboot](PR210_D1_CONTROL_BOOT_UART_20261025.txt) `App version a9a1156` sowie fuer alle drei Ausgaenge `polarity_unconfirmed_no_gpio_access` protokolliert. Das belegt den damaligen Stand, nicht den aktuell installierten Flashinhalt; aktuelle Imageidentitaet und Buildprofil `NOT_VERIFIED`. Keine Gleichsetzung des damaligen Smoke-Test-Images mit dem danach wiederhergestellten Original.
 
+## Software-Schnitt nach Planfreigabe
+
+Ownerfreigabe `34527abf1eac59099e5072a752a9c6dcde4b9b17`: Im Boardprofil ist ausschliesslich `gpio16.active_level` auf `high` gesetzt; der bestehende Generator erzeugt `kInternalFanPolarity=ActiveHigh`. Der Adapter bleibt unveraendert und setzt im bestaetigten Pfad LOW vor Output-Enable. GPIO17/26 bleiben `Unconfirmed`, GPIO27 Reserve. LOW=AUS bei OUT1 ist funktional belegt; aktives HIGH=EIN ist weiterhin `NOT_RUN`.
+
+Gezielt: Generator `--check` PASS, `--selftest` PASS (18 Faelle), ESP-IDF-6.1-Linux-CMock-Ausgabeadaptertest 12 Tests PASS, `git diff --check` PASS. Der gepushte Implementierungs-HEAD und der Builder-Self-Check werden im PR-Handover gebunden. Kein Flash oder Hardwaretest des neuen Images: `POST_BOOT_OUT1_OFF=NOT_RUN`, `SSOT_CONFORMANCE=PENDING`, `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`, `ACTUATOR_RELEASE=NO`.
+
+Der Owner akzeptiert fuer R1 am vorhandenen MOS-X4 das elektrische Restrisiko und Luefter-EIN bei Boot sowie gehaltenem EN-Reset. Historischer Reset-FAIL bleibt Befund; kein elektrischer Konformitaetsnachweis und kein Beleg fuer Luefter-EIN bei beliebigem MCU-Ausfall. Die fruehere Bezeichnung als nur DEV-begrenzte Abweichung ist historisch und wird durch diese R1-Ownerentscheidung konkretisiert.
+
 ## Bewertung und offene Nachweise
 
 ### Einmaliger GPIO16-/OUT1-LOW-Test und DEV-Ownerentscheid, 2026-11-18
