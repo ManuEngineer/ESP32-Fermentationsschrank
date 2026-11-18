@@ -25,7 +25,7 @@ I (841) app_main: onboard outputs: inner_fan=polarity_unconfirmed_no_gpio_access
 I (1581) app_main: real actuators: disabled
 ```
 
-Logversion `a9a1156` laesst sich lokal zu Commit `a9a1156a1d44d4679957526bbc34a30be6422e4e` aufloesen. Versionskennung, Buildzeit, kurzer ELF-Hash und Ausgabelog stimmen mit [historischem Kontrollboot](PR210_D1_CONTROL_BOOT_UART_20261025.txt) ueberein. Dies ist ein Indiz, aber kein vollstaendiger Flash-Hash oder Beweis quellgleichen Images bzw. des Buildprofils. Quellstand dieses Commits erzeugt die Ausgaenge 16/17/26 mit `Unconfirmed`; reserve GPIO27 ist nicht generiert. Verbraucher- und Displaybeobachtung des Owners fuer diese Aufnahme angefragt; physisches Bootverhalten bleibt offen.
+Logversion `a9a1156` laesst sich lokal zu Commit `a9a1156a1d44d4679957526bbc34a30be6422e4e` aufloesen. Versionskennung, Buildzeit, kurzer ELF-Hash und Ausgabelog stimmen mit [historischem Kontrollboot](PR210_D1_CONTROL_BOOT_UART_20261025.txt) ueberein. Dies ist ein Indiz, aber kein vollstaendiger Flash-Hash oder Beweis quellgleichen Images bzw. des Buildprofils. Quellstand dieses Commits erzeugt die Ausgaenge 16/17/26 mit `Unconfirmed`; Reserve GPIO27 ist nicht generiert. **Ownerbeobachtung:** Display zuvor schwarz, nach der UART-Pruefung wieder normal; beide Luefter liefen durchgehend ohne Unterbruch. Der Log weist einen Boot nach; die Ownerbeobachtung ist nicht zeitlich fein mit `app_main` synchronisiert. Exakter Zustand vor `app_main` und elektrische Ursache bleiben offen.
 
 ## Quellenbefund
 
@@ -39,6 +39,8 @@ Logversion `a9a1156` laesst sich lokal zu Commit `a9a1156a1d44d4679957526bbc34a3
 | Nachweis | Status |
 |---|---|
 | Luefter an MOSFET 1 und 4 bei UART-Oeffnung aktiv | Ownerbeobachtung, keine verifizierte GPIO-Zuordnung |
+| Luefter an MOSFET 1 und 4 waehrend UART-Boot 2026-11-18 durchgehend aktiv | Ownerbeobachtung; Log-Boot belegt, exakte Synchronisierung zu `app_main` nicht belegt |
+| UART-Empfang 2026-11-18 | PASS; bidirektionaler Austausch NOT_RUN |
 | Nach 12-V-Wiedereinschalten laufen Luefter 1 und 4; Display schwarz | Ownerbeobachtung; zeitliche Zuordnung zu `app_main` nicht verifiziert |
 | MOSFET 2 und 3 ohne angeschlossene Last | Ownerbeobachtung |
 | Klemmen und Bootphasen | NOT_VERIFIED |
@@ -46,7 +48,8 @@ Logversion `a9a1156` laesst sich lokal zu Commit `a9a1156a1d44d4679957526bbc34a3
 | Gate-/Treiberbias, aktive Polaritaet und Resetverhalten | NOT_VERIFIED |
 | Ursachenklassen Image, Software oder vor Firmwarestart aktive Stufe | NOT_PROVEN; Kombination moeglich |
 | Power-On vor/nach `app_main` | PARTIAL: Owner beobachtet laufende Luefter nach Wiedereinschalten; Zeitbezug zu `app_main` nicht belegt |
-| Reset und stabiler Standby vor/nach `app_main` | NOT_RUN |
+| Reset vor/nach `app_main` | PARTIAL: UART-Boot und durchgehend laufende Luefter beobachtet, zeitliche Synchronisierung nicht belegt |
+| Sicherer stabiler Standby | NOT_VERIFIED |
 | Aktive AUS/EIN-Pruefung | NOT_RUN; kein sicherer autorisierter vorhandener Aufrufpfad nachgewiesen |
 | `SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` | PENDING |
 
