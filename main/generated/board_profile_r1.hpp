@@ -36,16 +36,19 @@ inline constexpr device_platform::DisplayRotation kR1DisplayRotation =
 
 // Onboard-MOSFET outputs (Issue #32). A polarity of `Unconfirmed` means
 // the SSOT active_level is still TBD_HARDWARE: the output adapter then
-// performs no GPIO operation. The reserve channel is not generated.
+// performs no GPIO operation. The reserve channel is initialised off only.
 inline constexpr int kInternalFanPin = 16;
 inline constexpr device_platform::OutputPolarity kInternalFanPolarity =
     device_platform::OutputPolarity::ActiveHigh;
 inline constexpr int kOuterFanPin = 17;
 inline constexpr device_platform::OutputPolarity kOuterFanPolarity =
-    device_platform::OutputPolarity::Unconfirmed;
+    device_platform::OutputPolarity::ActiveHigh;
 inline constexpr int kBuzzerPin = 26;
 inline constexpr device_platform::OutputPolarity kBuzzerPolarity =
-    device_platform::OutputPolarity::Unconfirmed;
+    device_platform::OutputPolarity::ActiveHigh;
+inline constexpr int kReservePin = 27;
+inline constexpr device_platform::OutputPolarity kReservePolarity =
+    device_platform::OutputPolarity::ActiveHigh;
 
 // BTS7960 H-bridge signals (Issue #33): RPWM, LPWM and the shared
 // R_EN/L_EN enable. R_IS/L_IS (GPIO34/35) are disabled and unwired in R1
