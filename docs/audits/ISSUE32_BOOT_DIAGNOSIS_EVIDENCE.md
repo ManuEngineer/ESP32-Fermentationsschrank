@@ -12,6 +12,21 @@ Der Builder oeffnete den Port anschliessend unbeabsichtigt erneut durch `stty -F
 
 Nach Aufforderung zur koordinierten Spannungsunterbrechung meldet der Owner: Luefter schalten aus; nach Wiedereinschalten laufen sie, Display bleibt schwarz. Dies belegt den beobachteten Betrieb nach Power-On, nicht dessen exakte zeitliche Lage vor `app_main` oder einen funktionierenden Standby. Owner fragt, ob am FT232 `EN` und `RTS` vertauscht seien. Historische [Issue-29-Messung](../ISSUE_29_MEASUREMENTS.md) beschreibt RTS-Reset ueber ESP32-EN und DTR/IO0 im damaligen Aufbau; die aktuelle Verdrahtung und die Bedeutung der Beschriftung `EN` am konkreten FT232-Adapter sind nicht verifiziert. Kein Umstecken oder neue Portoeffnung durchgefuehrt.
 
+## UART nach Owner-Korrektur, 2026-11-18
+
+Owner meldet korrigierte FT232-Verbindung und fordert Konnektivitaetspruefung an. `/dev/ttyUSB0`, 115200 Baud, pyserial mit `dtr=False` und `rts=False` vor `open()`, keine expliziten Resetpulse; 20 Sekunden Aufnahme ergaben 9 377 Bytes (106 Nullbytes) mit lesbarem Boot und Heartbeats. Das Oeffnen kann einen Reset ausgeloest haben; Resetursache laut Log `rst:0x1 (POWERON_RESET)`, Bootmodus `boot:0x13 (SPI_FAST_FLASH_BOOT)`. Keine Flash- oder NVS-Aktion. UART-Empfang von ESP zum Host ist **PASS**; bidirektionaler Datentransfer ist **NOT_RUN**. Rohlog lokal `/tmp/issue32-uart-20261118.raw`, nicht veroeffentlicht; folgende Auszuege ohne Netz-/Zugangsdaten:
+
+```text
+I (771) app_init: App version:      a9a1156
+I (774) app_init: Compile time:     Oct 16 2026 16:40:57
+I (779) app_init: ELF file SHA256:  dca3cc664...
+I (784) app_init: ESP-IDF:          v6.1
+I (841) app_main: onboard outputs: inner_fan=polarity_unconfirmed_no_gpio_access outer_fan=polarity_unconfirmed_no_gpio_access buzzer=polarity_unconfirmed_no_gpio_access
+I (1581) app_main: real actuators: disabled
+```
+
+Logversion `a9a1156` laesst sich lokal zu Commit `a9a1156a1d44d4679957526bbc34a30be6422e4e` aufloesen. Versionskennung, Buildzeit, kurzer ELF-Hash und Ausgabelog stimmen mit [historischem Kontrollboot](PR210_D1_CONTROL_BOOT_UART_20261025.txt) ueberein. Dies ist ein Indiz, aber kein vollstaendiger Flash-Hash oder Beweis quellgleichen Images bzw. des Buildprofils. Quellstand dieses Commits erzeugt die Ausgaenge 16/17/26 mit `Unconfirmed`; reserve GPIO27 ist nicht generiert. Verbraucher- und Displaybeobachtung des Owners fuer diese Aufnahme angefragt; physisches Bootverhalten bleibt offen.
+
 ## Quellenbefund
 
 - Boardprofil und `main/generated/board_profile_r1.hpp` auf obiger Basis: GPIO16/17/26 als jeweilige Ausgaenge mit `Unconfirmed`; GPIO27 nicht generiert. `EspIdfBinaryOutputSink::begin()` ruft bei `Unconfirmed` keine GPIO-Funktion auf und `app_main` verbindet die drei Instanzen nicht mit dem Planner. Das beschreibt den Quellstand; physische Inaktivitaet folgt daraus nicht.
