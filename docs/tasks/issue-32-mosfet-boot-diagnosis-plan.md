@@ -1,6 +1,9 @@
 # Issue #32 – Boot-/Resetbefund der Onboard-MOSFET-Ausgaenge
 
-Status: PLAN, nicht freigegeben. Ausgangsbasis `main`
+Status: Ownerfreigabe fuer die Planfassung auf Commit
+`67f40f82b875fb4864247895971aee9fa1f4c180`. Die dort festgelegten Grenzen und
+separaten Ownerentscheidungen gelten weiter; diese Status- und
+Beobachtungskorrektur erweitert den freigegebenen Scope nicht. Ausgangsbasis `main`
 `9233226da3cf624eeefce468c219dafc0653caae`, Live-Issue #32 OPEN.
 Der bisherige Softwareplan `issue-32-onboard-mosfet-outputs-plan.md`,
 freigegeben auf `2c1d32b`, betrifft S1–S3 und autorisiert keine neuen
@@ -24,10 +27,10 @@ erforderliche Messung bedarf geeigneter Mittel und Ownerentscheidung.
 
 ## Ausgangsbefund und Quellen
 
-Der Owner nennt MOSFET 1 und 4 sowie ein entsprechendes Verhalten bei MOSFET 3;
-Anzahl tatsaechlich aktiver Lasten, Klemmen, geschaltete Lasten und Zeitfenster
-sind nicht verifiziert. Die Zuordnung 1/3/4 zu GPIO16/26/27 ist eine
-unbestaetigte Vermutung, kein funktionaler Kanalnachweis. Die installierte
+Der Owner bestaetigt laufende Luefter an den physischen MOSFET-Ausgaengen 1
+und 4; 2 und 3 sind derzeit ohne Last. Die GPIO-Zuordnung dieser Ausgaenge ist
+unbestaetigt; Klemmen und Zeitfenster sind nicht vollstaendig verifiziert.
+GPIO27 bleibt softwareseitige Reserve. Die installierte
 Firmware ist nicht verifiziert. Board 12 V; USB am Board nicht zugaenglich;
 Owner bestaetigt `/dev/ttyUSB0` als verbundenen FTDI/UART-Zugang; BTS7960
 ohne 12-V-Leistung und Peltier. Die externen 10-kOhm-Pulldowns von GPIO13/14/25
@@ -109,5 +112,5 @@ konkreten Platine. Relevante Quellen: `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`,
 
 Evidence dokumentiert Image-/Quell-SHA, Testaufbau, Datenquelle und getrennte
 PASS/FAIL/NOT_RUN/NOT_VERIFIED je Nachweis, offene Risiken und Ownerentscheide.
-Vor Sessionende kanonischen PR-Handover pflegen. Nach Plancommit anhalten und
-exakte SHA zur Ownerfreigabe vorlegen.
+Vor Sessionende kanonischen PR-Handover pflegen. Materielle Planrevisionen
+erfordern vor Umsetzung die Freigabe der exakten neuen Plan-SHA.

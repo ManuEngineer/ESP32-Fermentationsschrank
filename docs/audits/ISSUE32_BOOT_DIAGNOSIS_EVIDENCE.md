@@ -1,10 +1,10 @@
 # Issue #32 – Bootdiagnose: vorlaeufige Evidence
 
-Stand 2026-11-17. Ownerfreigabe Plan `67f40f82b875fb4864247895971aee9fa1f4c180` fuer PR #212; Ausgangsbasis `main` `9233226da3cf624eeefce468c219dafc0653caae`. Allgemeine Hardwaretestfreigabe erteilt; Plan- und gesonderte Ownergates gelten.
+Stand 2026-11-18. Ownerfreigabe Plan `67f40f82b875fb4864247895971aee9fa1f4c180` fuer PR #212; Ausgangsbasis `main` `9233226da3cf624eeefce468c219dafc0653caae`. Allgemeine Hardwaretestfreigabe erteilt; Plan- und gesonderte Ownergates gelten.
 
 ## Beobachtung und Aufbau
 
-Owner bestaetigt Luefter an MOSFET 1 und 4; MOSFET 2 und 3 sind nicht angeschlossen. Die Luefter an 1 und 4 liefen laut Owner waehrend der UART-Aufnahme unveraendert und laufen bei schwarzem Display weiter. Klemmen und Verhalten vor `app_main` sowie bei nachgewiesenem Reset sind `NOT_VERIFIED`. Vermutete Zuordnung MOSFET 1/4 zu GPIO16/27 ist kein Funktionsnachweis. Alle auffaelligen physischen Kanaele einschliesslich MOSFET 4 sind Gegenstand der Untersuchung; GPIO27 bleibt softwareseitig Reserve. `ACTUATOR_RELEASE=NO`.
+Owner bestaetigt Luefter an MOSFET 1 und 4; MOSFET 2 und 3 sind nicht angeschlossen. Die Luefter an 1 und 4 liefen laut Owner waehrend der UART-Aufnahme unveraendert und liefen auch beim zwischenzeitlich schwarzen Display weiter. Klemmen und Verhalten vor `app_main` sowie die vollstaendige Resetqualifikation sind `NOT_VERIFIED`. Vermutete Zuordnung MOSFET 1/4 zu GPIO16/27 ist kein Funktionsnachweis. Alle auffaelligen physischen Kanaele einschliesslich MOSFET 4 sind Gegenstand der Untersuchung; GPIO27 bleibt softwareseitig Reserve. `ACTUATOR_RELEASE=NO`.
 
 Owner bestaetigt `/dev/ttyUSB0` als verbundenen UART-Adapter und Beobachtungsbereitschaft. [Fruehere Evidence](PR210_D1_SMOKE_RESULT_20261025.md) dokumentiert einen Reset beim Oeffnen. Am 2026-11-17 wurde der Port nach Koordination fuer 20 Sekunden lesend mit 115200 Baud geoeffnet; kein expliziter DTR-/RTS-Puls, aber ein Reset durch das Oeffnen ist nicht ausgeschlossen. Empfang: 278 Nullbytes, keine lesbare Boot-/Firmwaremeldung. Ob ein Reset stattfand, ist aus dem Mitschnitt nicht bestimmbar; Ursache der Nullbytes unbekannt. **Ownerbeobachtung:** Luefter an MOSFET 1 und 4 liefen waehrend der UART-Oeffnung ohne erkennbare Aenderung weiter; das zuvor normal laufende Display wurde schwarz und blieb schwarz. Diese Beobachtung belegt weder einen Reset noch das Verhalten vor `app_main`. Ein ROM-Bootloader ist eine Moeglichkeit, aber nicht belegt.
 
@@ -27,6 +27,15 @@ I (1581) app_main: real actuators: disabled
 
 Logversion `a9a1156` laesst sich lokal zu Commit `a9a1156a1d44d4679957526bbc34a30be6422e4e` aufloesen. Versionskennung, Buildzeit, kurzer ELF-Hash und Ausgabelog stimmen mit [historischem Kontrollboot](PR210_D1_CONTROL_BOOT_UART_20261025.txt) ueberein. Dies ist ein Indiz, aber kein vollstaendiger Flash-Hash oder Beweis quellgleichen Images bzw. des Buildprofils. Quellstand dieses Commits erzeugt die Ausgaenge 16/17/26 mit `Unconfirmed`; Reserve GPIO27 ist nicht generiert. **Ownerbeobachtung:** Display zuvor schwarz, nach der UART-Pruefung wieder normal; beide Luefter liefen durchgehend ohne Unterbruch. Der Log weist einen Boot nach; die Ownerbeobachtung ist nicht zeitlich fein mit `app_main` synchronisiert. Exakter Zustand vor `app_main` und elektrische Ursache bleiben offen.
 
+**Funktionales Nicht-Aktivierungsverhalten: FAIL.** Die beiden an physischen
+MOSFET-Ausgaengen 1 und 4 angeschlossenen Luefter liefen laut Owner durchgehend,
+waehrend das UART-Log `polarity_unconfirmed_no_gpio_access` und
+`real actuators: disabled` meldete. Das ist ein beobachteter Hardware-
+Funktionsfehler; er belegt keinen gemessenen GPIO- oder Gatepegel und keine
+abschliessende Root Cause. Der genaue Einschaltzeitpunkt vor `app_main`,
+Bias und Polaritaet, vollstaendige aktuelle Imageidentitaet, funktionale
+GPIO-Zuordnung sowie Reset- und Standby-Qualifikation bleiben offen.
+
 ## Quellenbefund
 
 - Boardprofil und `main/generated/board_profile_r1.hpp` auf obiger Basis: GPIO16/17/26 als jeweilige Ausgaenge mit `Unconfirmed`; GPIO27 nicht generiert. `EspIdfBinaryOutputSink::begin()` ruft bei `Unconfirmed` keine GPIO-Funktion auf und `app_main` verbindet die drei Instanzen nicht mit dem Planner. Das beschreibt den Quellstand; physische Inaktivitaet folgt daraus nicht.
@@ -38,6 +47,7 @@ Logversion `a9a1156` laesst sich lokal zu Commit `a9a1156a1d44d4679957526bbc34a3
 
 | Nachweis | Status |
 |---|---|
+| Funktionales Nicht-Aktivierungsverhalten bei geloggter Aktorsperre | **FAIL**: Owner beobachtet beide Luefter durchgehend laufend; kein Pegel- oder Ursachennachweis |
 | Luefter an MOSFET 1 und 4 bei UART-Oeffnung aktiv | Ownerbeobachtung, keine verifizierte GPIO-Zuordnung |
 | Luefter an MOSFET 1 und 4 waehrend UART-Boot 2026-11-18 durchgehend aktiv | Ownerbeobachtung; Log-Boot belegt, exakte Synchronisierung zu `app_main` nicht belegt |
 | UART-Empfang 2026-11-18 | PASS; bidirektionaler Austausch NOT_RUN |
