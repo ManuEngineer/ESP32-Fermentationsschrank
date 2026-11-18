@@ -2,6 +2,14 @@
 
 Stand 2026-11-18. Ownerfreigabe Plan `67f40f82b875fb4864247895971aee9fa1f4c180` fuer PR #212; Ausgangsbasis `main` `9233226da3cf624eeefce468c219dafc0653caae`. Allgemeine Hardwaretestfreigabe erteilt; Plan- und gesonderte Ownergates gelten.
 
+## DEV-Flash und POST_BOOT_OUT1_OFF, 2026-11-18
+
+Der Owner gab DEV-Flash und `POST_BOOT_OUT1_OFF` gesondert frei und bestaetigte Beobachtungs-/Abschaltbereitschaft, FT232-Anschluss und getrennte BTS7960-/Peltier-Leistungsversorgung. Firmware-Source-HEAD `de521fbe108aeab90b4096e1eaf8ca2cf590e266`, freigegebener Plan `34527abf1eac59099e5072a752a9c6dcde4b9b17`. ESP-IDF v6.1, Release-Profil `esp32_release`: Build PASS; App-Image SHA-256 `2955e35e1f7e123ba115fb16d895720bb34326b37c88bac5134d444f2cf5af9b`.
+
+Vor dem Flash: ESP32-D0WD-V3, Flash-Verschluesselung und Secure Boot laut esptool aus; installierte Partitionstabelle mit Build bytegleich, Factory-App `0x10000`/`0x2f0000`. Vollstaendige Factory-Partition zweimal gelesen und mit der gespeicherten Datei verglichen: SHA-256 `3b907b251b32b034f2ac112f25862aaa317c827707837ccf2982232e9dc05cc9`. Lokale, fluechtige Sicherung `/tmp/issue32-dev-flash-backup/factory-app.bin`, Tabelle `/tmp/issue32-dev-flash-backup/partition-table.bin`. Restoreweg bei Bedarf nach separater Koordination: ROM-Modus und `esptool --chip esp32 --port /dev/ttyUSB0 --before no-reset --after no-reset write-flash 0x10000 /tmp/issue32-dev-flash-backup/factory-app.bin`; die Sicherung und Zielpartition zuvor erneut pruefen. Keine NVS- oder State-Store-Loeschung, kein `erase_flash`, kein OTA. Nur App-Image geschrieben; esptool-Hashverifikation und zusaetzlicher bytegenauer Readback PASS mit obigem Imagehash.
+
+Der automatische RTS-Resetimpuls erzeugte zunaechst keinen sichtbaren Boot; nach manuellem EN-Kontakt des Owners startete das Board. UART: `App version: de521fb`, `inner_fan=ready_inactive`, `real actuators: disabled` und stabile Heartbeats. Owner: Display normal, OUT1-Luefter AUS, OUT4-Luefter weiterhin EIN. **`POST_BOOT_OUT1_OFF=PASS`** fuer diesen beobachteten DEV-Firmwarestart. Rohlog lokal `/tmp/issue32-dev-flash-backup/boot-uart.raw`, SHA-256 `13877a8f01032f8adf4300d0fae137b184fb5c01ff9f9229aba4ed796d2eb64d`; es kann Netzangaben enthalten und wird nicht publiziert. Keine analoge Pegelmessung, kein HIGH-/EIN-Test und keine Aussage ueber alle Reset- oder Fehlerzustaende. Historischer gehaltener EN-Reset-FAIL bleibt bestehen. GPIO27 bleibt Reserve; `ACTUATOR_RELEASE=NO`, `SSOT_CONFORMANCE=PENDING`, `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`.
+
 ## Beobachtung und Aufbau
 
 Owner bestaetigt Luefter an MOSFET 1 und 4; MOSFET 2 und 3 sind nicht angeschlossen. Die Luefter an 1 und 4 liefen laut Owner waehrend der UART-Aufnahme unveraendert und liefen auch beim zwischenzeitlich schwarzen Display weiter. Klemmen und Verhalten vor `app_main` sowie die vollstaendige Resetqualifikation sind `NOT_VERIFIED`. Vermutete Zuordnung MOSFET 1/4 zu GPIO16/27 ist kein Funktionsnachweis. Alle auffaelligen physischen Kanaele einschliesslich MOSFET 4 sind Gegenstand der Untersuchung; GPIO27 bleibt softwareseitig Reserve. `ACTUATOR_RELEASE=NO`.
@@ -67,7 +75,7 @@ Fuer den fehlenden aktiven Funktionsnachweis ist ein konkreter Kandidat ein einz
 
 Ownerfreigabe `34527abf1eac59099e5072a752a9c6dcde4b9b17`: Im Boardprofil ist ausschliesslich `gpio16.active_level` auf `high` gesetzt; der bestehende Generator erzeugt `kInternalFanPolarity=ActiveHigh`. Der Adapter bleibt unveraendert und setzt im bestaetigten Pfad LOW vor Output-Enable. GPIO17/26 bleiben `Unconfirmed`, GPIO27 Reserve. LOW=AUS bei OUT1 ist funktional belegt; aktives HIGH=EIN ist weiterhin `NOT_RUN`.
 
-Gezielt: Generator `--check` PASS, `--selftest` PASS (18 Faelle), ESP-IDF-6.1-Linux-CMock-Ausgabeadaptertest 12 Tests PASS, `git diff --check` PASS. Der gepushte Implementierungs-HEAD und der Builder-Self-Check werden im PR-Handover gebunden. Kein Flash oder Hardwaretest des neuen Images: `POST_BOOT_OUT1_OFF=NOT_RUN`, `SSOT_CONFORMANCE=PENDING`, `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`, `ACTUATOR_RELEASE=NO`.
+Gezielt: Generator `--check` PASS, `--selftest` PASS (18 Faelle), ESP-IDF-6.1-Linux-CMock-Ausgabeadaptertest 12 Tests PASS, `git diff --check` PASS. Der gepushte Implementierungs-HEAD und der Builder-Self-Check werden im PR-Handover gebunden. Zum damaligen Implementierungszeitpunkt noch kein Flash oder Hardwaretest des neuen Images: `POST_BOOT_OUT1_OFF=NOT_RUN`; aktueller Nachweis siehe oben. Damalige und weiterhin geltende Gesamtgates: `SSOT_CONFORMANCE=PENDING`, `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`, `ACTUATOR_RELEASE=NO`.
 
 Der Owner akzeptiert fuer R1 am vorhandenen MOS-X4 das elektrische Restrisiko und Luefter-EIN bei Boot sowie gehaltenem EN-Reset. Historischer Reset-FAIL bleibt Befund; kein elektrischer Konformitaetsnachweis und kein Beleg fuer Luefter-EIN bei beliebigem MCU-Ausfall. Die fruehere Bezeichnung als nur DEV-begrenzte Abweichung ist historisch und wird durch diese R1-Ownerentscheidung konkretisiert.
 
@@ -83,7 +91,7 @@ Vorher: `GPIO_OUT=0x00000000`, `GPIO_ENABLE=0x00000000`, `PIN16=0x00000000`, `FU
 
 **`GPIO16_LOW=CONFIRMED`, `OUT1_LOW=PASS`:** Der Owner beobachtete OUT1 AUS und anschliessend wieder EIN; OUT4 lief weiter. Der genaue Zeitpunkt des Wiedereinschaltens relativ zum Cleanup ist nicht separat synchronisiert. Nach erneuter UART-Oeffnung wurde normaler Boot `SPI_FAST_FLASH_BOOT`, App-Version `a9a1156`, unbestaetigte Polaritaeten und Heartbeats erfasst; Owner bestaetigt Display normal. Rohlog `/tmp/issue32-out1-restore-20261118.raw`, SHA-256 `3881337df9209f22b3baa58a6b06879dc3c42081bada15256fbe5e5df49adaab`; Rohlog nicht veroeffentlichen. Kein Flash; vollstaendiger Image-Hash nach Test nicht verifiziert.
 
-Funktionaler LOW=AUS-Nachweis ist auf OUT1/GPIO16 und zuvor OUT4/GPIO27 begrenzt. HIGH=EIN, OUT2/GPIO17, Summer/GPIO26 und vollstaendiges AUS/EIN/AUS sind `NOT_RUN`; GPIO27 bleibt produktive Reserve. `POST_BOOT_OUT1_OFF=NOT_RUN`: die noch installierte Firmware meldet weiterhin fuer den Innenluefter `polarity_unconfirmed_no_gpio_access`. Die vorgeschlagene SSOT-Aenderung auf `gpio16.active_level: high` und erzeugter Header erfordern Freigabe der exakten Planrevision; separater Flash-/Hardwaregate folgt.
+Historischer Stand vor dem oben dokumentierten DEV-Flash: Funktionaler LOW=AUS-Nachweis ist auf OUT1/GPIO16 und zuvor OUT4/GPIO27 begrenzt. HIGH=EIN, OUT2/GPIO17, Summer/GPIO26 und vollstaendiges AUS/EIN/AUS sind `NOT_RUN`; GPIO27 bleibt produktive Reserve. `POST_BOOT_OUT1_OFF=NOT_RUN`: die noch installierte Firmware meldet weiterhin fuer den Innenluefter `polarity_unconfirmed_no_gpio_access`. Die vorgeschlagene SSOT-Aenderung auf `gpio16.active_level: high` und erzeugter Header erfordern Freigabe der exakten Planrevision; separater Flash-/Hardwaregate folgt.
 
 ### Einmaliger GPIO27-/OUT4-LOW-Test, 2026-11-18
 
@@ -105,7 +113,7 @@ Dieser begrenzte Funktionsnachweis zeigt LOW=AUS fuer den getesteten Pfad unter 
 
 [Espressif esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/advanced-commands.html) kann Speicher-/Registerwoerter schreiben; dies allein treibt keinen Pin nachweislich LOW. Das [ESP32-TRM, Kapitel 6](https://documentation.espressif.com/ESP32_Technical_Reference_Manual_en.pdf) nennt IO-MUX, Ausgangsmatrix und Output-Enable als getrennte Voraussetzungen. Registerreihenfolge, Ausgangszustand, Beschraenkung auf einen Kanal und Restore/ROM-Verlassen wurden nicht auf dem Geraet verifiziert. ROM ist damit **NOT_PROVEN** als sicherer reproduzierbarer Testpfad; die elektrische Sperre gilt ebenso fuer ihn und fuer den bestehenden ESP-IDF-Sink. Ein materieller produktionnaher Diagnoseschnitt bleibt nur ein Kandidat und braucht gesonderte Plan-/Ownerfreigabe.
 
-**Aktueller naechster Schritt:** GPIO16-SSOT-/Header-Schnitt nur nach Freigabe der exakten Planrevision; anschliessender Flash und DEV-Beobachtung nur nach dem gesonderten Gate. Die Owner-Messung von G27-Header zu Modulpad 12 (ca. 0,2 Ohm) ist oben dokumentiert; eine Wiederholung wird nicht verlangt. Die akzeptierte DEV-Abweichung beseitigt weder den historischen Reset-FAIL noch das ungeklaerte elektrische Restrisiko.
+**Historischer naechster Schritt vor der Planfreigabe:** GPIO16-SSOT-/Header-Schnitt nur nach Freigabe der exakten Planrevision; anschliessender Flash und DEV-Beobachtung nur nach dem gesonderten Gate. Die Owner-Messung von G27-Header zu Modulpad 12 (ca. 0,2 Ohm) ist oben dokumentiert; eine Wiederholung wird nicht verlangt. Die akzeptierte DEV-Abweichung beseitigt weder den historischen Reset-FAIL noch das ungeklaerte elektrische Restrisiko.
 
 | Nachweis | Status |
 |---|---|
@@ -117,8 +125,8 @@ Dieser begrenzte Funktionsnachweis zeigt LOW=AUS fuer den getesteten Pfad unter 
 | Nach 12-V-Wiedereinschalten laufen Luefter 1 und 4; Display schwarz | Ownerbeobachtung; zeitliche Zuordnung zu `app_main` nicht verifiziert |
 | MOSFET 2 und 3 ohne angeschlossene Last | Ownerbeobachtung |
 | Klemmen und Bootphasen | NOT_VERIFIED |
-| Aktuelles Image und tatsaechlicher Firmwarepfad | NOT_VERIFIED |
-| Gate-/Treiberbias, aktive Polaritaet und Resetverhalten | NOT_VERIFIED |
+| Aktuelles DEV-Image | App-Image und Factory-Readback SHA-256 gleich; Bootversion `de521fb` |
+| Gate-/Treiberbias und vollstaendige Resetqualifikation | NOT_VERIFIED; LOW=AUS fuer OUT1/OUT4 funktional beobachtet |
 | Ursachenklassen Image, Software oder vor Firmwarestart aktive Stufe | NOT_PROVEN; Kombination moeglich |
 | Power-On vor/nach `app_main` | PARTIAL: Owner beobachtet laufende Luefter nach Wiedereinschalten; Zeitbezug zu `app_main` nicht belegt |
 | Gehaltener EN-Reset, betroffene Luefter | **FAIL**: Owner beobachtet beide Luefter waehrend des gehaltenen Resets aktiv; vollstaendige Resetqualifikation offen |
@@ -126,6 +134,7 @@ Dieser begrenzte Funktionsnachweis zeigt LOW=AUS fuer den getesteten Pfad unter 
 | OUT4/GPIO27 LOW schaltet Luefter AUS | PASS, einmaliger Owner-autorisierter DEV-Test; GPIO-IN LOW, Ownerbeobachtung |
 | OUT1/GPIO16 LOW schaltet Luefter AUS | PASS, einmaliger Owner-autorisierter DEV-Test; GPIO-IN LOW, Ownerbeobachtung |
 | OUT1/GPIO16 HIGH und vollstaendiges AUS/EIN/AUS | NOT_RUN |
+| `POST_BOOT_OUT1_OFF` | PASS beim oben dokumentierten DEV-Firmwarestart |
 | `SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` | PENDING |
 
 Falls ein Ausgang bereits vor `app_main` aktiv ist, kann ein spaeteres `begin()` diese Zeit nicht absichern. Hardwareeingriff oder neuer produktionsnaher aktiver Pruefpfad erfordern die im Plan vorgesehenen separaten Entscheidungen. Keine Polaritaet oder Massnahme wird vorweggenommen.
