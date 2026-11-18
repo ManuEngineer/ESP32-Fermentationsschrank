@@ -75,7 +75,7 @@ set(APP_SOURCE_GIT_SHA_DEFINE "APP_SOURCE_GIT_SHA=\"${APP_SOURCE_GIT_SHA}\"")
 
 set(APP_ISSUE_29_COMPILE_DEFINITIONS)
 if(CONFIG_APP_PROFILE_ESP32_BRINGUP AND NOT APP_ISSUE_90_SLICE7_HARNESS AND
-   NOT APP_ISSUE_30_SENSOR_COMMISSIONING)
+   NOT APP_ISSUE_30_SENSOR_COMMISSIONING AND NOT APP_ISSUE_32_OUTPUT_PULSE)
     # The Issue #90 Slice-7 harness is a separate, independent hardware
     # runner and must not automatically compile or run the unrelated
     # Issue #29 diagnostic probe (real-hardware panic observed in the
@@ -194,6 +194,34 @@ if(APP_ISSUE_30_SENSOR_COMMISSIONING)
     )
 endif()
 
+# Issue #32 manual output pulse test: bring-up-only, UART-triggered, one short
+# ON/OFF cycle per test load. Enabled only by the dedicated build command;
+# release and native builds compile and link none of it.
+set(APP_ISSUE_32_COMPILE_DEFINITIONS)
+if(APP_ISSUE_32_OUTPUT_PULSE)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #32 output pulse test is allowed only in esp32_bringup"
+        )
+    endif()
+    if(APP_ISSUE_90_SLICE7_HARNESS OR APP_ISSUE_30_SENSOR_COMMISSIONING OR
+       APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS OR
+       APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER)
+        message(FATAL_ERROR
+            "Issue #32 output pulse test cannot be combined with another "
+            "Issue #30/#31/#90 harness"
+        )
+    endif()
+    idf_component_optional_requires(PRIVATE esp_driver_uart)
+    target_sources(
+        ${COMPONENT_LIB}
+        PRIVATE "issue_32_output_pulse_harness.cpp"
+    )
+    list(APPEND APP_ISSUE_32_COMPILE_DEFINITIONS
+        APP_ISSUE_32_OUTPUT_PULSE=1
+    )
+endif()
+
 # Firmwarefeste Release-1-Grenzen bleiben feste Compile-Definitionen, keine
 # Kconfig-Menuoptionen (siehe docs/tasks/issue-74-implementation-plan.md,
 # Abschnitt 7.2 Punkt 4). Textidentisch mit platformio.inis
@@ -207,6 +235,7 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_ISSUE_31_TOUCH_CALIBRATION_COMPILE_DEFINITIONS}
     ${APP_ISSUE_31_TOUCH_CALIBRATION_PROVISION_COMPILE_DEFINITIONS}
     ${APP_ISSUE_30_COMPILE_DEFINITIONS}
+    ${APP_ISSUE_32_COMPILE_DEFINITIONS}
     ${APP_SOURCE_GIT_SHA_DEFINE}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0

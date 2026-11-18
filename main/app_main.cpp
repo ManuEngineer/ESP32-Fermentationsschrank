@@ -42,6 +42,9 @@
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
 #include "issue_30_sensor_commissioning_harness.hpp"
 #endif
+#ifdef APP_ISSUE_32_OUTPUT_PULSE
+#include "issue_32_output_pulse_harness.hpp"
+#endif
 
 #ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
 #include "issue_31_touch_calibration_provision.hpp"
@@ -592,10 +595,13 @@ extern "C" void app_main(void) {
 
     // Onboard-MOSFET outputs (Issue #32). The role of each instance (inner
     // fan, outer fan, buzzer) is assigned only here; pins and polarity come
-    // from the generated SSOT header. With an unconfirmed polarity the adapter
-    // performs no GPIO operation (this does not prove the load is off). The
-    // outputs are deliberately not connected to the actuator planner; the
-    // reserve channel (GPIO27) is not used.
+    // from the generated SSOT header (all four channels ActiveHigh, an owner
+    // decision for identical PCB channels; LOW=OFF was observed on OUT1/OUT4
+    // only). begin() drives every channel to its inactive level (LOW). The
+    // reserve channel (GPIO27, NC in the final build) is initialised off and
+    // deliberately has no consumer. None of the outputs is connected to the
+    // actuator planner or driver, so this is no controlled fan operation. A fan
+    // may still run during boot or a held EN reset (accepted for R1).
     namespace r1_pins = board_profile::esp32_32e_quad_mosfet_r1;
     device_platform_esp_idf::EspIdfBinaryOutputSink innerFanOutput(
         r1_pins::kInternalFanPin, r1_pins::kInternalFanPolarity);
@@ -603,10 +609,18 @@ extern "C" void app_main(void) {
         r1_pins::kOuterFanPin, r1_pins::kOuterFanPolarity);
     device_platform_esp_idf::EspIdfBinaryOutputSink buzzerOutput(
         r1_pins::kBuzzerPin, r1_pins::kBuzzerPolarity);
-    ESP_LOGI(kTag, "onboard outputs: inner_fan=%s outer_fan=%s buzzer=%s",
-             binaryOutputBeginResultName(innerFanOutput.begin()),
-             binaryOutputBeginResultName(outerFanOutput.begin()),
-             binaryOutputBeginResultName(buzzerOutput.begin()));
+    device_platform_esp_idf::EspIdfBinaryOutputSink reserveOutput(
+        r1_pins::kReservePin, r1_pins::kReservePolarity);
+    const auto innerFanBegin = innerFanOutput.begin();
+    const auto outerFanBegin = outerFanOutput.begin();
+    const auto buzzerBegin = buzzerOutput.begin();
+    const auto reserveBegin = reserveOutput.begin();
+    ESP_LOGI(kTag,
+             "onboard outputs: inner_fan=%s outer_fan=%s buzzer=%s reserve=%s",
+             binaryOutputBeginResultName(innerFanBegin),
+             binaryOutputBeginResultName(outerFanBegin),
+             binaryOutputBeginResultName(buzzerBegin),
+             binaryOutputBeginResultName(reserveBegin));
 
     // BTS7960 H-bridge (Issue #33). The role of the instance is assigned only
     // here; pins and polarities come from the generated SSOT header. begin()
@@ -800,6 +814,12 @@ extern "C" void app_main(void) {
         application, ds18b20Sampler);
     issue30Harness.start();
 #endif
+#ifdef APP_ISSUE_32_OUTPUT_PULSE
+    // Manual bring-up-only HIGH=ON test of the two test loads (OUT1, OUT4).
+    fermentation::issue_32_output_pulse::Harness issue32Harness(innerFanOutput,
+                                                               reserveOutput);
+    issue32Harness.start();
+#endif
 
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
@@ -831,6 +851,9 @@ extern "C" void app_main(void) {
 #endif
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
         issue30Harness.update();
+#endif
+#ifdef APP_ISSUE_32_OUTPUT_PULSE
+        issue32Harness.update();
 #endif
 
         const uint64_t nowMs = timeSource.monotonicMillis();
