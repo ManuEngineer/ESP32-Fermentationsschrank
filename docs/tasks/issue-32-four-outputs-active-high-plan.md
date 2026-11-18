@@ -85,7 +85,12 @@ und beweist keine produktive Aussenluefterfunktion von OUT2.
   `FAIL` gemeldet; ein Timeout (wenige Sekunden) erzwingt die Rueckkehr auf LOW;
   ein unbekannter Befehl aendert nichts. OUT2/OUT3: keine Einzeltestkampagne.
 - Physischer Flash/Schaltversuch nur nach gesondertem Owner-Gate unmittelbar
-  vor Ausfuehrung (Backup/Restore wie in der #212-Evidence). Ergebnis in die
+  vor Ausfuehrung. **Ownerentscheidung (DEV-Firmware):** Das installierte DEV-Image
+  wird ohne Backup ueberschrieben, kein Restore-Test, kein automatischer
+  Rueckflash; nur App-Image auf die verifizierte App-Partition, kein
+  `erase_flash`, keine NVS-/State-Store-Loeschung, kein OTA, kein
+  Bootloader-/Partitionswechsel; der Endzustand (laufendes Image) wird
+  dokumentiert. Ergebnis in die
   Evidence-Datei; `HIGH_EIN` nur fuer tatsaechlich geschaltete Kanaele PASS.
   Faellt der Test negativ aus, ist die Gleichheitsannahme widerlegt -> Plan
   zurueck an den Owner, keine geratene Korrektur.
