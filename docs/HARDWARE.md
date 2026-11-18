@@ -18,8 +18,9 @@ Ein Designstatus `planned` oder
 `board_fixed_pending_functional_verification` ist kein
 `FUNCTIONAL_HARDWARE_VERIFICATION=PASS`. Kein solcher Status setzt
 `SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` oder
-`ACTUATOR_RELEASE`. Reale Aktoren bleiben bis zu den owning Hardwaregates
-fail-closed.
+`ACTUATOR_RELEASE`. Reale Aktorfreigaben bleiben bis zu den owning
+Hardwaregates fail-closed; fuer den physischen Luefterzustand beim Boot und
+gehaltenem EN-Reset gilt die unten dokumentierte R1-Ownerentscheidung.
 
 Der Owner hat fuer R1 die allgemeine Spannungs- und Bootpegel-Messpflicht
 bewusst waived. Das ersetzt keinen realen Funktions- oder Sicherheitsnachweis
@@ -75,8 +76,8 @@ Noch real zu verifizieren oder zu dokumentieren:
 - PSRAM-Erkennung
 - funktionale Kanal-/Verbraucherwirkung der vier PCB-festen MOSFET-Kanaele im
   owning Hardware-Issue
-- funktionales Boot-/Resetverhalten mit sicher angeschlossenem Einzelverbraucher
-  ohne unkontrollierten relevanten Verbraucherbetrieb
+- funktionales Boot-/Resetverhalten mit sicher angeschlossenem Einzelverbraucher;
+  die R1-Ownerentscheidung fuer Luefter ist unten abgegrenzt
 
 ```text
 ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED
@@ -358,8 +359,16 @@ Verbindliche Anforderungen:
 
 - beide BTS7960-Richtungen durch Hardwarebeschaltung inaktiv
 - Peltierfreigabe erst nach vollstaendiger Initialisierung und Validierung
-- Onboard-MOSFET-Ausgaenge im owning Hardware-Issue funktional fail-closed
-  pruefen; eine elektrische Boot-Pegelmessung ist fuer R1 nicht erforderlich
+- Onboard-MOSFET-Ausgaenge im owning Hardware-Issue funktional pruefen; fuer
+  die Luefter am vorhandenen ESP32-MOS-X4 erlaubt der Owner in R1 physischen
+  Betrieb beim Boot und gehaltenem EN-Reset und akzeptiert das bekannte
+  elektrische Restrisiko. Der historische Reset-FAIL bleibt als damaliger
+  Befund erhalten; kein elektrisches Konformitaets-PASS oder generelles
+  Hardware-GO folgt daraus. Ein Luefter-EIN bei beliebigem MCU-Ausfall ist
+  nicht nachgewiesen; ein anhaltender LOW-Pegel kann ihn AUS halten. Im
+  normalen Standby bleibt der Innenluefter AUS. Die Luefterruhelage gibt
+  Peltier/BTS7960-Leistung nicht frei; Boot, Reset, unbekannter Zustand oder
+  fehlende Safety-/Sensorfreigabe halten diese Leistung AUS.
 - ungeeignete Bootstrapping-Pins nicht fuer sicherheitskritische Freigaben nutzen
 - keine automatische Aktorpruefung beim normalen Boot
 - `esp32_bringup` startet weiterhin mit `HARDWARE_UNVERIFIED` beziehungsweise

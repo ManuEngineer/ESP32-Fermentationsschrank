@@ -105,12 +105,21 @@ Netzwerk, Web und Anzeige sind keine Voraussetzung fuer Regelung oder Safety.
 
 - Peltier und beide Richtungen bleiben bei Boot, Reset, Fehler und unbekanntem
   Zustand AUS;
+- R1-Ownerentscheidung fuer die Luefter am vorhandenen ESP32-MOS-X4-Aufbau:
+  Physischer Luefterbetrieb beim Boot und bei gehaltenem EN-Reset ist erlaubt;
+  das bekannte elektrische Restrisiko des Boards wird bewusst akzeptiert.
+  Die historische Reset-FAIL-Beobachtung bleibt erhalten, ein elektrisches
+  Konformitaets-PASS folgt nicht daraus. Bei beliebigem MCU-Ausfall ist
+  Luefter-EIN nicht nachgewiesen: ein gehaltener LOW-Pegel kann ihn AUS halten.
+  Die Luefterruhelage gibt weder Peltier noch BTS7960-Leistung frei; ohne
+  Safety- und Sensorfreigabe bleibt diese Leistung AUS.
 - Heizen und Kuehlen sind nie gleichzeitig freigegeben;
 - Richtungswechsel erzwingt Abschaltung und Totzeit;
 - Sicherheitsabschaltungen ueberstimmen Mindestlaufzeiten;
 - Quittierung und Fehlerreset bleiben getrennt;
 - aktuelle, rein fluechtige Safety-Latches muessen einen Neustart nicht
-  ueberleben; jeder Neustart startet all-off und erzwingt die vollstaendige
+  ueberleben; jeder Neustart startet logisch mit gesperrter Aktorfreigabe
+  und erzwingt die vollstaendige
   Neubewertung von Konfiguration, Persistenz, Sensorik und Safety-Evidenz;
 - es gibt keine Restart-Akkumulation und kein Restart-Zeitfenster;
   `SAFE_BOOT` entsteht aus aktuell untrusted Boot-, Konfigurations- oder

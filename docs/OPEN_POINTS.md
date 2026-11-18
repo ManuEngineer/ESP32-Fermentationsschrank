@@ -45,7 +45,9 @@ Nachweise einem späteren passenden Hardware- oder Release-Scope zu.
 - [ ] Bootstrapping-Eignung der real verwendeten Anschlüsse gegen das konkrete
       ESP32-/Board bestätigen
 - [ ] funktional nachweisen, dass relevante Aktoren beim Boot und Reset nicht
-      unkontrolliert betrieben werden
+      unkontrolliert betrieben werden; fuer Luefter beim Boot und gehaltenem
+      EN-Reset am vorhandenen MOS-X4 gilt die R1-Ownerentscheidung in
+      `SPECIFICATION_REVIEW.md`, nicht fuer Peltier-/BTS7960-Leistung
 - [ ] #32: PCB-feste Kanal-/Verbraucherzuordnung funktional bestaetigen
 
 Nachverfolgung: Design-SSOT #130 (geschlossen); funktionale Hardware-
