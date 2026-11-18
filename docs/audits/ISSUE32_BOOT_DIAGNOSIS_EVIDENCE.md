@@ -38,6 +38,26 @@ GPIO-Zuordnung sowie Reset- und Standby-Qualifikation bleiben offen.
 
 ## Quellenbefund
 
+### Koordinierter Kaltstart mit abgetrenntem RTS/DTR, 2026-11-18
+
+Owner: Board-12-V und FT232-USB zum Umstecken spannungsfrei; RTS und DTR am ESP32 entfernt, TXD/RXD/GND verbunden, FT232-USB wieder angeschlossen, Board-12-V zunaechst aus. Bei bereits offener UART-Aufnahme hat der Owner die 12-V-Versorgung eingeschaltet. UART meldet `rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)`, `App version: a9a1156`, alle drei `polarity_unconfirmed_no_gpio_access`, `real actuators: disabled` und fortlaufende Heartbeats. Rohlog lokal `/tmp/issue32-cold-20261118.raw`; kein Flash. Owner beobachtet: Luefter an physischem MOSFET 1 und 4 schalten unmittelbar ein und bleiben eingeschaltet; Display folgt nach etwa einer Sekunde. Funktionaler Nicht-Aktivierungsbefund **FAIL**. Diese Beobachtung beweist keinen genauen Zeitbezug zu `app_main`, keinen Gatepegel und keine Ursache. Ein Multimeter war nicht verfuegbar.
+
+Owner drueckte einmal kurz die IO0-Taste und beobachtete keine Aenderung. Die Kaltstartaufnahme wurde nach 191 Heartbeats (letzte `uptime_ms=201725`) beendet; sie enthaelt einen einzigen Reset-Header und keine Nullbytes. Rohlog-SHA-256 `2a2b57d6315a30b99e3ab8ff902db93143416274230e1d51cbcb9fb47a5688cf` (lokales Rohlog kann sensitive Netzangaben enthalten).
+
+### Kontrollierter EN-Reset
+
+Owner bestaetigte einen selbst eingerichteten direkten EN-/Board-GND-Kontakt ohne Spannungsquelle oder aktiven Treiber. In einer anschliessend separat gestarteten UART-Aufnahme schloss und oeffnete der Owner den Kontakt. Ownerbeobachtung: Solange der Kontakt geschlossen war, blieb das Display schwarz; nach Oeffnen startete das Board und das Display erschien wieder. Beide Luefter liefen dabei durchgehend. Das UART-Log zeigt einen Boot `rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)`, App-Version `a9a1156`, `polarity_unconfirmed_no_gpio_access` und `real actuators: disabled`. Rohlog `/tmp/issue32-en-reset-20261118.raw`, SHA-256 `fdab45caab628a6ebe3e035187fe9b092f0ddd88372a8ab9fcc19d57deaab9b5`, nicht veroeffentlicht.
+
+**Reset-Fail-Closed: FAIL** fuer die beiden angeschlossenen Luefter: Sie liefen laut Owner auch bei gehaltenem EN-Reset. Das belegt ein aktives Verbraucher-/Ausgangsverhalten waehrend des gehaltenen Resets, nicht den elektrischen Pegel, die exakte Transistortopologie, Kanal-GPIO-Zuordnung oder ob ein Verdrahtungsfehler beteiligt ist. Eine Aenderung von `begin()` nach Resetfreigabe kann den gehaltenen Reset nicht absichern; notwendige hardwareseitige Inaktivitaet ist noch nicht nachgewiesen. Reset- und Standbyqualifikation insgesamt bleiben offen.
+
+### Konkrete offene Entscheidung zur Schaltungsdiagnose
+
+Fuer die betroffenen physischen Kanaele 1 und 4 zuerst die tatsaechlichen Klemmenbezeichnungen, Luefterleitungen, Boardrevision und Gate-/Treiberbauteile anhand realer Platinenansicht/Unterlagen identifizieren; GPIO16/27 sind nur SSOT-Kandidaten. Wenn zugangssicher und ein Multimeter vorhanden ist: im Gleichspannungsbereich Board-GND als Bezug und die eindeutig identifizierten Lastklemmen sowie zugehoerigen GPIO-/Treiberpunkte im stabilen Zustand und bei gehaltenem EN-Reset beobachten. Klemmenmessungen unterscheiden Versorgung/Lastwirkung, die GPIO-/Treiberwerte zeigen den Zustand dieser Punkte; beides beweist allein noch keine genaue Gatebeschaltung oder Polaritaet. Keine Messspitze an unidentifizierte SMD-Pins, keine Widerstandsmessung an versorgter Schaltung, keine Verbindung zu 12 V an ESP-Pins. Ist ein Punkt nicht sicher erreichbar, `NOT_VERIFIED`.
+
+Ownerentscheidung nach dieser Identifikation: ob die nachgewiesene Ursache eine Korrektur an der konkreten Gate-/Treiber-Bias-Beschaltung oder an der identifizierten Lastverdrahtung erfordert, oder ob ein geeignetes Board mit nachgewiesen inaktiver Resetlage ersetzt werden muss. Widerstandswert, Anschluss und Bauteil werden erst aus identifizierter Schaltung und Messung festgelegt; kein pauschaler Pulldown. Eine Firmwarekorrektur allein kann den beobachteten gehaltenen Reset nicht beheben.
+
+Fuer den fehlenden aktiven Funktionsnachweis ist ein konkreter Kandidat ein einzelner lokal bestaetigter, zeitlich begrenzter Service-Pruefimpuls ueber den bestehenden `EspIdfBinaryOutputSink` fuer jeweils genau einen zuvor funktional identifizierten Kanal; bei Ende oder Fehler best effort AUS, keine Peltier-/Planneranbindung und keine dauerhafte offene Diagnoseschnittstelle. Die vorhandenen Servicevoraussetzungen in `docs/DIAGNOSTICS_AND_MAINTENANCE.md` bleiben verbindlich; insbesondere validierter Standby, bestaetigter PIN-Servicezustand und bestaetigte GPIO-/Funktionszuordnung. Ein verwendbarer Gesamtpfad ist derzeit nicht nachgewiesen. Der physische MOSFET 4 ist allenfalls Gegenstand einer gesondert freigegebenen Diagnose, GPIO27 bleibt produktiv Reserve. Bedienweg, Zeitlimit, sichere Abschaltung und die tatsaechliche Erfuellbarkeit der Voraussetzungen muessen als materielles konkretes Plan-Delta geklaert und vom Owner exakt freigegeben werden; dieser Kandidat ist keine implementierte oder autorisierte Freigabe.
+
 - Boardprofil und `main/generated/board_profile_r1.hpp` auf obiger Basis: GPIO16/17/26 als jeweilige Ausgaenge mit `Unconfirmed`; GPIO27 nicht generiert. `EspIdfBinaryOutputSink::begin()` ruft bei `Unconfirmed` keine GPIO-Funktion auf und `app_main` verbindet die drei Instanzen nicht mit dem Planner. Das beschreibt den Quellstand; physische Inaktivitaet folgt daraus nicht.
 - Quelltextsuche nach direkten `GPIO_NUM_16/17/26/27`, generierten Ausgangskonstanten und GPIO-Zugriffen zeigt diese drei Composition-Root-Verwendungen; sie schliesst indirekte Pin-Konflikte, Bootloader-/IDF-Effekte und Zugriffe des installierten Images nicht aus. Realer Firmwarepfad und Pin-Konfliktfreiheit `NOT_VERIFIED`.
 - Lieferanten-PDF `references/datasheets/esp32-32e-quad-mosfet-board-supplier.pdf`: Seite 1 nennt N-Kanal-MOSFETs; Seite 5 beschreibt einen softwaregesteuerten Testmodus der zweikanaligen Variante. Weder elektrische Polaritaet noch Gate-/Treiberbias oder Ausgangszustand der realen vierkanaligen Revision vor Firmwarestart sind damit belegt. PCB-Schaltpfad `NOT_VERIFIED`.
@@ -48,6 +68,7 @@ GPIO-Zuordnung sowie Reset- und Standby-Qualifikation bleiben offen.
 | Nachweis | Status |
 |---|---|
 | Funktionales Nicht-Aktivierungsverhalten bei geloggter Aktorsperre | **FAIL**: Owner beobachtet beide Luefter durchgehend laufend; kein Pegel- oder Ursachennachweis |
+| 12-V-Kaltstart mit FT232 RTS/DTR abgetrennt | **FAIL**: laut Owner beide Luefter unmittelbar und danach aktiv; genauer Zeitbezug zu `app_main` nicht nachgewiesen |
 | Luefter an MOSFET 1 und 4 bei UART-Oeffnung aktiv | Ownerbeobachtung, keine verifizierte GPIO-Zuordnung |
 | Luefter an MOSFET 1 und 4 waehrend UART-Boot 2026-11-18 durchgehend aktiv | Ownerbeobachtung; Log-Boot belegt, exakte Synchronisierung zu `app_main` nicht belegt |
 | UART-Empfang 2026-11-18 | PASS; bidirektionaler Austausch NOT_RUN |
@@ -58,7 +79,7 @@ GPIO-Zuordnung sowie Reset- und Standby-Qualifikation bleiben offen.
 | Gate-/Treiberbias, aktive Polaritaet und Resetverhalten | NOT_VERIFIED |
 | Ursachenklassen Image, Software oder vor Firmwarestart aktive Stufe | NOT_PROVEN; Kombination moeglich |
 | Power-On vor/nach `app_main` | PARTIAL: Owner beobachtet laufende Luefter nach Wiedereinschalten; Zeitbezug zu `app_main` nicht belegt |
-| Reset vor/nach `app_main` | PARTIAL: UART-Boot und durchgehend laufende Luefter beobachtet, zeitliche Synchronisierung nicht belegt |
+| Gehaltener EN-Reset, betroffene Luefter | **FAIL**: Owner beobachtet beide Luefter waehrend des gehaltenen Resets aktiv; vollstaendige Resetqualifikation offen |
 | Sicherer stabiler Standby | NOT_VERIFIED |
 | Aktive AUS/EIN-Pruefung | NOT_RUN; kein sicherer autorisierter vorhandener Aufrufpfad nachgewiesen |
 | `SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` | PENDING |
