@@ -1,8 +1,8 @@
-# Issue #218 – R1-Regelungs- und Aktorkette integrieren (Plan Revision 1)
+# Issue #218 – R1-Regelungs- und Aktorkette integrieren (Plan Revision 2)
 
 Status: **Plan zur Review und Ownerfreigabe der exakten Plan-Commit-SHA.** Keine
 Implementierung, kein Image, kein Flash, keine reale Schaltung vor Freigabe.
-Baseline: `origin/main` `5bbdef8173073c92c0737ed72d2193457dff6136` (PR #217 gemergt).
+Baseline: `origin/main` `5bbdef8173073c92c0737ed72d2193457dff6136` (PR #217 gemergt). Rev. 2 korrigiert nur C2/C4-Ownership und C3-Freigabeevidenz (Korrekturauftrag PR #219).
 `ACTUATOR_RELEASE=NO`, `REAL_PELTIER_TEST=NOT_RUN`. Auftrag: Owner-Datei
 `ESP32_Issue218_Codex_Integrationsauftrag.md`, Issue #218.
 
@@ -36,7 +36,7 @@ Fehlende Produkt-Aufrufstellen (alle per Repository-Suche belegt):
 |---|---|---|
 | G1 | Keine `SensorQualityPipeline`-Instanz im Produkt; Sampler-Quellen erreichen Regler/Safety nie. `FermentationApplication::publishOwningRuntimeEvidence` hat ausser Tests **keinen** Aufrufer (UI/Web sehen daher nie Live-Temperaturen). | `grep SensorQualityPipeline|publishOwningRuntimeEvidence` ueber `main/`, `lib/` |
 | G2 | Kein `SensorQualityConfig` mit Produktwerten; Medianfenster, Tiefpass, Plausibilitaet, Stale-/Fehlergrenzen sind `TBD_COMMISSIONING` (`SENSOR_TUNING_COMMISSIONING.md`). | `grep SensorQualityConfig` ausserhalb der Pipeline: keine Treffer |
-| G3 | `FermentationApplication` persistiert direkt ueber `RunPersistenceCoordinator` (`fermentation_application.cpp` `applyConfirmedPrepared` ~L731/735, `confirmProductInserted` ~L765, Recovery-/Resume-/Fallback-Pfade ~L2448–2559). Der Orchestrator (Lifecycle-Reset von Regler/Planner/Driver, `beginRun`, Feedback) wird nur von #29-Probe und Tests instanziiert. Der Orchestrator bietet keine Varianten fuer `persistBorrowedCommand`. | `grep TemperatureControlApplicationOrchestrator` |
+| G3 | `FermentationApplication` (privater Coordinator, private Borrowed-Operation, privater Run) persistiert direkt ueber `RunPersistenceCoordinator` (`fermentation_application.cpp` `applyConfirmedPrepared` ~L731/735, `confirmProductInserted` ~L765, Recovery-/Resume-/Fallback-Pfade ~L2448–2559). Der Orchestrator (Lifecycle-Reset von Regler/Planner/Driver, `beginRun`, Feedback) wird nur von #29-Probe und Tests instanziiert. Der Orchestrator bietet keine Varianten fuer `persistBorrowedCommand`. | `grep TemperatureControlApplicationOrchestrator` |
 | G4 | `ActuationInterlock::evaluate` hat **keinen** Produktaufrufer (nur `evaluate({})` in der #29-Probe); es gibt keinen Evidenz-Bauer (`ActuationEvidence`: Boot, Konfiguration, Persistenz, Sensor, explizite Aktivierung, Aktivierungsergebnis). | `grep ActuationInterlock::evaluate` |
 | G5 | Kein periodischer Tick in der `app_main`-Schleife: `evaluateTemperatureControl` → `tickActuatorPlan` (Gate) wird nie aufgerufen; `innerFanOutput`/`outerFanOutput`/`peltierBridge` sind keinem `ActuatorPlanSinkDriver` zugeordnet. | `app_main.cpp` L609–L650, Hauptschleife |
 | G6 | Composition-Guard `test_peltier_composition_guard` verbietet `ActuatorPlanner`/`ActuatorPlanSinkDriver` in `app_main.cpp` und `setForward(`/`setReverse(` in `main/`; muss gezielt auf den neuen Komposer eingegrenzt werden (wie in #33). | Testquelle |
@@ -49,54 +49,124 @@ kein Defekt; Wertefreigabe ist #35.
 
 ## 3. Umsetzung (kleinster Patch-Scope)
 
-**C1 – Sensorevidenz-Komposition (fermentation_app/main, Reuse).**
-Ein schmaler Evidenz-Zusammenbau (kein neuer Algorithmus): pro Rolle (Luft, Produkt,
-Kuehlkoerper/Peltier) eine `SensorQualityPipeline`, gespeist aus `Ds18b20Sampler::source(ch)`
-ueber die persistierte Rollenbindung (`sensor_commissioning`), Snapshot mit
-`monotonicMillis` → `CrossRolePlausibilityContext` → `publishOwningRuntimeEvidence` und
-`TemperatureControlEvaluationEvidence`. `SensorQualityConfig` kommt aus einem injizierten
-Provider; **im Produkt liefert er bis #35 `nullopt`** (keine Pipeline → kein `Valid`).
-Testwerte nur in Testfixtures.
+**Festgelegte Ownership (eine Struktur, Rev. 2).** `main/app_main.cpp` kann weder den
+privaten `runPersistenceCoordinator_` noch `runtimeRunState_` erreichen und erhaelt sie
+auch nicht. Daher gilt: **`FermentationApplication` besitzt die gesamte Regelkette
+intern**; `app_main` uebergibt nur die drei bereits vorhandenen, von `app_main`
+besessenen abstrakten Sinks (ADR-013, nur Ports aus `device_platform`).
 
-**C2 – Orchestrator als einzige Persistenzgrenze der Application.**
-Orchestrator um die von der Application tatsaechlich genutzten Borrowed-/Recovery-
-Varianten ergaenzen, die **denselben** `complete()`-Pfad nutzen; `FermentationApplication`
-haelt einen optionalen Orchestrator-Zeiger (abstrakte Ports, ADR-013) und ruft ihn an
-allen mutierenden Coordinator-Aufrufstellen (G3-Liste, C0-Inventur vollstaendig) statt des
-Coordinators direkt. Ohne angeschlossene Aktorik: Verhalten unveraendert.
+- **Anschluss:** neue schmale Methode `FermentationApplication::attachActuationPorts(
+  IBidirectionalActuatorSink& peltier, IBinaryOutputSink& outerFan, IBinaryOutputSink&
+  innerFan)`, aufrufbar **vor** `begin()`; speichert nur Referenzen (Zeiger). Nach
+  erfolgreichem `begin()` ist ein Aufruf wirkungslos abgelehnt. Ohne Aufruf (alle Tests,
+  #29-Probe, Bring-up-Harnesses) bleibt das Verhalten bytegleich unveraendert.
+  Lebensdauer: die Sinks in `app_main` (L609–L650) sind vor `application` (L698)
+  deklariert und werden daher nach ihr zerstoert.
+- **Entstehung:** in `beginPersistent()` **unmittelbar nach** dem Erzeugen des
+  `runPersistenceCoordinator_` (~L2242) legt die Application einen `ControlChain`-
+  Verbund als **privates Mitglied** an (`TemperatureController`,
+  `TargetQualificationEvaluator`, `ActuatorPlanner`, `ActuatorPlanSinkDriver`,
+  `TemperatureControlApplicationOrchestrator` mit Referenz auf `*runPersistenceCoordinator_`;
+  ein `unique_ptr`, nur wenn Ports angeschlossen). Planner startet ohne Run-Snapshot
+  (`Unconfigured`, Ausgaenge AUS).
+- **Abbau (alle Pfade):** an jeder Stelle, an der der Coordinator zurueckgesetzt wird
+  (`begin()`-Wiederholung ~L787, Fehlerpfade/`beginPersistent()` ~L2155/2156, Destruktor)
+  zuerst `planner.forceStop` + `driver.apply` (alle drei Sinks AUS), dann Verbund
+  zerstoeren, **danach** Coordinator. So sind Referenzen nie dangling; ein fruehzeitiger
+  Initialisierungsfehler hinterlaesst nie eine aktive Kette.
+- **Persistenzpfad unveraendert:** `beginCommandOperation`/`commandCandidate`/
+  `persistBorrowedCommand` und `CommandDecisionView` bleiben privat bei der Application;
+  kein zweiter Coordinator, keine oeffentlichen Run-/Speicherzugriffe, keine Kopie.
+  Der Orchestrator erhaelt **eine** neue oeffentliche, schmale Post-Commit-Methode
+  `handoffCommitted(before, RunPersistenceResult&, RunCommandState& current, nowMs,
+  recoveryBoundary)`, die **nur** den bestehenden privaten `complete()`-Pfad aufruft
+  (Hint-Verbrauch ueber `consumeCommittedControlContextTransition`, Lifecycle-Reset,
+  `beginRun`, Feedback-Loeschung). Die Application ruft sie direkt nach jedem bestehenden
+  Coordinator-Aufruf auf, dessen `status == Applied` ist; das Ergebnis wird per
+  Referenz uebergeben und der Hint damit **genau einmal** verbraucht. Die bisherigen
+  `persist*`-Wrapper des Orchestrators bleiben fuer Tests unveraendert.
+- **C0 – Inventur (vor Code, in Evidence):** alle mutierenden Coordinator-Aufrufstellen
+  der Application, klassifiziert: (a) Laufzeitmutationen (`applyConfirmedPrepared`
+  ~L731/735, `confirmProductInserted` ~L765, Sensorselektion) → `handoffCommitted(...,
+  false)`; (b) Boot-/Recovery-/Resume-Aktivierungen (`activateR1EligibleRun`,
+  `discardAsNoActiveRun`, `activateFallbackRecoveredRun`, `resumeFallback`, Recovery-
+  Aufloesung; ~L2448–2559, ~L2814–2880) → `handoffCommitted(..., true)`;
+  (c) nicht mutierend (Evaluation/Load/Periodic-Checkpoint) → kein Handoff. Eine nicht
+  klassifizierte Aufrufstelle blockiert den Review.
 
-**C3 – Evidenz-Bauer und Tick.**
-`ActuationEvidence` ausschliesslich aus vorhandenem Application-/Konfigurations-/
-Persistenz-/Sensorzustand ableiten; `explicitActivationRequested`/`activationKind`/
-`activationPersistenceResult` nur aus dem realen Start-Kommando (#17-Persistenz Applied),
-nie bei Boot/Reset/Recovery. Ein Tick (`evaluateTemperatureControl` → `ActuationInterlock::
-evaluate` → `tickActuatorPlan`) pro Schleifendurchlauf in `app_main`, STOP/Fault/Watchdog/
-SafeBoot laufen ueber die bestehenden Lifecycle-Boundaries.
+**C1 – Sensorevidenz.** Pro Rolle (Luft, Produkt, Kuehlkoerper/Peltier) eine
+`SensorQualityPipeline`, gespeist aus `Ds18b20Sampler::source(ch)` ueber die persistierte
+Rollenbindung; ein Zusammenbau in `main/` (nicht in der Application) liefert pro
+Schleifendurchlauf `publishOwningRuntimeEvidence(CrossRolePlausibilityContext)` (bestehender
+oeffentlicher Eingang, bisher ohne Produktaufrufer). `SensorQualityConfig` kommt aus einem
+injizierten Provider, der **im Produkt bis #35 `nullopt`** liefert (keine Pipeline → kein
+`Valid`). Testwerte nur in Fixtures.
 
-**C4 – Composition-Root.**
-`app_main.cpp` konstruiert `ActuatorPlanner`, `ActuatorPlanSinkDriver(peltierBridge,
-outerFanOutput, innerFanOutput)` und den Orchestrator und uebergibt sie; `OUT3` (Summer)
-und `OUT4` (Reserve) bleiben unverbunden. Guard (G6) gezielt auf die Composition-Stelle
-begrenzen, `setForward(`/`setReverse(` bleiben ausserhalb von `ActuatorPlanSinkDriver`
-verboten. RTC/SNTP: unveraendert, fehlende vertrauenswuerdige UTC sperrt weiter den Start.
+**C3 – Tick und Freigabeevidenz je Tick (Rev. 2).** `FermentationApplication::update()`
+fuehrt (nur bei vorhandener Kette und `ready()`) pro Aufruf unter dem bestehenden
+`applicationCallSerializer_` genau einen Tick aus:
+`evaluateTemperatureControl(*runtimeRunState_, evidence aus owningRuntimeEvidence_)` →
+`ActuationEvidence` neu bauen → `ActuationInterlock::evaluate` → `tickActuatorPlan`. Kein
+Zustand ausserhalb des Application-Locks, kein Zugriff von `app_main` auf Run-Objekte.
+
+*Aktivierungs-Latch (nur RAM, kein persistentes Gate, kein neues Safety-Gate).* Die
+Application haelt `activation_{kind, activeRunId, runRevision-at-activation}` und setzt es
+**ausschliesslich** in `handoffCommitted`, wenn dasselbe `Applied`-Ergebnis (a) einen
+expliziten Start (`RunStarted`/`ManualRunStarted` → `FreshStart`) oder eine explizit
+bestaetigte Resume-Aktivierung (→ `Resume`) beschreibt. Daraus folgt pro Tick:
+`explicitActivationRequested`, `activationKind`, `activationPersistenceResult=Applied`
+und `processActivationApplied` werden **aus dem Latch plus dem aktuellen Live-Zustand**
+abgeleitet, nicht gespeichert wiederverwendet. Der Latch gilt nur, solange **alle**
+zutreffen: `runtimeRunState_->activeRunId` und Prozessphase sind unveraendert
+temperaturgeregelt, kein Stop/Fault/Recovery/Standby/SafeBoot/Service-Boundary
+(jeder `needsRuntimeReset`-Fall ausser dem aktivierenden Commit selbst loescht den Latch
+**im selben `handoffCommitted`-Aufruf**), Coordinator-Zustand vertrauenswuerdig,
+Konfiguration/Persistenz/Sensor/Planner (inkl. Watchdog-Latch) in diesem Tick frisch
+gueltig. Neuer Run, Boot, `begin()`, Recovery, Stop, Fehler oder neue Run-Identitaet
+loeschen den Latch; ein altes `Applied` kann deshalb nie einen anderen Lauf freigeben.
+Gewoehnliche Phasenwechsel innerhalb desselben Laufs loeschen ihn nicht, weil der Latch
+an `activeRunId`, nicht an `transitionSequence` haengt.
+`loadDisposition` fuer die Auswertung wird aus der `activationKind` des Latch abgeleitet
+(FreshStart → `Standby`, Resume → `ResumeOffer`), weil `ActuationInterlock::evaluate`
+`Allowed` nur fuer diese beiden kennt; **Risiko R1:** falls die Interlock-Tests diese
+Ableitung nach Stop/Neustart im selben Boot nicht tragen, wird gemeldet und eine
+Ownerentscheidung eingeholt statt den Interlock still zu aendern.
+STOP/Fault/Recovery enden die Freigabe sofort ueber die bestehenden Boundaries
+(Latch weg im selben Aufruf → naechster Tick `Unresolved` → Bruecke/Luefter laut
+bestehender Nachlauflogik AUS). Watchdog/Mindestzeiten/Totzeit unveraendert (Planner).
+
+**C4 – Composition-Root.** `app_main.cpp` ruft nur `application.attachActuationPorts(
+peltierBridge, outerFanOutput, innerFanOutput)` vor `application.begin()` und den
+Sensor-Zusammenbau aus C1 in der Schleife auf; `ActuatorPlanner`/`ActuatorPlanSinkDriver`
+erscheinen **nicht** in `app_main.cpp`. `OUT3` (Summer) und `OUT4` (Reserve) bleiben
+unverbunden. Guard (G6): `setForward(`/`setReverse(` bleiben in `main/` verboten; die
+Verbote gegen Planner/Driver in `app_main.cpp` bleiben bestehen; neu geprueft wird, dass
+die Anbindung ausschliesslich ueber `attachActuationPorts` erfolgt. RTC/SNTP unveraendert
+(aktuell `kRtcConfig{}` deaktiviert, separates R1-Thema, kein Teil von #218).
 
 ## 4. Tests (wenige, gezielt)
 
-Neuer Hosttest `test/test_r1_control_chain_integration` (Test-Fixtures mit expliziten,
-als Testwerte markierten `ActuatorPlannerParameters`/`SensorQualityConfig`; keine
-Produktkonstanten):
+Neuer Hosttest `test/test_r1_control_chain_integration` ueber die **echte**
+`FermentationApplication` mit Test-Sinks (Fixtures mit expliziten, als Testwerte markierten
+`ActuatorPlannerParameters`/`SensorQualityConfig` ueber den normalen Run-Snapshot-/
+Evidenzeingang; **kein** fixture-seitiges `Allowed`, der produktive Evidenzbauer wird
+durchlaufen):
 
-- **T1 positiv:** gueltiger, explizit gestarteter, persistierter Run + frische Pflichtsensoren
-  (Luft, Kuehlkoerper) → Regler → Planner → Aussenluefter EIN **vor genau einer**
-  Brueckenrichtung; Planner-Feedback erreicht den naechsten Regler-Tick.
+- **T1 positiv:** expliziter Start (`Applied`) + frische Pflichtsensoren (Luft,
+  Kuehlkoerper) → Regler → Planner → Aussenluefter EIN **vor genau einer**
+  Brueckenrichtung; **mindestens zwei aufeinanderfolgende positive Ticks desselben
+  committed Runs** mit korrekter Feedback-Weitergabe (zweiter Tick erhaelt das Feedback
+  des ersten); Phasenwechsel im selben Run haelt die Freigabe; danach STOP, Fault und
+  Recovery → Bruecke sofort AUS/gesperrt, Latch geloescht, Nachlauf/Totzeit unveraendert.
 - **T2 negativ (parametrisiert):** Pflichtsensor fehlt/`Stale`/`Failed`; Aussenluefter-EIN
-  verweigert; unsicherer Boot-/Run-/Persistenzzustand; Request-Watchdog; STOP → Bruecke
-  AUS/gesperrt, Nachlauf und Richtungs-Totzeit unveraendert.
-- **T3 Produkt-Default:** Produktkomposition ohne Konfigurationswerte → alle Sinks AUS,
-  kein `Allowed`.
+  verweigert; unsicherer Boot-/Run-/Persistenzzustand; Request-Watchdog; Neustart
+  (`begin()`) und neuer Run mit altem `Applied` → Peltier AUS/gesperrt.
+- **T3 Produkt-Default:** Kette angeschlossen, aber ohne Konfigurationswerte → alle Sinks AUS,
+  kein `Allowed`; ohne `attachActuationPorts` Verhalten unveraendert; `begin()`-Wiederholung
+  und Initialisierungsfehler lassen alle Sinks AUS (Lebensdauer/Abbau).
 - Regression nur betroffener Bereiche: `test_actuator_planner`, `test_actuation_interlock`,
   `test_temperature_control*`, `test_run_persistence_coordinator`, `test_peltier_composition_guard`,
-  `test_actuator_plan_sink_driver`, Architekturpruefung `check_architecture_boundaries.py`.
+  `test_actuator_plan_sink_driver`, `check_architecture_boundaries.py`.
 - Builds: beide ESP-IDF-Profile (`esp32_bringup`, `esp32_release`) ohne Flash; Stack-/
   Flash-Delta dokumentieren.
 
@@ -104,14 +174,16 @@ Pre-Ready-Lauf nur nach Independent Review und Owner-Anweisung (AGENTS.md).
 
 ## 5. Gates und Entscheidungen
 
-Kein Hardware-Gate in diesem PR. **Ownerentscheidungen:**
+Kein Hardware-Gate in diesem PR. Der fertige PR #219 ist **noch keine lauffaehige
+Peltier-Regelfreigabe**. **Ownerentscheidungen:**
 
 - **D1:** Plan-Freigabe dieser exakten SHA.
-- **D2:** Bestaetigung, dass #218 im Produkt ohne #35-Werte **verdrahtet, aber fail-closed**
-  endet (Sensorqualitaets- und Plannerparameter-Provider liefern bis #35 nichts).
-- **D3:** Orchestrator-Zeiger in `FermentationApplication` (C2, empfohlen: kleinster
-  Schnitt, ein Persistenzpfad) statt Komposition der Persistenz ausserhalb der Application.
-  Alternative ist ein zweiter Persistenzweg und widerspricht dem Vertrag.
+- **D2:** #218 endet im Produkt **verdrahtet, aber fail-closed**, bis #35 die Sensor-/
+  Plannerwerte liefert (Etappengrenze, keine geratenen Parameter).
+- **D3 (Rev. 2):** Ownership gemaess §3: Application besitzt Kette, Anschluss nur ueber
+  `attachActuationPorts` mit Ports, Post-Commit-Handoff `handoffCommitted` auf dem
+  bestehenden privaten Persistenzpfad. Es wird **kein** Orchestrator-Zeiger von `app_main`
+  und kein oeffentlicher Coordinator-/Run-Zugriff freigegeben.
 
 ## 6. Abgrenzung
 
