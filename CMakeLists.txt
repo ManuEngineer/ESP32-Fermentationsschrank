@@ -15,7 +15,7 @@ set(EXTRA_COMPONENT_DIRS
 # dedicated bring-up build.  Keep the ESP-IDF UART/VFS components out of the
 # normal product component graph.
 if(APP_ISSUE_90_SLICE7_HARNESS OR APP_ISSUE_30_SENSOR_COMMISSIONING OR
-   APP_ISSUE_32_OUTPUT_PULSE)
+   APP_ISSUE_32_OUTPUT_PULSE OR APP_ISSUE_33_BRIDGE_IDLE_TEST)
     # Explicitly select the IDF console components for the optional harness
     # graph; optional component requirements are resolved only for selected
     # build components when MINIMAL_BUILD is enabled.

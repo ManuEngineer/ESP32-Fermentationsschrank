@@ -45,6 +45,9 @@
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
 #include "issue_32_output_pulse_harness.hpp"
 #endif
+#ifdef APP_ISSUE_33_BRIDGE_IDLE_TEST
+#include "issue_33_bridge_idle_harness.hpp"
+#endif
 
 #ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
 #include "issue_31_touch_calibration_provision.hpp"
@@ -636,9 +639,10 @@ extern "C" void app_main(void) {
         r1_pins::kBtsEnablePin, r1_pins::kBtsEnablePolarity,
         r1_pins::kBtsRpwmPin, r1_pins::kBtsRpwmPolarity, r1_pins::kBtsLpwmPin,
         r1_pins::kBtsLpwmPolarity);
+    const bool peltierBridgeReady = peltierBridge.begin();
     ESP_LOGI(kTag, "peltier bridge: %s",
-             peltierBridge.begin() ? "ready_all_off_not_connected_to_planner"
-                                   : "not_ready_fail_closed");
+             peltierBridgeReady ? "ready_all_off_not_connected_to_planner"
+                                : "not_ready_fail_closed");
 
     const esp_err_t defaultNvsStatus = nvs_flash_init();
     if (defaultNvsStatus != ESP_OK) {
@@ -839,6 +843,13 @@ extern "C" void app_main(void) {
         innerFanOutput, outerFanOutput, reserveOutput);
     issue32Harness.start();
 #endif
+#ifdef APP_ISSUE_33_BRIDGE_IDLE_TEST
+    // Manual bring-up-only BTS7960 bridge idle test (no Peltier, no load); the
+    // harness only receives the existing bridge and its begin() result.
+    fermentation::issue_33_bridge_idle::Harness issue33Harness(
+        peltierBridge, peltierBridgeReady);
+    issue33Harness.start();
+#endif
 
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
@@ -873,6 +884,9 @@ extern "C" void app_main(void) {
 #endif
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
         issue32Harness.update();
+#endif
+#ifdef APP_ISSUE_33_BRIDGE_IDLE_TEST
+        issue33Harness.update();
 #endif
 
         const uint64_t nowMs = timeSource.monotonicMillis();

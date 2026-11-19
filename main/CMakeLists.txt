@@ -75,7 +75,8 @@ set(APP_SOURCE_GIT_SHA_DEFINE "APP_SOURCE_GIT_SHA=\"${APP_SOURCE_GIT_SHA}\"")
 
 set(APP_ISSUE_29_COMPILE_DEFINITIONS)
 if(CONFIG_APP_PROFILE_ESP32_BRINGUP AND NOT APP_ISSUE_90_SLICE7_HARNESS AND
-   NOT APP_ISSUE_30_SENSOR_COMMISSIONING AND NOT APP_ISSUE_32_OUTPUT_PULSE)
+   NOT APP_ISSUE_30_SENSOR_COMMISSIONING AND NOT APP_ISSUE_32_OUTPUT_PULSE AND
+   NOT APP_ISSUE_33_BRIDGE_IDLE_TEST)
     # The Issue #90 Slice-7 harness is a separate, independent hardware
     # runner and must not automatically compile or run the unrelated
     # Issue #29 diagnostic probe (real-hardware panic observed in the
@@ -222,6 +223,35 @@ if(APP_ISSUE_32_OUTPUT_PULSE)
     )
 endif()
 
+# Issue #33 manual BTS7960 bridge idle test: bring-up-only, UART-triggered, one
+# direction for a fixed short time, no Peltier or load connected. Enabled only
+# by the dedicated build command; release and native builds compile and link
+# none of it.
+set(APP_ISSUE_33_COMPILE_DEFINITIONS)
+if(APP_ISSUE_33_BRIDGE_IDLE_TEST)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #33 bridge idle test is allowed only in esp32_bringup"
+        )
+    endif()
+    if(APP_ISSUE_90_SLICE7_HARNESS OR APP_ISSUE_30_SENSOR_COMMISSIONING OR
+       APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS OR
+       APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER OR APP_ISSUE_32_OUTPUT_PULSE)
+        message(FATAL_ERROR
+            "Issue #33 bridge idle test cannot be combined with another "
+            "Issue #30/#31/#32/#90 harness"
+        )
+    endif()
+    idf_component_optional_requires(PRIVATE esp_driver_uart)
+    target_sources(
+        ${COMPONENT_LIB}
+        PRIVATE "issue_33_bridge_idle_harness.cpp"
+    )
+    list(APPEND APP_ISSUE_33_COMPILE_DEFINITIONS
+        APP_ISSUE_33_BRIDGE_IDLE_TEST=1
+    )
+endif()
+
 # Firmwarefeste Release-1-Grenzen bleiben feste Compile-Definitionen, keine
 # Kconfig-Menuoptionen (siehe docs/tasks/issue-74-implementation-plan.md,
 # Abschnitt 7.2 Punkt 4). Textidentisch mit platformio.inis
@@ -236,6 +266,7 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_ISSUE_31_TOUCH_CALIBRATION_PROVISION_COMPILE_DEFINITIONS}
     ${APP_ISSUE_30_COMPILE_DEFINITIONS}
     ${APP_ISSUE_32_COMPILE_DEFINITIONS}
+    ${APP_ISSUE_33_COMPILE_DEFINITIONS}
     ${APP_SOURCE_GIT_SHA_DEFINE}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0
