@@ -155,3 +155,75 @@ vorhanden, keine Firmwareaenderung in diesem Delta). Die absoluten Systemtiefstw
 
 **Endzustand Board:** laeuft das Probe-Image (Source `e0da8ae`, Bring-up, nicht
 Release), unveraenderte Partitionen; **persistierte Bindung geschrieben** (air `A60000006C724828`, heatsink `F90000006C4C6228`); alle drei Sensoren angeschlossen, Aktoren getrennt.
+
+## Release-Test (2026-11-19, C3-Release-Image, Owner-Anweisung "Release-Test durchfuehren")
+
+Scope: das tatsaechlich zu flashende Release-Image wurde aus dem aktuellen, sauberen
+Source-HEAD neu gebaut und verifiziert geflasht; keine erneute Sensor-Messreihe,
+keine Eingriffe an Sensoren. `ACTUATOR_RELEASE=NO`.
+
+| Feld | Wert |
+|---|---|
+| Source-HEAD | `c782156dbb8afb1dcf2803da92373c2f1b059fdd` (Arbeitsbaum sauber, `SOURCE_TREE_CLEAN=YES`) |
+| Build | `build/esp32_release` zuvor entfernt, `python3 scripts/build_esp_idf_profiles.py release --require-clean-source-tree`, 0 Warnungen/Fehler |
+| Datei | `build/esp32_release/esp32_fermentationsschrank.bin`, 1 779 216 B |
+| SHA-256 | `cad364c0a9e58024d71ace26f2d71a582e456a59c863d97d7159d7fdf6e1d6db` |
+| Trennung | 0 Treffer fuer `ISSUE30`, `PROBE`, `ISSUE190`, "not approved for product" |
+| Produktbudget | `kApprovedDs18b20TaskBudget = {4096, 2, 1}` (C3) |
+| ELF-SHA (Boot-Log) | `ba0da9081...` |
+
+Der Hash weicht vom Release-Build des vorherigen Handovers (`128bcfe6…`) ab; es wird keine
+bitgleiche Reproduzierbarkeit zwischen Builds behauptet, massgeblich ist der oben
+geflashte und verifizierte Hash.
+
+**Flash:** installierte Partitionstabelle (Read-only) identisch zum Build (`factory app
+0x10000/3008K`, `nvs 0x9000`, `state_store 0x300000/1M`). App-only bei `0x10000`:
+`Hash of data verified.`, unabhaengig `verify-flash`: `Verification successful (digest
+matched).` Kein `erase_flash`, kein Bootloader-/Partitionstabellen-/NVS-/State-Store-/OTA-
+Schreibzugriff, kein Backup (D4, separate Flashfreigabe durch die Owner-Anweisung).
+
+**Boot (ein EN-Reset, ca. 150 s passiv):**
+
+```
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+I boot: Loaded app from partition at offset 0x10000
+I app_main: ds18b20 sampler: started
+```
+
+Kein Panic/WDT/Abort/Backtrace, keine `E`-Zeilen; einzige Warnungen (vorbestehend):
+WiFi-Authmode und LCD-Callback. 147 Heartbeats (`safe test mode`), groesster Abstand
+1010 ms.
+
+**Ressourcen (`app_main: resources`, Release):**
+
+| Punkt (Tick ms) | frei | min. frei | groesster 8-Bit-Block |
+|---|---|---|---|
+| `after_ui_init` (2099) | 45 932 | 37 284 | 43 008 |
+| `stable_home_wifi` (5069) | 34 500 | 26 204 | 25 600 |
+| `periodic_30s` (32429) | 34 380 | 26 204 | 25 600 |
+| `idle_120s` (122429) | 34 400 | 25 152 | 25 600 |
+
+Der Heap liegt im Release-Image ohne Harness hoeher als im Probe-Image (dort
+`stable_home_wifi` 26 480 frei, min. 19 448); der Heap-Verbrauch des Sampler-Tasks bleibt
+damit weiterhin nicht isoliert messbar (`NOT_PROVEN`).
+
+**Persistierte Bindung:** `NVS` (24 KiB) und `state_store` (1 MiB) sind vor und nach Flash
+und Boot **byteidentisch** (SHA-256 `state_store` `8c89180d…a772`, `nvs` `24354ddf…a57d`);
+beide ROMs des Commissioning-Datensatzes (`A60000006C724828`, `F90000006C4C6228`) liegen
+im `state_store` (je einmal). Das Release-Image hat bewusst **keine** Ausgabe der
+geladenen Bindung oder der Messwerte (D3, keine neue Release-Telemetrie); daher ist
+`engine_binding_valid` und eine frische Temperatur im Release **`NOT_PROVEN`**. Der
+Ladepfad (`application.sensorCommissioning()` -> `toChannelBindings` -> `start()`) ist im
+Quelltext identisch zum Probe-Image, in dem `engine_binding_valid=1` und `Ok`-Werte
+nachgewiesen sind (M1/M5).
+
+**Befund Release-Test:** Das Release-Image mit Produktbudget 4096/2/1 bootet, startet den
+Sampler (`started`), laeuft 150 s ohne Panic/WDT bei normalen Heartbeats und unkritischen
+Heap-Werten; die persistierten Daten blieben unveraendert. **Nicht belegt:** geladene
+Bindung und frische Messwerte im Release (keine Ausgabe), Stack-HWM des Sampler-Tasks im
+Release (keine Ausgabe), Fehlerpfade `CrcFault`/`BusFault`, Aktorentrennung fuer diesen
+Flash nicht neu abgefragt (Aktoren/BTS7960 laut Owner zuvor getrennt; Release initialisiert
+alle Ausgaenge inaktiv).
+
+**Endzustand Board:** laeuft das Release-Image `cad364c0…d6db` (Source `c782156`),
+Partitionen unveraendert, persistierte Bindung unveraendert, alle Sensoren angeschlossen.
