@@ -1,7 +1,11 @@
-# Issue #32 – realer Luefter-Nachweis OUT1/OUT2 (Restplan, Revision 1)
+# Issue #32 – realer Luefter-Nachweis OUT1/OUT2 (Restplan, Revision 2)
 
-Status: **Plan zur Review und Ownerfreigabe der exakten Plan-Commit-SHA.** Keine
-Implementierung, kein Testimage, kein Flash, keine Lastaktivierung vor Freigabe.
+Status: **Revision 2 (ersetzt Revision 1 `94b60f8` vollstaendig; praezisiert P1 und
+uebernimmt die Ownerentscheidungen D1–D6, §9). Der Owner befuerwortet die Freigabe des
+korrigierten Plans nach erfolgreicher Fix Verification; die formale Freigabe der exakten
+finalen Plan-Commit-SHA steht aus (D1) und gilt weder fuer `94b60f8` noch fuer eine
+andere Zwischenversion.** Keine Implementierung, kein Testimage, kein Flash, keine
+Lastaktivierung vor Freigabe.
 Baseline: `origin/main` `17c278ad577fe7b0ca359b154737351221924b99` (PR #215
 gemergt; PR #214 gemergt `29c9f51217ebc2dd4cd75e8b3ecb385c4ec3bb5d`).
 
@@ -26,15 +30,25 @@ Pflicht wiederholt.
 
 ## 2. Belegt vs. offen (Kriterien aus Issue #32)
 
+**Ownerangabe zur Lastidentitaet (nach PR #214, praezisiert diesen Plan; die damalige
+Evidence wird nicht rueckwirkend umgeschrieben):** Die an OUT1/GPIO16 und OUT4/GPIO27
+verwendeten Luefter sind **keine Wegwerf-Testlasten**, sondern die beiden realen
+Luefter des Fermentationsschranks. Endgueltige Rollen: OUT1/GPIO16 = Innenluefter,
+OUT2/GPIO17 = Aussenluefter; das bisher an OUT4 angeschlossene reale Geraet wird in
+G1 auf OUT2 umgesteckt, OUT4 bleibt im Produkt unbelegte Reserve. Der OUT1-Puls aus
+`HW-32-04` gilt damit als bestehender Nachweis des realen Innenluefters, solange
+Luefter, Zuordnung und Anschluss unveraendert bleiben. Der damalige OUT4-Test belegt
+**nicht** OUT2.
+
 | Kriterium | Stand | Quelle |
 |---|---|---|
 | ActiveHigh-SSOT OUT1–OUT4, Reserve AUS-Init, Generator/Selftest | belegt (`SIM-32-05`) | PR #214 |
 | Sichere Initialisierung nach `app_main` (alle vier AUS) | belegt | Boot-Log PR #214, `POST_BOOT_OUT1_OFF=PASS` (PR #212) |
-| AUS→EIN→AUS OUT1/GPIO16 und OUT4/GPIO27 mit temporaerer Testlast | belegt `HW-32-04=PASS` (2026-11-19) | PR #214, Evidence |
+| AUS→EIN→AUS OUT1/GPIO16 (realer Innenluefter laut Ownerangabe) und OUT4/GPIO27 (Reservekanal; dasselbe reale Geraet, das spaeter nach OUT2 umgesteckt wird) | belegt `HW-32-04=PASS` (2026-11-19); fuer OUT2 **nicht** uebertragbar | PR #214, Evidence |
 | OUT4/GPIO27 | bleibt **Reserve**, kein produktiver Aussenluefter | HARDWARE.md |
 | Boot/gehaltener EN-Reset mit Luefter physisch laufend | **akzeptierte R1-Abweichung**, historischer FAIL bleibt FAIL, kein Konformitaets-PASS; gilt nicht fuer BTS7960/Peltier | Issue #32 R1-Ownerentscheidung |
-| **OUT2/GPIO17 realer Aussenluefter: Zuordnung, AUS/EIN** | **offen** (`NOT_RUN`) | – |
-| OUT1 als realer Innenluefter (Zuordnung/Versorgung) | offen: bisher temporaere Testlast | §4 (a) |
+| **OUT2/GPIO17 realer Aussenluefter (umgestecktes Geraet von OUT4): Zuordnung, AUS/EIN/AUS** | **offen** (`NOT_RUN` bis zum Hardwaretest) | – |
+| OUT1 als realer Innenluefter | durch `HW-32-04` mit demselben realen Geraet belegt; Wiederholung nur bei geaenderter Zuordnung/anderem Geraet/nicht belastbarer Evidence | Ownerangabe, §4 |
 | Produktionsnaher Pfad fuer beide Luefter | **offen**, siehe §3 | – |
 | Innenluefter-Dauerlauf, Aussenluefter-Nachlauf (Hardware) | **nicht ohne #35/#90 end-to-end nachweisbar**, siehe §5 | – |
 | OUT3/GPIO26 Summer | **separater offener #32-Punkt**, siehe §6 | O3 |
@@ -84,23 +98,25 @@ unveraendert (siehe D5). Kein neuer Treiber, kein Release-Code, keine neue Datei
 
 | Gate | Inhalt |
 |---|---|
-| G1 Verdrahtung | Owner steckt einen Test-/Aussenluefter von OUT4 nach **OUT2** um (Plattform spannungsfrei); Versorgung und Luefterdaten werden vom Owner genannt; BTS7960/Peltier abgeklemmt bestaetigt |
+| G1 Verdrahtung | Owner steckt das **reale Luefter-Geraet von OUT4 nach OUT2 um** (spannungsfrei; kein beliebiger neuer Testluefter); OUT1 bleibt am realen Innenluefter. Erfasst werden nur die tatsaechlich fehlenden Versorgungs-/Anschlussdetails (vorhandene 12-V-Evidenz wird beruecksichtigt, keine Typenschild-/Lastdaten erfinden); BTS7960/Peltier abgeklemmt bestaetigt |
 | G2 Flash | Bring-up-#32-Image aus sauberem Source-HEAD (`scripts/build_issue32_output_pulse.py`, ohne `--allow-dirty`), App-only bei `0x10000`, Hash-Verifikation, kein Erase/NVS/State-Store/Bootloader/Partitionstabelle, DEV-Image ohne Backup (D4-Praezedenz #190, Freigabe je Flash) |
 | G3 Pulse | UART-Pulse gemaess §4-Tests, Owner beobachtet |
 
 ### Testfaelle
 
-(a) **Nachvollziehen:** realer Anschluss und Versorgung von OUT1/OUT2 (welcher
-Luefter, welche Spannung, welche Last) vom Owner dokumentieren; Zuordnung
-Innenluefter = OUT1, Aussenluefter = OUT2 laut SSOT.
-(b) **T1** `pulse out2` einmal: AUS→EIN (~3 s)→AUS am realen Aussenluefter, richtiger
-Verbraucher (OUT1/OUT4-Last bleibt aus). **T2** nur falls OUT1 bis dahin noch kein
-realer Innenluefter war: ein `pulse out1` am realen Innenluefter; sonst entfaellt
-T2 (bestehender `HW-32-04` OUT1-Nachweis).
+(a) **Nachvollziehen:** Anschluss und Versorgung der beiden realen Luefter
+(OUT1 Innen, nach G1 OUT2 Aussen) vom Owner nur soweit noetig erfassen; Zuordnung laut
+SSOT: OUT1 = Innenluefter, OUT2 = Aussenluefter.
+(b) **T1** `pulse out2` einmal: AUS→EIN (~3 s)→AUS am umgesteckten realen
+Aussenluefter, richtiger Verbraucher (OUT1-Innenluefter und OUT4 bleiben aus).
+**T2 entfaellt:** derselbe reale Innenluefter wurde bereits an OUT1 mit AUS→EIN→AUS
+geprueft (`HW-32-04`). Eine Wiederholung erfolgt nur bei real geaenderter Zuordnung,
+anderem Geraet oder nicht belastbarer frueherer Evidence (Entscheid des Owners).
 (c) **T3** Boot/EN-Reset mit angeschlossenem OUT2-Luefter **beobachten und
 dokumentieren** unter der akzeptierten R1-Abweichung (kein neues PASS/FAIL gegen die
 historische Anforderung, keine Spannungsmessung).
-(d) Nachlauf/Dauerlauf: **offen kennzeichnen** (§5).
+(d) Nachlauf/Dauerlauf: **offen kennzeichnen** (§5). OUT2-AUS→EIN→AUS bleibt
+`NOT_RUN` bis zum Hardwaretest; kein Hardware-PASS fuer OUT2 wird vorab behauptet.
 
 ### Stopkriterien
 
@@ -146,12 +162,19 @@ Release-Trennung `ISSUE32` 0 Treffer); der Harness hat keinen Hosttest.
 
 ## 9. Owner-Entscheidungen
 
-- **D1:** Freigabe der exakten Plan-SHA.
-- **D2:** Code-Delta C1 (`pulse out2` im bestehenden Harness) als kleinster
-  produktionsnaher Hardwarepfad; Alternative waere Warten auf die #35/#90-Komposition.
-- **D3:** Angaben zu Versorgung/Last/Identitaet der Luefter an OUT1/OUT2 (§4 a)
-  und welcher Luefter nach OUT2 umgesteckt wird.
-- **D4:** DEV-Flash ohne Backup auch fuer #32 (Freigabe je Flash-Vorgang).
-- **D5:** Reserve-Sink und `pulse out4` (aus PR #214) belassen oder entfernen
-  (Entscheid war offen; Vorschlag: belassen, keine Aenderung in diesem Schnitt).
-- **D6:** Summer (OUT3) bleibt separater offener Punkt bis zu einer Ownerentscheidung.
+- **D1:** Planrichtung/-korrektur befuerwortet; **formale Freigabe der exakten finalen
+  Plan-Commit-SHA ausstehend** (nach erfolgreicher fokussierter Fix Verification).
+- **D2 (entschieden):** C1 umsetzen: bestehenden Bring-up-only-Pulsharness minimal um
+  `pulse out2` auf dem bestehenden `outerFanOutput` erweitern, erst nach Plan-GO; keine
+  neue Driver-/Planner-/BTS7960-Abstraktion.
+- **D3 (entschieden):** Lueftoridentitaet und Zielanschluesse wie in §2; fuer G1 nur die
+  tatsaechlich fehlenden Versorgungs-/Anschlussdetails beim Owner erfragen, nichts
+  erfinden.
+- **D4 (entschieden):** DEV-App-only-Flash ohne Backup grundsaetzlich akzeptiert; der
+  **konkrete Flash bleibt ein separates Owner-Gate G2** und ist damit nicht freigegeben.
+- **D5 (entschieden):** Reserve-Sink und `pulse out4` im Bring-up unveraendert; kein
+  produktiver Anschluss an OUT4; keine weitere Aenderung in diesem Scope.
+- **D6 (entschieden):** OUT3/GPIO26-Summer bleibt separat offener Punkt in #32; keine
+  Summer-/PWM-/Musterimplementierung in diesem Schnitt.
+
+G1 Verdrahtung, G2 Flash und G3 Pulse bleiben getrennte Owner-Gates.
