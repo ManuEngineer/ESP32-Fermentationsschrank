@@ -1,8 +1,9 @@
-# Issue #190 – drei angeschlossene DS18B20 in Betrieb nehmen (Plan, Revision 2)
+# Issue #190 – drei angeschlossene DS18B20 in Betrieb nehmen (Plan, Revision 3)
 
-Status: **Freigabe dieser Plan-Commit-SHA durch den Owner ausstehend.** Revision 2
-ersetzt Revision 1 (`1d28393`) vollstaendig (Korrektur der Erstzuordnung, §4 M1).
-Bis dahin
+Status: **Planrichtung vom Owner genehmigt; formelle Freigabe dieser exakten
+Plan-Commit-SHA ausstehend (D1).** Revision 3 uebernimmt die Workshop-Entscheidungen
+D2–D5 (§8) und M2 ca. 10 min; fachlich sonst unveraendert gegenueber Revision 2
+(`0b4ea34`; Revision 1 `1d28393` ist ersetzt). Bis zur Freigabe
 keine Implementierung, kein Flash, keine Hardwareaktion. Ausgangsbasis: `main`
 `09b704e`; PR #214 (MOSFET-Ausgaenge) ist noch Draft (`c0afd62`).
 
@@ -106,7 +107,7 @@ Aktoren/BTS7960 physisch getrennt; Verdrahtung wie SSOT; Autoreset am FT232
 | Nr. | Schritt | Erwartung / Abbruch |
 |---|---|---|
 | M1 | **Erstzuordnung in drei Schritten.** Vor einer gueltigen Bindung publiziert die Engine fuer Kanal 0/1 nur `MissingSample` ohne Temperatur (`planExpectedRomBus`, `!bindingValid_`); eine Erwaermungszuordnung ist **vor** dem `bind` daher nicht beobachtbar und braucht weder Rohdaten-API noch neuen Treiber. (a) `ds18b20 report`: beide ROMs des festen Busses (GPIO32) und den Produkt-ROM (GPIO33) erfassen. (b) Die zwei festen ROMs **vorlaeufig** per `bind air=<ROM-A> heatsink=<ROM-B>` zuordnen, einmal koordiniert neu starten; diese Zuordnung ist ausdruecklich **noch nicht verifiziert**. (c) Beide Temperaturkanaele beobachten und die Sensoren einzeln vorsichtig lokal erwaermen; widerlegt die Reaktion die vorlaeufige Zuordnung, mit demselben `bind`-Kommando tauschen und einmal neu starten. Die **endgueltige** Zuordnung wird erst nach eindeutiger Temperaturreaktion dokumentiert; Report, ROMs, Zeitstempel und Reaktionen kommen in die Evidence. Produktfuehler = einziger ROM auf GPIO33 | Keine ROM geraten. Nicht 2+1 ROMs oder sporadische Fehler: Ist-Diagnose vorlegen, keine Umbelegung, keine neuen Treiber. Keine separate umfangreiche Testserie |
-| M2 | Kurze zusammenhaengende Messreihe (ca. 2 min, 12 Bit, ~2-s-Takt): alle drei Temperaturen plausibel, Zeitstempel fortschreitend, keine eingefrorenen Werte | Zykluszeit aus Zeitstempeln; CRC-/Busfehler nur aus realer Logbeobachtung |
+| M2 | Kurze zusammenhaengende Messreihe (ca. 10 min, 12 Bit, ~2-s-Takt, etwa 300 Zyklen je Sensor; bei Auffaelligkeiten gezielt verlaengern): alle drei Temperaturen plausibel, Zeitstempel fortschreitend, keine eingefrorenen Werte | Zykluszeit aus Zeitstempeln; CRC-/Busfehler nur aus realer Logbeobachtung |
 | M3 | Je **ein** fester Sensor (Luft, dann Kuehlkoerper) kurz trennen und wieder anschliessen. Beide teilen GPIO32; beim Trennen kann der gemeinsame Bus kurzzeitig **insgesamt** ausfallen | Kriterium: korrekte Fehler-/Nicht-Ok-Reaktion (kein gueltiger Altwert) und **keine vertauschte Identitaet**; ein unveraendert gueltiger zweiter Messwert waehrend der Busstoerung wird **nicht** verlangt. Wiederkehr mit gleichem ROM und richtiger Rolle |
 | M4 | Produktfuehler einmal abziehen und wieder anstecken | `Missing`/Wiederkehr korrekt, kein ROM-Tausch |
 | M5 | Ein koordinierter Neustart | Persistierte Bindung/Rollen identisch, ROM-Liste unveraendert |
@@ -161,13 +162,22 @@ Independent Review auf Owner-Anweisung.
   fuehrt zu einem engen Entscheidungsdelta, nicht zu einem geratenen Releasewert.
 - Das Release-Image zeigt keine Temperaturen (siehe §5); das ist beabsichtigt.
 
-## 8. Offene Owner-Entscheidungen
+## 8. Owner-Entscheidungen
 
-- **D1:** Freigabe dieser Plan-SHA.
-- **D2:** Probe-Startwerte `stackBytes=6144`, `priority=2`, `coreId=1` (nur
-  Bring-up, als Probe gekennzeichnet) – freigeben oder andere Werte nennen.
-- **D3:** Release-Nachweis auf Task-Start, geladene Bindung und stabilen Lauf
-  begrenzt (Ownervorgabe im Planreview); keine Release-Temperaturausgabe.
-- **D4:** Gilt fuer das Flashen der Probe-/Release-Images in #190 dieselbe
-  Ownerentscheidung "DEV-Image ohne Backup" wie in PR #214?
-- **D5:** Dauer der Messreihe M2 (Vorschlag ca. 2 min).
+- **D1:** Planrichtung genehmigt; **formelle Freigabe der exakten Plan-SHA
+  ausstehend.**
+- **D2 (entschieden):** `Ds18b20TaskBudget{stackBytes=6144, priority=2, coreId=1}`
+  ausschliesslich als vorlaeufiges **Bring-up-PROBE-Budget**. Kein freigegebenes
+  Produktbudget; die Release-Konstante `kApprovedDs18b20TaskBudget` bleibt bis zur
+  realen Messung und spaeteren Ownerfreigabe unveraendert gesperrt.
+- **D3 (entschieden):** Keine neue Temperatur-/ROM-Ausgabe im Release-Image.
+  Release-Nachweis zunaechst auf Start, geladene Bindung und stabilen Lauf
+  begrenzt; kein eigenstaendiger Nachweis frischer Temperaturen im Release.
+- **D4 (entschieden):** Fuer den Entwicklungsaufbau ist App-only-Flash ohne
+  zusaetzliches App-Backup erlaubt, sofern Rueckfallweg bekannt und
+  Image-Verifikation gegeben ist. Die **separate Freigabe des konkreten
+  Flash-Vorgangs** bleibt erforderlich; kein Erase, keine Aenderung von
+  NVS/State-Store, Bootloader oder Partitionstabelle.
+- **D5 (entschieden):** Messreihe M2 ca. 10 min (etwa 300 Zyklen je Sensor), bei
+  Auffaelligkeiten gezielt verlaengern. Die Reduktion gegenueber den historischen
+  1000 Zyklen/10 Neustarts bleibt bestehen.
