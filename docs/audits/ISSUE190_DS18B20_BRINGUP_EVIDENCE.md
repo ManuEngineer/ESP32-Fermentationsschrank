@@ -110,13 +110,40 @@ Temperatur, `air`/`heatsink` unberuehrt; angesteckt -> `Ok`, ROM `CF…5328` unv
 `record_air`/`record_heatsink` identisch, ROM-Liste 2+1 unveraendert, alle Kanaele `Ok`.
 
 **M6 – Ressourcen: `PASS` (Messwerte, kein Budget).** Ueber die gesamte Sitzung
-(122 Messpunkte, ca. 20 min): Task-Stack-HWM (Minimum freier Stack) 4768 B von 6144 B, d. h.
-hoechster beobachteter Stackbedarf ca. 1376 B; freier Heap min. 30 532 B; groesster freier
-Block min. 22 528 B; Heartbeat-Abstand der Hauptschleife max. 1343 ms bei Soll 1000 ms
+(122 `ISSUE190_RESOURCES`-Stichproben im 10-s-Takt, ca. 20 min): Task-Stack-HWM
+(Minimum freier Stack) 4768 B von 6144 B, d. h. hoechster beobachteter Stackbedarf ca.
+1376 B; **kleinster in diesen Stichproben beobachteter aktueller freier Heap 30 532 B** und
+**kleinster beobachteter groesster freier 8-Bit-Block 22 528 B** (Stichproben-Minima, **nicht**
+der absolute Systemtiefstwert, siehe Heap-Vergleich unten); Heartbeat-Abstand der Hauptschleife max. 1343 ms bei Soll 1000 ms
 (keine Blockade durch Busarbeit); kein Panic/WDT. RMT-Nutzung nicht gemessen
 (aus der Konfiguration: zwei Busse). Nicht ausgeloest wurden `CrcFault`/`BusFault`
 (nur `MissingSample` durch Abziehen); der Stackbedarf dieser Fehlerpfade ist damit
 **nicht** gemessen.
+
+**Heap-/Block-Vergleich am Taskstart (Vorher/Nachher, `NOT_PROVEN` fuer isolierte Taskkosten).**
+Aus denselben Bootsequenzen (je Boot: `app_main: resources: point=after_ui_init` unmittelbar
+vor `ds18b20Sampler.start()` und erstes `ISSUE190_RESOURCES` nach `ds18b20 sampler: started`;
+Tick = ESP-Log-Zeit in ms seit Boot):
+
+| Boot (Log) | Vorher `after_ui_init` (Tick): frei / min. frei / groesster Block | `sampler: started` (Tick) | Nachher erstes `ISSUE190_RESOURCES` (Tick): frei / groesster Block | Differenz frei / Block |
+|---|---|---|---|---|
+| Flash-Smoke (`boot190`) | 2016: 45 940 / 37 288 / 43 008 | 2426 | 2676: 31 260 / 23 552 | −14 680 / −19 456 |
+| M1 (Boot nach `bind`, `m1b`) | 2026: 45 916 / 37 260 / 43 008 | 2426 | 2686: 31 228 / 23 552 | −14 688 / −19 456 |
+| M2-Vorlauf (Boot, `m3` erster Boot) | 2416: 45 932 / 37 284 / 43 008 | 2486 | 2736: 31 256 / 29 696 | −14 676 / −13 312 |
+| M2 (Boot nach versehentlichem EN-Reset) | 2016: 45 752 / 37 284 / 43 008 | 2416 | 2696: 31 244 / 22 528 | −14 508 / −20 480 |
+| M5 (Neustart) | 2136: 45 752 / 37 284 / 43 008 | 2476 | 2716: 31 252 / 23 552 | −14 500 / −19 456 |
+
+Zwischen den beiden Logs liegen 250–340 ms; in diesem Fenster laufen parallel Netzwerkaufbau
+(`network_state=ConnectingHome`), Display/UI und weitere Allokationen. Die Differenz (ca.
+14,5–14,7 kB frei) ist daher **keine isolierte Taskkostenmessung**; der Anteil des
+Sampler-Tasks (Stack 6144 B, TCB, zwei RMT-Busse, Kanalquellen) ist aus diesen Logs nicht
+trennbar. `NOT_PROVEN`: Heap-Verbrauch des Sampler-Tasks isoliert; fehlender Wert: ein
+`logResources` unmittelbar vor und nach `start()` ohne parallele Netzwerkallokation (nicht
+vorhanden, keine Firmwareaenderung in diesem Delta). Die absoluten Systemtiefstwerte
+(`minimum_free_heap_bytes` aus `app_main: resources`) liegen je Boot bei 19 448 B
+(Flash-Smoke), 21 660 B (M1), 21 524 B (M2) und 21 748 B (M5), also **unter** den
+10-s-Stichprobenminima; sie fallen in die Netzwerkphase (`stable_home_wifi`/`periodic_30s`/
+`idle_120s`), nicht in eine Taskstart-Messung.
 
 ## Status
 
