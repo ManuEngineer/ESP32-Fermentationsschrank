@@ -1,8 +1,8 @@
-# Issue #218 – R1-Regelungs- und Aktorkette integrieren (Plan Revision 2)
+# Issue #218 – R1-Regelungs- und Aktorkette integrieren (Plan Revision 3)
 
 Status: **Plan zur Review und Ownerfreigabe der exakten Plan-Commit-SHA.** Keine
 Implementierung, kein Image, kein Flash, keine reale Schaltung vor Freigabe.
-Baseline: `origin/main` `5bbdef8173073c92c0737ed72d2193457dff6136` (PR #217 gemergt). Rev. 2 korrigiert nur C2/C4-Ownership und C3-Freigabeevidenz (Korrekturauftrag PR #219).
+Baseline: `origin/main` `5bbdef8173073c92c0737ed72d2193457dff6136` (PR #217 gemergt). Rev. 2 korrigierte C2/C4-Ownership und C3-Freigabeevidenz, Rev. 3 nur den endgueltigen Abbau (Luefter-Nachlauf) und die PI-Parameterherkunft (Korrekturauftraege PR #219).
 `ACTUATOR_RELEASE=NO`, `REAL_PELTIER_TEST=NOT_RUN`. Auftrag: Owner-Datei
 `ESP32_Issue218_Codex_Integrationsauftrag.md`, Issue #218.
 
@@ -55,9 +55,25 @@ auch nicht. Daher gilt: **`FermentationApplication` besitzt die gesamte Regelket
 intern**; `app_main` uebergibt nur die drei bereits vorhandenen, von `app_main`
 besessenen abstrakten Sinks (ADR-013, nur Ports aus `device_platform`).
 
-- **Anschluss:** neue schmale Methode `FermentationApplication::attachActuationPorts(
-  IBidirectionalActuatorSink& peltier, IBinaryOutputSink& outerFan, IBinaryOutputSink&
-  innerFan)`, aufrufbar **vor** `begin()`; speichert nur Referenzen (Zeiger). Nach
+- **Anschluss und Parameterherkunft (Rev. 3):** neue schmale Methode
+  `FermentationApplication::attachActuationPorts(IBidirectionalActuatorSink& peltier,
+  IBinaryOutputSink& outerFan, IBinaryOutputSink& innerFan, ControlChainParameters
+  parameters)`, aufrufbar **vor** `begin()`; speichert die Referenzen (Zeiger) und die
+  Parameter als Wert. `ControlChainParameters{TemperatureControlParameters pi;
+  IntegratorTransitionPolicy policy;}` ist die **einzige** Injektionsstelle fuer den
+  `TemperatureController`; die Application konstruiert damit genau eine Instanz
+  (`TemperatureController(pi, policy)`), kein verstecktes Default, kein zweites PI-Objekt.
+  **Produkt (`app_main`)** uebergibt explizit eine benannte Konstante
+  `kControlChainParametersUnconfiguredUntilIssue35 = {}`: alle Nullwerte werden vom
+  bestehenden `classifyTemperatureControlParameters` als `Unconfigured` erkannt
+  (`temperature_control.cpp` L119/L194–200 → `Unavailable/NoCommissioning`, keine
+  `ControlRequest`) und bleiben fail-closed bis #35 reale Werte freigibt. **Hosttest:**
+  explizit gueltige, als Testwerte markierte `ControlChainParameters` auf **demselben**
+  Pfad; ein `ActuatorPlannerParameters`-Fixture geht ueber den bestehenden Run-Snapshot-
+  Producer (Konfigurationsdokument/`FreshStartSnapshotProvenance`), `SensorQualityConfig`-
+  Fixtures nur im Test fuer reale `SensorQualityPipeline`-Snapshots, die ueber
+  `publishOwningRuntimeEvidence` eingehen. Keine neue Konfigurationsarchitektur, kein
+  Test-`Allowed`. Die Referenzen bleiben bis zum Abbau gueltig. Nach
   erfolgreichem `begin()` ist ein Aufruf wirkungslos abgelehnt. Ohne Aufruf (alle Tests,
   #29-Probe, Bring-up-Harnesses) bleibt das Verhalten bytegleich unveraendert.
   Lebensdauer: die Sinks in `app_main` (L609–L650) sind vor `application` (L698)
@@ -69,11 +85,19 @@ besessenen abstrakten Sinks (ADR-013, nur Ports aus `device_platform`).
   `TemperatureControlApplicationOrchestrator` mit Referenz auf `*runPersistenceCoordinator_`;
   ein `unique_ptr`, nur wenn Ports angeschlossen). Planner startet ohne Run-Snapshot
   (`Unconfigured`, Ausgaenge AUS).
-- **Abbau (alle Pfade):** an jeder Stelle, an der der Coordinator zurueckgesetzt wird
+- **Endgueltiger Abbau (Rev. 3, getrennt vom normalen Lauf-STOP).** Der normale
+  Lauf-STOP (`forceStop` an Lifecycle-Boundaries) behaelt den zulaessigen Aussen-/
+  Innenluefter-Nachlauf und bleibt **unveraendert**. Der endgueltige Abbau der Kette
   (`begin()`-Wiederholung ~L787, Fehlerpfade/`beginPersistent()` ~L2155/2156, Destruktor)
-  zuerst `planner.forceStop` + `driver.apply` (alle drei Sinks AUS), dann Verbund
-  zerstoeren, **danach** Coordinator. So sind Referenzen nie dangling; ein fruehzeitiger
-  Initialisierungsfehler hinterlaesst nie eine aktive Kette.
+  ist ein anderer Fall, weil nach Zerstoerung des Planners kein Nachlauf mehr beendet
+  werden kann. Reihenfolge: (1) laufende Regelung stoppen (`planner.forceStop` +
+  `driver.apply`, Peltier Idle), (2) **danach** ueber den bestehenden Driver ein
+  explizites `ActuatorPlanTickResult{status=Idle, appliedDirection=Idle,
+  outerFanEnabled=false, innerFanEnabled=false}` anwenden (Peltier AUS, beide Luefter AUS;
+  keine neue GPIO-Operation, keine neue Aktor-API), (3) Verbund zerstoeren, (4)
+  **danach** Coordinator. So sind Referenzen nie dangling, ein fruehzeitiger
+  Initialisierungsfehler hinterlaesst nie eine aktive Kette, und kein Luefter bleibt nach
+  dem Abbau eingeschaltet. Der Destruktor nutzt denselben Pfad.
 - **Persistenzpfad unveraendert:** `beginCommandOperation`/`commandCandidate`/
   `persistBorrowedCommand` und `CommandDecisionView` bleiben privat bei der Application;
   kein zweiter Coordinator, keine oeffentlichen Run-/Speicherzugriffe, keine Kopie.
@@ -136,7 +160,8 @@ STOP/Fault/Recovery enden die Freigabe sofort ueber die bestehenden Boundaries
 bestehender Nachlauflogik AUS). Watchdog/Mindestzeiten/Totzeit unveraendert (Planner).
 
 **C4 – Composition-Root.** `app_main.cpp` ruft nur `application.attachActuationPorts(
-peltierBridge, outerFanOutput, innerFanOutput)` vor `application.begin()` und den
+peltierBridge, outerFanOutput, innerFanOutput,
+kControlChainParametersUnconfiguredUntilIssue35)` vor `application.begin()` und den
 Sensor-Zusammenbau aus C1 in der Schleife auf; `ActuatorPlanner`/`ActuatorPlanSinkDriver`
 erscheinen **nicht** in `app_main.cpp`. `OUT3` (Summer) und `OUT4` (Reserve) bleiben
 unverbunden. Guard (G6): `setForward(`/`setReverse(` bleiben in `main/` verboten; die
@@ -152,7 +177,8 @@ Neuer Hosttest `test/test_r1_control_chain_integration` ueber die **echte**
 Evidenzeingang; **kein** fixture-seitiges `Allowed`, der produktive Evidenzbauer wird
 durchlaufen):
 
-- **T1 positiv:** expliziter Start (`Applied`) + frische Pflichtsensoren (Luft,
+- **T1 positiv** (mit gueltigen Fixture-`ControlChainParameters` ueber `attachActuationPorts`,
+  Planner-Snapshot ueber den Run-Snapshot-Producer): expliziter Start (`Applied`) + frische Pflichtsensoren (Luft,
   Kuehlkoerper) → Regler → Planner → Aussenluefter EIN **vor genau einer**
   Brueckenrichtung; **mindestens zwei aufeinanderfolgende positive Ticks desselben
   committed Runs** mit korrekter Feedback-Weitergabe (zweiter Tick erhaelt das Feedback
@@ -160,9 +186,17 @@ durchlaufen):
   Recovery → Bruecke sofort AUS/gesperrt, Latch geloescht, Nachlauf/Totzeit unveraendert.
 - **T2 negativ (parametrisiert):** Pflichtsensor fehlt/`Stale`/`Failed`; Aussenluefter-EIN
   verweigert; unsicherer Boot-/Run-/Persistenzzustand; Request-Watchdog; Neustart
-  (`begin()`) und neuer Run mit altem `Applied` → Peltier AUS/gesperrt.
-- **T3 Produkt-Default:** Kette angeschlossen, aber ohne Konfigurationswerte → alle Sinks AUS,
-  kein `Allowed`; ohne `attachActuationPorts` Verhalten unveraendert; `begin()`-Wiederholung
+  (`begin()`) und neuer Run mit altem `Applied` → Peltier AUS/gesperrt. Die
+  `loadDisposition`-Normalisierung aus der Latch-Provenienz wird hier mit Live-Run-
+  Identitaet, aktuellem Persistenz-/Bootzustand und Invalidierung geprueft (kein
+  Rueckgriff auf alte Evidenz). `RunStarted` aus Abbruch-und-Kuehlen/Abschluss-mit-
+  Kuehlung wird gegen die normale STOP-Semantik getrennt geprueft (Lifecycle-Effekte
+  nicht pauschal gleichgesetzt).
+- **T3 Produkt-Default:** Kette mit `kControlChainParametersUnconfiguredUntilIssue35`
+  angeschlossen → `Unavailable/NoCommissioning`, alle Sinks AUS, kein `Allowed`;
+  **Abbau:** Luefter war aktiv / Nachlauf noch offen → `begin()`-Wiederholung bzw.
+  Destruktor bzw. Initialisierungsfehler → beide Luefter und Bruecke AUS; der normale
+  Lauf-STOP mit Nachlauf bleibt davon getrennt unveraendert; ohne `attachActuationPorts` Verhalten unveraendert; `begin()`-Wiederholung
   und Initialisierungsfehler lassen alle Sinks AUS (Lebensdauer/Abbau).
 - Regression nur betroffener Bereiche: `test_actuator_planner`, `test_actuation_interlock`,
   `test_temperature_control*`, `test_run_persistence_coordinator`, `test_peltier_composition_guard`,
