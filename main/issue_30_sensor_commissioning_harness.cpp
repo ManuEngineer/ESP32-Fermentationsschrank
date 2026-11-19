@@ -3,10 +3,15 @@
 #if defined(APP_ISSUE_30_SENSOR_COMMISSIONING)
 
 #include <cinttypes>
+#include <cstdint>
+#include <cstdio>
 #include <string_view>
 
 #include "driver/uart.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "sensor_commissioning.hpp"
 
 namespace fermentation::issue_30_commissioning {
@@ -15,6 +20,28 @@ namespace {
 constexpr char kTag[] = "issue30_commissioning";
 // Muss die UART-Hardware-FIFO (128 Byte) uebersteigen (uart_driver_install).
 constexpr int kUartRxBufferBytes = 256;
+constexpr uint64_t kReadingPeriodMs = 2000U;
+constexpr uint64_t kResourcePeriodMs = 10000U;
+constexpr uint8_t kChannelCount = 3U;
+constexpr const char* kChannelNames[kChannelCount] = {"air", "heatsink",
+                                                      "product"};
+
+const char* statusName(device_platform::TemperatureSampleStatus status) {
+    using S = device_platform::TemperatureSampleStatus;
+    switch (status) {
+        case S::Ok:
+            return "Ok";
+        case S::BusFault:
+            return "BusFault";
+        case S::CrcFault:
+            return "CrcFault";
+        case S::MissingSample:
+            return "MissingSample";
+        case S::KnownInvalidMeasurement:
+            return "KnownInvalidMeasurement";
+    }
+    return "Unknown";
+}
 
 void logRom(const char* label, device_platform::OneWireRom rom) {
     ESP_LOGI(kTag, "ISSUE30_ROM %s=%016" PRIX64, label,
@@ -56,7 +83,57 @@ void Harness::start() noexcept {
              "note=binding_takes_effect_after_restart");
 }
 
+void Harness::logReadings() noexcept {
+    const uint64_t nowMs = time_.monotonicMillis();
+    for (uint8_t channel = 0U; channel < kChannelCount; ++channel) {
+        const auto reading = sampler_.source(channel).read();
+        char temperature[24] = "-";
+        if (reading.celsius().has_value()) {
+            std::snprintf(temperature, sizeof(temperature), "%.3f",
+                          *reading.celsius());
+        }
+        char rom[20] = "-";
+        if (reading.identity().has_value()) {
+            std::snprintf(rom, sizeof(rom), "%016" PRIX64,
+                          reading.identity()->value());
+        }
+        const uint64_t timestamp = reading.monotonicTimestampMs();
+        ESP_LOGI(kTag,
+                 "ISSUE190_READING channel=%s status=%s celsius=%s rom=%s "
+                 "timestamp_ms=%" PRIu64 " age_ms=%" PRIu64,
+                 kChannelNames[channel], statusName(reading.status()),
+                 temperature, rom, timestamp,
+                 nowMs >= timestamp ? nowMs - timestamp : 0U);
+    }
+}
+
+void Harness::logResources() noexcept {
+    const TaskHandle_t task = xTaskGetHandle("ds18b20_sampler");
+    if (task == nullptr) {
+        ESP_LOGI(kTag, "ISSUE190_RESOURCES task=absent");
+        return;
+    }
+    ESP_LOGI(kTag,
+             "ISSUE190_RESOURCES task_stack_hwm_bytes=%u free_heap=%u "
+             "largest_free_block=%u",
+             static_cast<unsigned>(uxTaskGetStackHighWaterMark(task)),
+             static_cast<unsigned>(esp_get_free_heap_size()),
+             static_cast<unsigned>(
+                 heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+}
+
 void Harness::update() noexcept {
+    // Periodische Ausgabe VOR der UART-Schleife, die bei leerem Puffer per
+    // return verlassen wird: sie laeuft auch ohne UART-Eingabe.
+    const uint64_t nowMs = time_.monotonicMillis();
+    if (nowMs >= nextReadingMs_) {
+        nextReadingMs_ = nowMs + kReadingPeriodMs;
+        logReadings();
+    }
+    if (nowMs >= nextResourceMs_) {
+        nextResourceMs_ = nowMs + kResourcePeriodMs;
+        logResources();
+    }
     for (std::size_t attempts = 0U; attempts < 64U; ++attempts) {
         size_t buffered = 0U;
         if (uart_get_buffered_data_len(UART_NUM_0, &buffered) != ESP_OK ||

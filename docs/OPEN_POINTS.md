@@ -74,14 +74,17 @@ neues RTC-Issue oder einen RTC-PR in #136.
 - [ ] Pull-ups und Leitungslaengen aus Verdrahtungs-/Board-SSOT bestimmen;
       Busfunktion, ROM, CRC, Hot-Plug und Fehlerreaktion pruefen, ohne ein
       generelles Spannungs- oder Pegelmess-Gate einzufuehren
-- [ ] ROM-Adressen der festen Sensoren dokumentieren
+- [x] ROM-Adressen der festen Sensoren dokumentieren (Issue #190, H5; Hardware-Evidence
+      `docs/audits/ISSUE190_DS18B20_BRINGUP_EVIDENCE.md`, 2026-11-19): Luft (GPIO32)
+      `A60000006C724828`, Kuehlkoerper (GPIO32) `F90000006C4C6228`, Produkt (GPIO33)
+      `CF0000006C415328`
 - [ ] Produktfuehleranschluss waehlen; M8-3, GX12-3 oder andere verriegelbare
       3-polige Loesung vergleichen
 - [ ] Verpolungs-, Fehlsteck- und ESD-Schutz des externen Anschlusses pruefen
 - [ ] Lebensmitteltauglichkeit und Reinigbarkeit des Produktfuehlers bestaetigen
 - [ ] Hot-Plug praktisch testen
 
-Nachverfolgung: #30
+Nachverfolgung: #30 (Software, gemergt); Hardware-Folgeissue #190
 
 ### Display und Touch
 

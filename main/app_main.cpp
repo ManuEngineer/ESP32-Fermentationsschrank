@@ -798,8 +798,26 @@ extern "C" void app_main(void) {
     static device_platform_esp_idf::Ds18b20Sampler ds18b20Sampler(timeSource);
     {
         const auto commissioning = application.sensorCommissioning();
+#ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
+        // PROBE-Budget (nur Bring-up, Issue #190, Plan D2): vorlaeufiger
+        // Messwert-Startpunkt, KEIN freigegebenes Produktbudget. Das
+        // Release-Profil nutzt ausschliesslich kApprovedDs18b20TaskBudget.
+        static constexpr device_platform_esp_idf::Ds18b20TaskBudget
+            kProbeDs18b20TaskBudget{6144U, 2U, 1};
+        ESP_LOGW(kTag,
+                 "ds18b20 PROBE budget (not approved for product): "
+                 "stack=%u priority=%u core=%d",
+                 static_cast<unsigned>(kProbeDs18b20TaskBudget.stackBytes),
+                 static_cast<unsigned>(kProbeDs18b20TaskBudget.priority),
+                 static_cast<int>(kProbeDs18b20TaskBudget.coreId));
+        const std::optional<device_platform_esp_idf::Ds18b20TaskBudget>
+            ds18b20Budget = kProbeDs18b20TaskBudget;
+#else
+        const auto& ds18b20Budget =
+            device_platform_esp_idf::kApprovedDs18b20TaskBudget;
+#endif
         const auto samplerStart = ds18b20Sampler.start(
-            device_platform_esp_idf::kApprovedDs18b20TaskBudget,
+            ds18b20Budget,
             fermentation::toChannelBindings(commissioning.has_value()
                                                 ? commissioning->record
                                                 : std::nullopt),
@@ -811,7 +829,7 @@ extern "C" void app_main(void) {
     }
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
     fermentation::issue_30_commissioning::Harness issue30Harness(
-        application, ds18b20Sampler);
+        application, ds18b20Sampler, timeSource);
     issue30Harness.start();
 #endif
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
