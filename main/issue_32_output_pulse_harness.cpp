@@ -61,7 +61,8 @@ void Harness::finishPulse(const char* result, const char* reason) noexcept {
     if (active_ == nullptr) return;
     const bool off = active_->setEnabled(false);
     ESP_LOGI(kTag, "ISSUE32_PULSE channel=%s state=OFF result=%s reason=%s",
-             activeName_, off ? result : "FAIL", off ? reason : "DISABLE_FAILED");
+             activeName_, off ? result : "FAIL",
+             off ? reason : "DISABLE_FAILED");
     active_ = nullptr;
     activeName_ = nullptr;
 }

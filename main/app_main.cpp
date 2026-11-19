@@ -817,7 +817,7 @@ extern "C" void app_main(void) {
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
     // Manual bring-up-only HIGH=ON test of the two test loads (OUT1, OUT4).
     fermentation::issue_32_output_pulse::Harness issue32Harness(innerFanOutput,
-                                                               reserveOutput);
+                                                                reserveOutput);
     issue32Harness.start();
 #endif
 
