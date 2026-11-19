@@ -97,7 +97,7 @@ OUT3/GPIO26 uebernehmen die Polaritaet als begruendete Gleichheitsannahme, nicht
 als Einzelmess-PASS. `safe_boot_level` und `external_bias` bleiben unbestaetigt.
 Die Rollenzuordnung ist unveraendert: OUT1/16 Innenluefter, OUT2/17
 Aussenluefter, OUT3/26 Summer, OUT4/27 Reserve (im Endaufbau unbelegt). Luefter
-an OUT1 und OUT4 im aktuellen Testaufbau sind temporaere Funktionspruefasten.
+an OUT1 (Innenluefter) und OUT2 (Aussenluefter) sind laut Ownerangabe die realen Endgeraete (zuvor am Testaufbau an OUT1/OUT4 betrieben; das Geraet von OUT4 wurde nach OUT2 umgesteckt, OUT4 bleibt unbelegt); `HW-32-04` (OUT1) und `HW-32-05` (OUT2) sind je ein Owner-beobachteter AUS→EIN→AUS-Puls.
 Die Firmware initialisiert alle vier Kanaele beim Start auf AUS; die Ausgaenge
 sind noch nicht mit Planner/Driver verbunden (keine geregelte Luefterfunktion).
 
