@@ -69,15 +69,62 @@ Panic/WDT/Abort; einzige Warnungen: WiFi-Authmode und LCD-Callback (vorbestehend
 Temperatur (fail-closed). Der Produktfuehler liefert ohne Binding plausible Werte
 (ca. 22,2 °C). **Vorlaeufige Beobachtung, keine Messreihe:** Stack-HWM ca. 4,8 kB
 von 6144 B, groesster freier Block 23 552 B; diese Werte gehen nicht in ein
-Produktbudget ein (C3 erst nach M1–M6).
+Produktbudget ein; belastbare Werte siehe M6 unten (C3 braucht Ownerentscheid).
+
+## Hardwaremessung M1–M6 (2026-11-19, gleiches Image `e0da8ae`, Owner am Geraet)
+
+Messaufbau: ein Konsolen-Logger hielt den Port durchgehend offen (kein Reset ausser
+den genannten); Rohlogs nicht veroeffentlicht (enthalten Netzwerkdaten). Zwischenfaelle:
+(1) nach ca. 90 s eines ersten M2-Versuchs fiel die FT232-Verbindung aus (Owner: Kabel
+defekt, danach verloetet); der Versuch ist **nicht** gewertet. (2) Waehrend des
+wiederholten M2 loeste der Owner versehentlich einen kurzen EN-Reset aus; ausgewertet
+wird ab dem Neustart. (3) Das erste `bind` ohne Praefix `ds18b20` wurde mit `REJECTED`
+abgelehnt (Syntax `ds18b20 bind air=<ROM> heatsink=<ROM>`), danach PASS.
+
+**M1 – ROM-Report und Zuordnung: `PASS`.** `ds18b20 report`: GPIO32 (expected_rom_bus)
+`count=2`: `A60000006C724828`, `F90000006C4C6228`; GPIO33 (single_device_bus) `count=1`:
+`CF0000006C415328`; kein Overflow, kein Bindungskonflikt. Vorlaeufiges
+`ds18b20 bind air=A60000006C724828 heatsink=F90000006C4C6228`, ein Neustart, Binding
+geladen (`engine_binding_valid=1`). Der Owner hatte die drei Fuehler auf unterschiedliche
+Temperaturen gebracht: air-Kanal 43,1 °C, heatsink-Kanal 4,9 °C, product 22,1 °C;
+Ownerzuordnung 43,1 °C = Innenluft, 4,9 °C = Heatsink entspricht dem vorlaeufigen Binding
+(kein Tausch). **Endgueltige Zuordnung:** air = `A60000006C724828`, heatsink =
+`F90000006C4C6228`, product = `CF0000006C415328`.
+
+**M2 – Messreihe: `PASS`.** Ab Neustart ca. 10,3 min: je Kanal 308 Zyklen, alle `Ok`,
+Zeitstempel alle verschieden, Zykluszeit 1895/2000/2160 ms (Min/Median/Max), Alter max.
+1,2 s, ROM je Kanal konstant. Temperaturen: air 29,75–32,56 °C (sinkend), heatsink
+6,63–7,19 °C, product 22,81–22,88 °C. Keine CRC-/Busfehler, kein Panic/WDT, keine
+`E`/`W`-Zeilen.
+
+**M3 – festen Fuehler trennen: `PASS`.** Luft: abgezogen -> `air=MissingSample` ohne
+Temperatur (ROM-Feld bleibt `A6…4828`), `heatsink` und `product` blieben `Ok` mit eigenem
+ROM; wieder angesteckt -> `air=Ok`, gleicher ROM. Heatsink: spiegelbildlich dasselbe
+(`heatsink=MissingSample`, `air`/`product` `Ok`; Wiederkehr `Ok`, gleicher ROM). Kein
+gueltiger Altwert, keine vertauschte Identitaet.
+
+**M4 – Produktfuehler Hot-Plug: `PASS`.** Abgezogen -> `product=MissingSample` ohne
+Temperatur, `air`/`heatsink` unberuehrt; angesteckt -> `Ok`, ROM `CF…5328` unveraendert.
+
+**M5 – koordinierter Neustart: `PASS`.** Ein EN-Reset: `engine_binding_valid=1`,
+`record_air`/`record_heatsink` identisch, ROM-Liste 2+1 unveraendert, alle Kanaele `Ok`.
+
+**M6 – Ressourcen: `PASS` (Messwerte, kein Budget).** Ueber die gesamte Sitzung
+(122 Messpunkte, ca. 20 min): Task-Stack-HWM (Minimum freier Stack) 4768 B von 6144 B, d. h.
+hoechster beobachteter Stackbedarf ca. 1376 B; freier Heap min. 30 532 B; groesster freier
+Block min. 22 528 B; Heartbeat-Abstand der Hauptschleife max. 1343 ms bei Soll 1000 ms
+(keine Blockade durch Busarbeit); kein Panic/WDT. RMT-Nutzung nicht gemessen
+(aus der Konfiguration: zwei Busse). Nicht ausgeloest wurden `CrcFault`/`BusFault`
+(nur `MissingSample` durch Abziehen); der Stackbedarf dieser Fehlerpfade ist damit
+**nicht** gemessen.
 
 ## Status
 
 | Schritt | Status |
 |---|---|
 | Flash Probe-Image, Boot-Smoke | `PASS` |
-| M1–M6 (ROM-Report, vorlaeufiges Binding, Erwaermung, 10-min-Reihe, Hot-Plug, Ressourcen) | `NOT_RUN` |
+| M1–M6 (ROM-Report, vorlaeufiges Binding, Zuordnung, 10-min-Reihe, Hot-Plug, Neustart, Ressourcen) | `PASS` (siehe oben) |
 | C3 Produktbudget, Release-Nachweis | `NOT_RUN` |
 
 **Endzustand Board:** laeuft das Probe-Image (Source `e0da8ae`, Bring-up, nicht
-Release), unveraenderte Partitionen, keine Bindung geschrieben, Aktoren getrennt.
+Release), unveraenderte Partitionen; **persistierte Bindung geschrieben** (air `A60000006C724828`, heatsink `F90000006C4C6228`); alle drei Sensoren angeschlossen, Aktoren getrennt.
