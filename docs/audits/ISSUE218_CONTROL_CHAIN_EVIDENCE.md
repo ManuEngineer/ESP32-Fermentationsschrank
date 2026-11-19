@@ -34,11 +34,12 @@ Code-Stand: `e54796c`. Nur digitale Nachweise; kein Flash, keine Hardware, keine
   `test_control_context`, `test_target_qualification`, `test_sensor_quality_pipeline`, `test_local_touch_ui`,
   `test_display_language_application`, `test_run_commands`, `test_sensor_selection`, `test_shared_enable_bridge_sink`,
   `test_sensor_actuator_mocks`, `test_ui_steady_state_allocations`, `test_process_state_machine`, `test_ds18b20_sampling`.
+- Builder-Self-Check `scripts/run_pre_ready_gates.sh self-check` (clang-format/clang-tidy 21): `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` (erster Lauf FAIL wegen Special-Member-Regel in `ControlChain` und Kognitiv-Komplexitaet 26>25 in `beginAuthorizedFactoryReset`, beides in `4614583` behoben).
 - `scripts/check_architecture_boundaries.py`: PASS. `clang-format` (esp-clang 21.1.3) auf allen geaenderten Dateien: PASS.
 - Mutationsproben: Frische-Pflicht entfernt -> SIM-218-02 (stale) FAIL; Latch-Loeschung entfernt -> SIM-218-01/-06 FAIL;
   finales Idle entfernt -> Abbau-Test FAIL. Nach Rueckbau jeweils wieder PASS.
 - ESP-IDF-Builds `esp32_bringup` und `esp32_release` (`scripts/build_esp_idf_profiles.py all --require-clean-source-tree`): PASS,
-  0 Compiler-Warnungen; Release-App `1 805 184` B (41 % der kleinsten App-Partition frei), Bring-up `1 815 680` B.
+  0 Compiler-Warnungen; Release-App `1 805 120` B (41 % der kleinsten App-Partition frei), Bring-up `1 815 600` B (Stand Code-HEAD `4614583`, nach den clang-tidy-Korrekturen neu gebaut).
 - Statische Stackframes (Release, `-fstack-usage`): `tickControlChain` 560 B, `evaluateTemperatureControl` 640 B,
   `TemperatureController::evaluate` 384 B, `ControlSensorEvidenceProducer::sample` 736 B, `handoffControlChain` 96 B;
   neue Kette in der Hauptschleife < 3 KB statisch, Main-Task-Stack 24 576 B. **Keine** Laufzeitmessung (kein Flash).
