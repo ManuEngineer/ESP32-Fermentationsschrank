@@ -28,8 +28,9 @@ struct Ds18b20TaskBudget {
 // Vom Owner freigegebenes Task-Budget (Issue #190, C3): Stack 4096 B,
 // Prioritaet 2, Core 1. Grundlage: hoechster beobachteter Stackbedarf 1376 B
 // bei 6144 B Probe-Budget (Bring-up-Messung, docs/audits/
-// ISSUE190_DS18B20_BRINGUP_EVIDENCE.md, M6); die Fehlerpfade CrcFault/BusFault
-// sind nicht gemessen und durch die Reserve abgedeckt. Wird das Budget wieder
+// ISSUE190_DS18B20_BRINGUP_EVIDENCE.md, M6). Die Fehlerpfade CrcFault/BusFault
+// sind nicht gemessen; dafuer ist Reserve vorgesehen, der Release-Hardware-
+// Nachweis steht aus. Wird das Budget wieder
 // entfernt (std::nullopt), erzeugt start() weder Task noch Bus und alle Kanaele
 // bleiben MissingSample (fail-closed).
 inline constexpr std::optional<Ds18b20TaskBudget> kApprovedDs18b20TaskBudget =
