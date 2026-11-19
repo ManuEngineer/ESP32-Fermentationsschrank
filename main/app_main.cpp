@@ -23,6 +23,7 @@
 #include "esp_time_zone_resolver.hpp"
 #include "nvs_flash.h"
 #include "nvs_state_store.hpp"
+#include "control_sensor_evidence.hpp"
 #include "fermentation_application.hpp"
 #include "fermentation_ui_lvgl_renderer.hpp"
 #include "fermentation_ui_press_dispatcher.hpp"
@@ -696,6 +697,21 @@ extern "C" void app_main(void) {
         ESP_LOGW(kTag, "SNTP initialization failed; continuing fail-closed");
     }
     fermentation::FermentationApplication application;
+#if !defined(APP_ISSUE_32_OUTPUT_PULSE) && \
+    !defined(APP_ISSUE_33_BRIDGE_IDLE_TEST)
+    // R1 control chain (Issue #218): the application owns planner, driver and
+    // regulator; only the abstract ports and the single regulator parameter
+    // injection point are handed over, before begin(). The parameters stay
+    // the named unconfigured constant until #35, so no ControlRequest and no
+    // actuator release can result. The manual output harnesses (#32/#33) drive
+    // the same sinks directly and therefore never get the chain attached.
+    if (!application.attachActuationPorts(
+            fermentation::ActuatorPlanSinkPorts{&peltierBridge, &outerFanOutput,
+                                                &innerFanOutput},
+            fermentation::kControlChainParametersUnconfiguredUntilIssue35)) {
+        ESP_LOGE(kTag, "control chain: attachActuationPorts rejected");
+    }
+#endif
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
     device_platform_esp_idf::EspIdfSecureRandomSource randomSource;
     device_platform_esp_idf::EspIdfPbkdf2HmacSha256 authenticationKdf;
@@ -831,6 +847,16 @@ extern "C" void app_main(void) {
                  device_platform_esp_idf::ds18b20SamplerStartResultName(
                      samplerStart));
     }
+    // Per-role sensor evidence for the control chain (Issue #218). The quality
+    // configuration is TBD_COMMISSIONING (#35): without it no evidence is
+    // produced and no sensor can become Valid (fail-closed).
+    const std::optional<device_platform::SensorQualityConfig>
+        kSensorQualityConfigUnconfiguredUntilIssue35 = std::nullopt;
+    fermentation::ControlSensorEvidenceProducer controlSensorEvidence(
+        ds18b20Sampler.source(fermentation::kChamberAirChannel),
+        ds18b20Sampler.source(fermentation::kHeatsinkChannel),
+        ds18b20Sampler.source(fermentation::kProductChannel), timeSource,
+        kSensorQualityConfigUnconfiguredUntilIssue35);
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
     fermentation::issue_30_commissioning::Harness issue30Harness(
         application, ds18b20Sampler, timeSource);
@@ -865,6 +891,12 @@ extern "C" void app_main(void) {
     for (;;) {
         platform.update();
         sntp.poll();
+        if (const auto sensorEvidence = controlSensorEvidence.sample(
+                application.publishedProcessState()
+                    .value_or(fermentation::ProcessRuntimeState{})
+                    .state)) {
+            application.publishOwningRuntimeEvidence(*sensorEvidence);
+        }
         application.update();
         const bool touchPressObserved =
             updateProductUi(application, displayRenderer.get(), uiWorkspace,

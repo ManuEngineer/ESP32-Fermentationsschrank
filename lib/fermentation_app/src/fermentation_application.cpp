@@ -14,9 +14,12 @@
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
 #include "connectivity_credentials.hpp"
+#include "control_chain.hpp"
+#include "control_context.hpp"
 #include "fermentation_ui_commands.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
+#include "actuation_interlock.hpp"
 #include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
 #include "web_application_routes.hpp"
@@ -256,6 +259,70 @@ FermentationApplication::~FermentationApplication() {
     // here additionally guarantees that no authentication operation still
     // uses the domain or record store while the members are destroyed.
     authOperationGate_.closeAndDrain();
+    teardownControlChain();
+}
+
+bool FermentationApplication::attachActuationPorts(
+    const ActuatorPlanSinkPorts& ports,
+    const ControlChainParameters& parameters) {
+    const auto guard = applicationCallSerializer_.enter();
+    // Ports are only accepted before the first begin(): the chain is composed
+    // inside the boot path and never rebinds to other sinks afterwards.
+    if (platformServices_ != nullptr) {
+        return false;
+    }
+    if (!ports.complete()) {
+        return false;
+    }
+    controlPorts_ = ports;
+    controlParameters_ = parameters;
+    return true;
+}
+
+bool FermentationApplication::buildControlChain() {
+    controlChain_.reset();
+    freshStartActivation_ = FreshStartActivation{};
+    if (!controlPorts_.complete() || runPersistenceCoordinator_ == nullptr) {
+        return true;
+    }
+    controlChain_ =
+        std::unique_ptr<ControlChain>{new (std::nothrow) ControlChain(
+            *runPersistenceCoordinator_, controlPorts_, controlParameters_)};
+    return controlChain_ != nullptr;
+}
+
+void FermentationApplication::teardownControlChain() noexcept {
+    freshStartActivation_ = FreshStartActivation{};
+    if (controlChain_ == nullptr) {
+        return;
+    }
+    // The last tick time is used instead of the time source, which may
+    // already be gone while the application is being destroyed.
+    controlChain_->shutdownOutputs(lastControlTickMillis_);
+    controlChain_.reset();
+}
+
+void FermentationApplication::handoffControlChain(
+    const TemperatureControlLifecycleSnapshot& before,
+    RunPersistenceResult& persisted, bool recoveryBoundary,
+    bool explicitFreshStart) {
+    if (controlChain_ == nullptr || runtimeRunState_ == nullptr ||
+        persisted.status != RunPersistenceResultStatus::Applied) {
+        return;
+    }
+    const bool runtimeReset = controlChain_->orchestrator.handoffCommitted(
+        before, persisted, *runtimeRunState_,
+        timeSource_ != nullptr ? timeSource_->monotonicMillis() : 0U,
+        recoveryBoundary);
+    if (runtimeReset) {
+        // Every lifecycle boundary (new run, stop, fault, recovery, standby,
+        // safe boot, service) ends a previous activation in the same call.
+        freshStartActivation_ = FreshStartActivation{};
+    }
+    if (explicitFreshStart) {
+        freshStartActivation_.active = true;
+        freshStartActivation_.activeRunId = runtimeRunState_->activeRunId;
+    }
 }
 
 FermentationApplicationRequestResult
@@ -716,6 +783,8 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
         confirmed.commandEnvelope().monotonicMillis;
     RunPersistenceResult persisted;
     const auto* liveEvidence = &owningRuntimeEvidence_;
+    const TemperatureControlLifecycleSnapshot lifecycleBefore{
+        runtimeRunState_->processState.state};
     if (decision.kind == CommandKind::StartProgram ||
         decision.kind == CommandKind::StartManualHolding) {
         FreshStartSnapshotProvenance provenance =
@@ -736,6 +805,12 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
             *operation, *runtimeRunState_, decision, checkpointTime,
             liveEvidence, nullptr);
     }
+    // Only an explicit program/manual-holding start is a fresh-start
+    // activation. A RunStarted effect of AbortAndCool or CoolAfterCompletion
+    // is a lifecycle boundary but never an activation (fail-closed).
+    handoffControlChain(lifecycleBefore, persisted, false,
+                        decision.kind == CommandKind::StartProgram ||
+                            decision.kind == CommandKind::StartManualHolding);
     return FermentationUiCommandBridge::fromRunPersistenceResult(
         persisted.status);
 }
@@ -762,8 +837,11 @@ FermentationUiCommandResult FermentationApplication::confirmProductInserted(
 
     auto checkpointTime = currentCheckpointTime();
     checkpointTime.monotonicMillis = context.monotonicMillis;
-    const auto persisted = runPersistenceCoordinator_->persistTransition(
+    const TemperatureControlLifecycleSnapshot lifecycleBefore{
+        runtimeRunState_->processState.state};
+    auto persisted = runPersistenceCoordinator_->persistTransition(
         *runtimeRunState_, decision, checkpointTime, &owningRuntimeEvidence_);
+    handoffControlChain(lifecycleBefore, persisted, false, false);
     return FermentationUiCommandBridge::fromRunPersistenceResult(
         persisted.status);
 }
@@ -784,6 +862,7 @@ bool FermentationApplication::begin(
     storageEpoch_.reset();
     runIdentity_.reset();
     configurationRecoveryService_.reset();
+    teardownControlChain();
     runPersistenceCoordinator_.reset();
     recoveryDisposition_.reset();
     localServiceLease_ = device_platform::ServiceSessionLease{};
@@ -1471,6 +1550,7 @@ void FermentationApplication::publishOwningRuntimeEvidence(
     const CrossRolePlausibilityContext& evidence) {
     const auto guard = applicationCallSerializer_.enter();
     owningRuntimeEvidence_ = evidence;
+    ++runtimeEvidencePublications_;
 }
 
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
@@ -2153,6 +2233,7 @@ bool FermentationApplication::beginPersistent(
     pendingRecoverySource_.reset();
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
+    teardownControlChain();
     runPersistenceCoordinator_.reset();
     configurationRecoveryService_.reset();
     networkSetupRoutes_.reset();
@@ -2243,6 +2324,10 @@ bool FermentationApplication::beginPersistent(
         new (std::nothrow)
             RunPersistenceCoordinator(store, epoch, RunCheckpointSchedule{})};
     if (runPersistenceCoordinator_ == nullptr) {
+        requireService(FaultCode::None, true);
+        return true;
+    }
+    if (!buildControlChain()) {
         requireService(FaultCode::None, true);
         return true;
     }
@@ -2476,17 +2561,19 @@ bool FermentationApplication::processTerminalClassification(
         return false;
     }
 
-    const auto persisted =
-        classification == BootClassification::DiscardableRun
-            ? runPersistenceCoordinator_->discardAsNoActiveRun(*target,
-                                                               bootTime)
-            : runPersistenceCoordinator_->activateR1EligibleRun(
-                  *target, bootTime, nullptr);
+    const TemperatureControlLifecycleSnapshot lifecycleBefore{
+        target->processState.state};
+    auto persisted = classification == BootClassification::DiscardableRun
+                         ? runPersistenceCoordinator_->discardAsNoActiveRun(
+                               *target, bootTime)
+                         : runPersistenceCoordinator_->activateR1EligibleRun(
+                               *target, bootTime, nullptr);
     if (persisted.status != RunPersistenceResultStatus::Applied) {
         requireService(FaultCode::RunPersistenceUntrusted);
         return false;
     }
     runtimeRunState_ = std::move(target);
+    handoffControlChain(lifecycleBefore, persisted, true, false);
     return true;
 }
 
@@ -2501,6 +2588,84 @@ void FermentationApplication::update() {
     if (!localServiceEntryAllowedUnlocked()) {
         endLocalServiceLeaseUnlocked();
     }
+    tickControlChain();
+}
+
+void FermentationApplication::tickControlChain() {
+    if (controlChain_ == nullptr || runtimeRunState_ == nullptr ||
+        timeSource_ == nullptr) {
+        return;
+    }
+    ControlChain& chain = *controlChain_;
+    const std::uint64_t now = timeSource_->monotonicMillis();
+    lastControlTickMillis_ = now;
+    const RunCommandState& run = *runtimeRunState_;
+
+    // At most one evidence publication per tick: no reuse across ticks.
+    const bool freshPublication =
+        runtimeEvidencePublications_ != runtimeEvidenceConsumed_;
+    runtimeEvidenceConsumed_ = runtimeEvidencePublications_;
+    const CrossRolePlausibilityContext& sensors = owningRuntimeEvidence_;
+
+    // The activation binds only to the live run it was committed for.
+    const bool activationLive =
+        freshStartActivation_.active &&
+        freshStartActivation_.activeRunId == run.activeRunId &&
+        isTemperatureControlledProcessState(run.processState.state);
+    if (!activationLive) {
+        freshStartActivation_ = FreshStartActivation{};
+    }
+
+    if (freshPublication) {
+        TemperatureControlEvaluationEvidence evaluation;
+        evaluation.sampleTimestampMonotonicMillis =
+            sensors.evaluationMonotonicMillis;
+        evaluation.air = sensors.air;
+        evaluation.product = sensors.product;
+        static_cast<void>(
+            chain.orchestrator.evaluateTemperatureControl(run, evaluation));
+    }
+
+    // Complete evidence, rebuilt every tick from current state only.
+    ActuationEvidence evidence;
+    evidence.bootValidationComplete =
+        lifecycleState_ == ApplicationLifecycleState::Ready;
+    evidence.explicitActivationRequested = activationLive;
+    evidence.activationKind = activationLive ? SafetyActivationKind::FreshStart
+                                             : SafetyActivationKind::None;
+    evidence.activationPersistenceResult =
+        activationLive
+            ? std::optional<
+                  RunPersistenceResultStatus>{RunPersistenceResultStatus::
+                                                  Applied}
+            : std::nullopt;
+    evidence.processActivationApplied = activationLive;
+    evidence.loadDisposition = activationLive ? RunLoadDisposition::Standby
+                                              : RunLoadDisposition::SafeBoot;
+    if (configurationService_ != nullptr) {
+        const auto runtime = configurationService_->acquireRuntime();
+        evidence.configurationValidated =
+            runtime.status ==
+                RuntimeConfigurationReadStatus::RuntimeLeaseGranted &&
+            storageEpoch_.has_value() &&
+            runtime.lease.get().storageEpoch() == *storageEpoch_;
+        evidence.configurationServiceMode = configurationService_->mode();
+    }
+    evidence.persistenceLoadStatus = persistenceLoadStatus_;
+    evidence.persistenceCoordinatorState = runPersistenceCoordinator_->state();
+    evidence.persistenceValidated =
+        persistenceLoadStatus_.has_value() && applicationReadiness();
+    evidence.plannerEvidenceValidated =
+        classifyActuatorPlannerParameters(chain.planner.parameters()) ==
+        ActuatorPlannerParametersValidation::Valid;
+    evidence.sensorEvidenceValidated = freshPublication;
+    evidence.peltierSensor = &sensors.cooling;
+    evidence.sensorSelectionRuntime = &run.sensorSelectionRuntime;
+    evidence.actuatorPlanner = &chain.planner;
+
+    ActuatorSafetyGateInput gate;
+    gate.status = ActuationInterlock::evaluate(evidence).permission;
+    static_cast<void>(chain.orchestrator.tickActuatorPlan(run, now, gate));
 }
 
 void FermentationApplication::publishOwningRecoveryEvidence(
@@ -2555,9 +2720,10 @@ RunPersistenceResult FermentationApplication::resumeFallback(
     // trusted-time result can replay the same sensor/plausibility snapshot.
     const auto evidence = *owningRecoveryEvidence_;
     owningRecoveryEvidence_.reset();
-    const auto outcome =
-        runPersistenceCoordinator_->activateFallbackRecoveredRun(
-            *pendingFallbackResume_, currentCheckpointTime(), evidence);
+    const TemperatureControlLifecycleSnapshot lifecycleBefore{
+        pendingFallbackResume_->processState.state};
+    auto outcome = runPersistenceCoordinator_->activateFallbackRecoveredRun(
+        *pendingFallbackResume_, currentCheckpointTime(), evidence);
     if (outcome.persistenceResult.status ==
         RunPersistenceResultStatus::Applied) {
         // The coordinator's resultingState is the exact candidate that was
@@ -2579,6 +2745,11 @@ RunPersistenceResult FermentationApplication::resumeFallback(
             return failed;
         }
         pendingFallbackResume_.reset();
+        // A recovered fallback run is a lifecycle boundary but never a
+        // fresh-start activation; the interlock additionally denies
+        // FallbackRecovered in R1.
+        handoffControlChain(lifecycleBefore, outcome.persistenceResult, true,
+                            false);
         if (outcome.resultingState.activeProgramRun.has_value() ||
             outcome.resultingState.activeManualRun.has_value()) {
             loadDisposition_ = RunLoadDisposition::ResumeOffer;
@@ -2738,7 +2909,15 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     // authentication domain once more. The first resolution above deliberately
     // remained fail-closed while the reset handoff was still pending.
     initializeAuthentication(*stateStore_);
+    // The chain references the old coordinator: tear it down first (outputs
+    // off), then rebind it to the coordinator of the new epoch.
+    teardownControlChain();
     runPersistenceCoordinator_ = std::move(coordinator);
+    if (!buildControlChain()) {
+        requireService(FaultCode::None, true);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
     storageEpoch_ = currentEpoch;
     runIdentity_.reset();
     pendingResume_.reset();

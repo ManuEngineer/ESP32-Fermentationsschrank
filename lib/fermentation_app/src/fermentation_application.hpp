@@ -24,6 +24,7 @@
 #include "fermentation_ui_projector.hpp"
 #include "http_server_lifecycle.hpp"
 #include "connectivity_credentials.hpp"
+#include "control_chain.hpp"
 #include "network_lifecycle.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
@@ -376,6 +377,13 @@ class FermentationApplication {
     // and web adapters never provide runtime evidence.
     void publishOwningRuntimeEvidence(
         const CrossRolePlausibilityContext& evidence);
+    // Optional R1 control chain (#218). Must be called before begin(); only
+    // abstract ports and the single regulator parameter injection point are
+    // accepted. Returns false after begin() or for incomplete ports. Without
+    // this call the application never touches an actuator port.
+    [[nodiscard]] bool attachActuationPorts(
+        const ActuatorPlanSinkPorts& ports,
+        const ControlChainParameters& parameters);
     [[nodiscard]] FermentationUiSnapshot uiSnapshot() const;
     // Same snapshot into an existing object (recycled buffers): allocation-free
     // once the buffers have reached their capacity; used by the steady-state
@@ -682,6 +690,9 @@ class FermentationApplication {
     std::unique_ptr<WebSessionManager> webSessionManager_;
     std::unique_ptr<WebRouteDispatcher> webRouteDispatcher_;
     std::unique_ptr<RunPersistenceCoordinator> runPersistenceCoordinator_;
+    // Declared after the coordinator: destroyed before it (the orchestrator
+    // inside the chain references the coordinator).
+    std::unique_ptr<ControlChain> controlChain_;
     std::unique_ptr<ApplicationRunIdentity> runIdentity_;
     device_platform::IStateStore* stateStore_{nullptr};
     device_platform::INetworkLifecycle* networkLifecycle_{nullptr};
@@ -724,6 +735,33 @@ class FermentationApplication {
     // Evaluated once at boot (never per UI tick): the recovery core admitted
     // `ResetEligibleNoRuntime` AND the bootstrap has no open handoff.
     bool noRuntimeResetAdmitted_{false};
+
+    // --- R1 control chain (#218) ------------------------------------------
+    // Ports and regulator parameters, set before begin() only.
+    ActuatorPlanSinkPorts controlPorts_;
+    ControlChainParameters controlParameters_;
+    // RAM-only binding of one explicit fresh-start commit to the live run. It
+    // is not a persistent gate and never grants permission by itself: every
+    // tick rebuilds the full ActuationEvidence and lets the stateless
+    // ActuationInterlock decide.
+    struct FreshStartActivation {
+        bool active{false};
+        std::string activeRunId;
+    } freshStartActivation_;
+    // Advanced by publishOwningRuntimeEvidence(); each tick consumes at most
+    // one publication, so evidence is never reused across ticks.
+    std::uint64_t runtimeEvidencePublications_{0U};
+    std::uint64_t runtimeEvidenceConsumed_{0U};
+    std::uint64_t lastControlTickMillis_{0U};
+
+    [[nodiscard]] bool buildControlChain();
+    // Final teardown: outputs off through the existing driver, then the chain
+    // is destroyed (see ControlChain::shutdownOutputs).
+    void teardownControlChain() noexcept;
+    void handoffControlChain(const TemperatureControlLifecycleSnapshot& before,
+                             RunPersistenceResult& persisted,
+                             bool recoveryBoundary, bool explicitFreshStart);
+    void tickControlChain();
     ApplicationCallSerializer applicationCallSerializer_;
 };
 

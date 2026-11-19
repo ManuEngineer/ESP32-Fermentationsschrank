@@ -124,6 +124,18 @@ class TemperatureControlApplicationOrchestrator {
         RunCommandState& current, const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
 
+    // Narrow post-commit handoff for a caller that already performed the
+    // persisted mutation through the existing private borrowed-command or
+    // coordinator path (#218). It runs the same private complete() boundary
+    // as the persist* wrappers above, in place: the single-use control-context
+    // hint inside `result` is consumed exactly once, and a failed result
+    // (status != Applied) is a no-op. Returns true iff a lifecycle runtime
+    // reset (regulator, planner, driver, run binding) was performed.
+    [[nodiscard]] bool handoffCommitted(
+        const TemperatureControlLifecycleSnapshot& before,
+        RunPersistenceResult& result, RunCommandState& current,
+        std::uint64_t nowMonotonicMillis, bool recoveryBoundary);
+
     [[nodiscard]] TargetQualificationEvaluator&
     qualificationEvaluator() noexcept {
         return evaluator_;
@@ -159,6 +171,11 @@ class TemperatureControlApplicationOrchestrator {
         const ActuatorSafetyGateInput& currentGate);
 
    private:
+    [[nodiscard]] bool completeInPlace(
+        RunPersistenceResult& result,
+        const TemperatureControlLifecycleSnapshot& before,
+        RunCommandState& current, std::uint64_t nowMonotonicMillis,
+        bool recoveryBoundary);
     [[nodiscard]] RunPersistenceResult complete(
         RunPersistenceResult result,
         const TemperatureControlLifecycleSnapshot& before,
