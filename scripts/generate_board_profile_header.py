@@ -39,15 +39,16 @@ gemeinsame R_EN/L_EN) nach demselben Verfahren ueber `bts7960_rpwm`,
 `bts7960_lpwm` und `shared_r_en_l_en` abgeleitet; R_IS/L_IS (GPIO34/35,
 `reserved_disabled`) werden bewusst nicht erzeugt.
 
-Zusaetzlich (Issue #32) werden die drei Onboard-MOSFET-Ausgaenge Innenluefter,
-Aussenluefter und Summer ueber ihre SSOT-`application_role` (`internal_fan`,
-`external_heatsink_fan`, `active_buzzer`) abgeleitet: GPIO-Nummer und
+Zusaetzlich (Issue #32) werden die vier Onboard-MOSFET-Ausgaenge Innenluefter,
+Aussenluefter, Summer und Reserve ueber ihre SSOT-`application_role`
+(`internal_fan`, `external_heatsink_fan`, `active_buzzer`, `reserve`)
+abgeleitet: GPIO-Nummer und
 Ausgangspolaritaet. Hier ist `board_fixed_pending_functional_verification` der
 erwartete Status (die funktionale Pruefung steht aus). Die Polaritaet kommt
 ausschliesslich aus `active_level`: `high` -> `ActiveHigh`, `low` ->
 `ActiveLow`, `TBD_HARDWARE` -> `Unconfirmed`; jeder andere oder fehlende Wert
 ist ein Fehler. Es wird keine Polaritaet geraten. Die Reserve (`reserve`,
-GPIO27) wird nicht erzeugt.
+GPIO27) wird erzeugt, aber nur unverbunden beim Start auf AUS initialisiert.
 
 `width`/`height` sind eine Panel-/Displayeigenschaft, keine GPIO-Zuordnung,
 und daher nicht Teil dieser SSOT-Ableitung; sie bleiben ein
@@ -91,6 +92,7 @@ OUTPUT_ROLES = {
     "internal_fan": ("kInternalFanPin", "kInternalFanPolarity"),
     "external_heatsink_fan": ("kOuterFanPin", "kOuterFanPolarity"),
     "active_buzzer": ("kBuzzerPin", "kBuzzerPolarity"),
+    "reserve": ("kReservePin", "kReservePolarity"),
 }
 
 # BTS7960-H-Bruecke (Issue #33): RPWM, LPWM und gemeinsames R_EN/L_EN.
@@ -293,7 +295,7 @@ def render_header(resolved: dict, source_path_display: str) -> str:
         "",
         "// Onboard-MOSFET outputs (Issue #32). A polarity of `Unconfirmed` means",
         "// the SSOT active_level is still TBD_HARDWARE: the output adapter then",
-        "// performs no GPIO operation. The reserve channel is not generated.",
+        "// performs no GPIO operation. The reserve channel is initialised off only.",
     ]
     for role, (pin_name, polarity_name) in OUTPUT_ROLES.items():
         gpio_number, polarity = resolved["outputs"][role]
@@ -440,8 +442,8 @@ def run_selftest() -> int:
                 and "kInternalFanPin = 16;" in header
                 and "kOuterFanPin = 17;" in header
                 and "kBuzzerPin = 26;" in header
-                and header.count("OutputPolarity::Unconfirmed;") == 3
-                and "27" not in header.split("kOneWireProductPin")[1]
+                and "kReservePin = 27;" in header
+                and header.count("OutputPolarity::Unconfirmed;") == 4
                 and "kBtsRpwmPin = 13;" in header
                 and "kBtsLpwmPin = 14;" in header
                 and "kBtsEnablePin = 25;" in header
@@ -574,6 +576,13 @@ def run_selftest() -> int:
                 "    application_role: external_heatsink_fan\n",
             ),
             "external_heatsink_fan",
+        )
+        output_case(
+            "missing reserve role rejected",
+            valid_pins.replace(
+                "application_role: reserve", "application_role: other"
+            ),
+            "reserve",
         )
         # A missing or duplicated output role must fail fast.
         output_case(

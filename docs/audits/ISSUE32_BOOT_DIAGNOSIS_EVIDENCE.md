@@ -138,3 +138,32 @@ Dieser begrenzte Funktionsnachweis zeigt LOW=AUS fuer den getesteten Pfad unter 
 | `SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` | PENDING |
 
 Falls ein Ausgang bereits vor `app_main` aktiv ist, kann ein spaeteres `begin()` diese Zeit nicht absichern. Hardwareeingriff oder neuer produktionsnaher aktiver Pruefpfad erfordern die im Plan vorgesehenen separaten Entscheidungen. Keine Polaritaet oder Massnahme wird vorweggenommen.
+
+## PR #214: DEV-Flash Bring-up-Image und HIGH=EIN-/LOW=AUS-Test OUT1/OUT4, 2026-11-19
+
+Source-HEAD des Images `11da33b1ba4f916c718468ce4df67f0d4f2d4888`, Plan `b21d563161e73210b64ef2ff6d46f212bb100bda` (Rev. 2), Independent Implementierungsreview PASS fuer `eb0ad67`. Owner bestaetigte vor Ort: DEV-Board am FT232 `/dev/ttyUSB0`, Testlaeufer an OUT1 und OUT4, 12-V-Abschaltung zugaenglich, BTS7960-/Peltier-Leistung getrennt, nichts an OUT2/OUT3.
+
+**Image:** Profil `esp32_bringup` (`scripts/build_issue32_output_pulse.py`, `SOURCE_TREE_CLEAN=YES`), `esp32_fermentationsschrank.bin` SHA-256 `02a662ea88fadf18dda68db93f31fef72c3fe09c55a4789047953183b63c348f`. Release-Build desselben Standes enthaelt keinen `ISSUE32`-String. **Flash:** ESP32 (MAC-Endung `…2f:34`), installierte Partitionstabelle byte-identisch mit dem Build (nvs `0x9000`, phy_init `0xf000`, factory `0x10000`/`0x2f0000`, state_store `0x300000`); nur `factory` bei `0x10000` geschrieben, `esptool` "Hash of data verified" (zweimal; beim ersten Flash zusaetzlich bytegenauer Readback mit identischem SHA-256). Kein Backup (Ownerentscheidung DEV-Image), kein `erase_flash`, keine NVS-/State-Store-Loeschung, kein OTA, kein Bootloader-/Partitionswechsel.
+
+**Zwischenfaelle (ehrlich):** Die erste Verbindung scheiterte, weil beim Aufbau RTS und DTR am FT232 vertauscht waren (Ownerbefund); Autoreset-/Downloadversuche und Portoeffnungen haben das Board dadurch mehrfach unbeabsichtigt zurueckgesetzt bzw. in den Downloadmodus gebracht. Ein `pulse out1`-Versuch waehrend eines solchen Resets wurde vom Harness fail-closed mit `ISSUE32_COMMAND result=FAIL reason=REJECTED` abgewiesen (kein `state=ON`). Nach korrigierter Verdrahtung wurde von vorn getestet; die gezaehlten Ergebnisse stammen ausschliesslich aus dem folgenden Lauf.
+
+**Boot nach Reset (RTS, ein Portzugriff, Rohlog lokal nicht publiziert):** `rst:0x1 (POWERON_RESET)`, `App version: 11da33b`, `profile: esp32_bringup`, `source git sha: 11da33b1ba4f916c718468ce4df67f0d4f2d4888`, `onboard outputs: inner_fan=ready_inactive outer_fan=ready_inactive buzzer=ready_inactive reserve=ready_inactive`, `real actuators: disabled`, `ISSUE32_UART_RX_READY result=PASS`, `ISSUE32_READY bring_up_only=YES … commands="pulse out1|pulse out4|off" pulse_ms=3000`. **Owner:** nach `app_main` beide Testlaeufer AUS; bei EN liefen sie nur ganz kurz an (akzeptiertes R1-Verhalten, kein Fehler).
+
+**UART-Auszug, durchgehend offener Port, je ein Befehl nach Owner-Freigabe:**
+
+```text
+#SEND pulse out1
+I (723724) issue32_output_pulse: ISSUE32_PULSE channel=out1 state=ON
+I (726734) issue32_output_pulse: ISSUE32_PULSE channel=out1 state=OFF result=PASS reason=TIMEOUT_OFF
+#SEND pulse out4
+I (762814) issue32_output_pulse: ISSUE32_PULSE channel=out4 state=ON
+I (765824) issue32_output_pulse: ISSUE32_PULSE channel=out4 state=OFF result=PASS reason=TIMEOUT_OFF
+#SEND off
+I (785064) issue32_output_pulse: ISSUE32_OFF result=PASS reason=ALREADY_OFF
+```
+
+**Owner-Beobachtung (massgeblich):** OUT1-Testlast AUS → EIN (~3 s) → AUS wie erwartet; OUT4-Testlast AUS → EIN (~3 s) → AUS wie erwartet. Kein Reset, keine Abweichung waehrend der beiden Zyklen; je Kanal genau ein Zyklus, keine Wiederholung.
+
+**Ergebnis:** `HW-32-04=PASS`, `HIGH_EIN=PASS` fuer OUT1/GPIO16 und OUT4/GPIO27 (OUT4 ist ein **Reservekanal-Hardwaretest** und beweist keine produktive Aussenluefterfunktion von OUT2). OUT2/GPIO17 und OUT3/GPIO26 sind **nicht einzeln getestet**; ihre `ActiveHigh`-Polaritaet beruht auf der Ownerakzeptanz gleichartiger PCB-Kanaele. Keine elektrische Konformitaet, keine Aktor-/Peltierfreigabe: `ACTUATOR_RELEASE=NO`, `SSOT_CONFORMANCE` und `FUNCTIONAL_HARDWARE_VERIFICATION` bleiben auf diesen Umfang beschraenkt; die Fan-Sinks sind weiterhin nicht mit Planner/Driver verbunden (keine geregelte Luefterfunktion).
+
+**Endzustand:** Auf dem DEV-Board laeuft das **Bring-up-Image `11da33b`** (Profil `esp32_bringup`, SHA-256 `02a662ea…348f`), **nicht** die Release-Firmware. Kein Rueckflash, keine Wiederherstellung; Bootzustand AUS, Heartbeats stabil. Bei Bedarf ist ein quellgebundener Stand neu bau- und flashbar.

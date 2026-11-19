@@ -174,7 +174,7 @@ pins:
     application_role: external_heatsink_fan
     capability: digital_output
     direction: output
-    active_level: TBD_HARDWARE
+    active_level: high
     safe_boot_level: TBD_HARDWARE
     external_bias: TBD_BOARD_CIRCUIT
     assignment_status: board_fixed_pending_functional_verification
@@ -245,7 +245,7 @@ pins:
     application_role: active_buzzer
     capability: digital_output
     direction: output
-    active_level: TBD_HARDWARE
+    active_level: high
     safe_boot_level: TBD_HARDWARE
     external_bias: TBD_BOARD_CIRCUIT
     assignment_status: board_fixed_pending_functional_verification
@@ -255,7 +255,7 @@ pins:
     application_role: reserve
     capability: digital_output
     direction: output
-    active_level: TBD_HARDWARE
+    active_level: high
     safe_boot_level: TBD_HARDWARE
     external_bias: TBD_BOARD_CIRCUIT
     assignment_status: board_fixed_pending_functional_verification
