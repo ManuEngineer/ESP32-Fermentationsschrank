@@ -32,7 +32,7 @@ void Harness::start() noexcept {
     ESP_LOGI(kTag, "ISSUE32_UART_RX_READY result=PASS");
     ESP_LOGI(kTag,
              "ISSUE32_READY bring_up_only=YES real_actuators_enabled=NO "
-             "commands=\"pulse out1|pulse out4|off\" pulse_ms=3000 "
+             "commands=\"pulse out1|pulse out2|pulse out4|off\" pulse_ms=3000 "
              "note=no_automatic_on_at_boot");
 }
 
@@ -111,6 +111,8 @@ void Harness::processLine() noexcept {
     }
     if (!lineOverflow_ && text == "pulse out1") {
         beginPulse(out1_, "out1");
+    } else if (!lineOverflow_ && text == "pulse out2") {
+        beginPulse(out2_, "out2");
     } else if (!lineOverflow_ && text == "pulse out4") {
         beginPulse(out4_, "out4");
     } else {

@@ -167,3 +167,67 @@ I (785064) issue32_output_pulse: ISSUE32_OFF result=PASS reason=ALREADY_OFF
 **Ergebnis:** `HW-32-04=PASS`, `HIGH_EIN=PASS` fuer OUT1/GPIO16 und OUT4/GPIO27 (OUT4 ist ein **Reservekanal-Hardwaretest** und beweist keine produktive Aussenluefterfunktion von OUT2). OUT2/GPIO17 und OUT3/GPIO26 sind **nicht einzeln getestet**; ihre `ActiveHigh`-Polaritaet beruht auf der Ownerakzeptanz gleichartiger PCB-Kanaele. Keine elektrische Konformitaet, keine Aktor-/Peltierfreigabe: `ACTUATOR_RELEASE=NO`, `SSOT_CONFORMANCE` und `FUNCTIONAL_HARDWARE_VERIFICATION` bleiben auf diesen Umfang beschraenkt; die Fan-Sinks sind weiterhin nicht mit Planner/Driver verbunden (keine geregelte Luefterfunktion).
 
 **Endzustand:** Auf dem DEV-Board laeuft das **Bring-up-Image `11da33b`** (Profil `esp32_bringup`, SHA-256 `02a662ea…348f`), **nicht** die Release-Firmware. Kein Rueckflash, keine Wiederherstellung; Bootzustand AUS, Heartbeats stabil. Bei Bedarf ist ein quellgebundener Stand neu bau- und flashbar.
+
+## PR #216: DEV-Flash Bring-up-Image und OUT2-Puls (Aussenluefter), 2026-11-19
+
+Plan `docs/tasks/issue-32-real-fan-verification-plan.md` Rev. 2, Plan-SHA
+`f93afa4bd01f7856a0e654a5e3d766cfdeb07c5a` (D1 Ownerfreigabe); Ownergates G1 (Verdrahtung
+bestaetigt), G2 (Flash, Kommentar PR #216) und G3 (`pulse out2`, Ownerfreigabe im Chat).
+`ACTUATOR_RELEASE=NO`, BTS7960/Peltier-Leistung getrennt.
+
+**G1 (Owner-reported):** Innenluefter an OUT1/GPIO16, Aussenluefter an OUT2/GPIO17; das
+reale Geraet war bereits vor G2 von OUT4 nach OUT2 umgesteckt (nicht erneut ausgefuehrt),
+OUT4 unbelegt (Reserve). Die Luefter aus PR #214 sind laut Owner die realen Endgeraete
+(die damalige Evidence nannte sie temporaere Testlasten und bleibt unveraendert). Vor G2/G3
+vom Owner bestaetigt: BTS7960/Peltier-Leistung getrennt, Luefterversorgung sofort
+trennbar, Owner beobachtet am Geraet.
+
+**Image:** PR-HEAD `234ce8c096914c5b0c5f74d1726fc9650d307c5d` (sauber, `SOURCE_TREE_CLEAN=YES`),
+`scripts/build_issue32_output_pulse.py` ohne `--allow-dirty-source-tree` nach `--clean`,
+Profil `esp32_bringup` + `APP_ISSUE_32_OUTPUT_PULSE`, `esp32_fermentationsschrank.bin`
+1 796 304 B, SHA-256 `5cf00469645570afa0f29980a5ab81ab02f92466f197ce30a1f6f49a53c83913`,
+ELF-SHA (Boot-Log) `29212f342...`.
+
+**Flash (G2):** Zielgeraet `ESP32-D0WD-V3 (revision v3.1)`, installierte Partitionstabelle
+byteidentisch zum Build (`factory app 0x10000/3008K`). Nur App bei `0x10000`:
+`Hash of data verified.`, `verify-flash`: `Verification successful (digest matched).`
+Kein `erase_flash`, kein NVS-/State-Store-/Bootloader-/Partitionstabellen-/OTA-Zugriff, kein
+Backup, kein Restore (Ownerentscheid).
+
+**Boot (ein EN-Reset, Port durchgehend offen):**
+
+```
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+I boot: Loaded app from partition at offset 0x10000
+I app_main: onboard outputs: inner_fan=ready_inactive outer_fan=ready_inactive buzzer=ready_inactive reserve=ready_inactive
+I app_main: peltier bridge: ready_all_off_not_connected_to_planner
+I issue32_output_pulse: ISSUE32_UART_RX_READY result=PASS
+I issue32_output_pulse: ISSUE32_READY bring_up_only=YES real_actuators_enabled=NO commands="pulse out1|pulse out2|pulse out4|off" pulse_ms=3000 note=no_automatic_on_at_boot
+```
+
+Owner-Beobachtung nach dem Boot (vor dem Puls): beide Luefter AUS. Das Verhalten beim
+EN-Reset wurde in diesem Lauf **nicht** gezielt untersucht; die akzeptierte R1-Abweichung
+(Luefter koennen bei Boot/gehaltenem EN-Reset physisch laufen) bleibt bestehen; kein
+`HW-32-02`-PASS, keine elektrische Konformitaetsaussage.
+
+**G3 – einmaliger Puls OUT2:**
+
+```
+#SEND pulse out2
+I issue32_output_pulse: ISSUE32_PULSE channel=out2 state=ON
+I issue32_output_pulse: ISSUE32_PULSE channel=out2 state=OFF result=PASS reason=TIMEOUT_OFF
+```
+
+Ablauf ca. 3,0 s (Log-Ticks 30 814 ms → 33 824 ms); kein Reset/Panic/WDT, keine `E`-Zeilen.
+**Owner-Beobachtung (massgeblich):** Aussenluefter an OUT2 AUS → EIN (~3 s) → AUS wie
+erwartet; Innenluefter (OUT1) blieb AUS; OUT4 unbelegt.
+
+**Ergebnis:** `HW-32-05=PASS` (realer Aussenluefter OUT2/GPIO17: Zuordnung und
+AUS/EIN/AUS, ein Zyklus, Owner-beobachtet). Nicht belegt bleiben: Innenluefter-Dauerlauf
+und Aussenluefter-Nachlauf in Hardware (erst nach #35/#90 end-to-end), Boot-/Reset-
+Verhalten als eigener Nachweis (`HW-32-02`), OUT3/GPIO26-Summer (separat offen),
+Stromaufnahme/Anlauf. Es wurde kein OUT1-/OUT4-Puls wiederholt (Plan T2 entfaellt).
+
+**Endzustand Board:** laeuft das **Bring-up-Image `234ce8c`** (SHA-256 `5cf00469…3913`,
+Profil `esp32_bringup`), **nicht** die Release-Firmware; Partitionen/NVS/State-Store
+unveraendert; beide Luefter AUS; BTS7960/Peltier getrennt. Kein Rueckflash.
