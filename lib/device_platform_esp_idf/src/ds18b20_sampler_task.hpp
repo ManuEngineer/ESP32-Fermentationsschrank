@@ -16,19 +16,24 @@
 // nur technische Kanaele (ADR-013).
 namespace device_platform_esp_idf {
 
-// Hardware-Budgetgroessen des Tasks. Sie werden erst nach Hardwaremessung und
-// Ownerfreigabe gesetzt (Hardware-Folgeissue, Plan O4/6.1 H3); es gibt keinen
-// Standardwert und nie einen geratenen oder TBD-Wert.
+// Hardware-Budgetgroessen des Tasks. Sie werden nur nach Hardwaremessung und
+// Ownerfreigabe gesetzt (Plan O4/6.1 H3); es gibt keinen Standardwert und nie
+// einen geratenen oder TBD-Wert.
 struct Ds18b20TaskBudget {
     uint32_t stackBytes{0U};
     uint32_t priority{0U};
     int32_t coreId{0};
 };
 
-// Bis zur Freigabe leer: start() erzeugt dann weder Task noch Bus, alle Kanaele
+// Vom Owner freigegebenes Produktbudget (Issue #190, C3): Stack 4096 B,
+// Prioritaet 2, Core 1. Grundlage: hoechster beobachteter Stackbedarf 1376 B
+// bei 6144 B Probe-Budget (Bring-up-Messung, docs/audits/
+// ISSUE190_DS18B20_BRINGUP_EVIDENCE.md, M6); die Fehlerpfade CrcFault/BusFault
+// sind nicht gemessen und durch die Reserve abgedeckt. Wird das Budget wieder
+// entfernt (std::nullopt), erzeugt start() weder Task noch Bus und alle Kanaele
 // bleiben MissingSample (fail-closed).
 inline constexpr std::optional<Ds18b20TaskBudget> kApprovedDs18b20TaskBudget =
-    std::nullopt;
+    Ds18b20TaskBudget{4096U, 2U, 1};
 
 enum class Ds18b20SamplerStartResult : uint8_t {
     Started,
