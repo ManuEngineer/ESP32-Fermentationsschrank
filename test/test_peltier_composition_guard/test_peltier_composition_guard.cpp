@@ -21,7 +21,8 @@ bool contains(const std::string& text, const char* token) {
 // SIM-33-guard: the product composition (main/) creates and starts the
 // H-bridge adapter but never issues a direction command and never connects it
 // to the actuator planner/driver. Only the Issue #29 bring-up probe (its own
-// AllOff sinks) may define or call setForward/setReverse.
+// AllOff sinks) and the Issue #33 manual bridge idle harness (bring-up-only,
+// see the dedicated tests below) may define or call setForward/setReverse.
 void test_main_never_calls_peltier_direction_commands() {
     std::size_t scanned = 0U;
     for (const auto& entry : std::filesystem::directory_iterator("main")) {
@@ -30,6 +31,7 @@ void test_main_never_calls_peltier_direction_commands() {
         if (extension != ".cpp" && extension != ".hpp") continue;
         const auto name = entry.path().filename().string();
         if (name == "issue_29_bringup_probe.cpp") continue;
+        if (name == "issue_33_bridge_idle_harness.cpp") continue;
         ++scanned;
         const auto text = readSource(entry.path().string());
         TEST_ASSERT_FALSE(contains(text, "setForward("));
@@ -54,6 +56,55 @@ void test_app_main_composes_the_bridge_without_planner_connection() {
     TEST_ASSERT_FALSE(contains(text, "kBtsLis"));
 }
 
+// SIM-33-guard (Issue #33): the one allowed direction caller is the manual
+// bring-up-only idle harness. It is fully wrapped in its bring-up build flag,
+// has no planner/driver and no GPIO control of its own (only the existing
+// bridge port), and appears in the build only inside the dedicated bring-up
+// block. app_main includes it only under the same flag.
+void test_bridge_idle_harness_is_bringup_only_and_planner_free() {
+    for (const char* path : {"main/issue_33_bridge_idle_harness.hpp",
+                             "main/issue_33_bridge_idle_harness.cpp"}) {
+        const auto text = readSource(path);
+        TEST_ASSERT_TRUE(
+            contains(text, "#if defined(APP_ISSUE_33_BRIDGE_IDLE_TEST)"));
+        TEST_ASSERT_FALSE(contains(text, "ActuatorPlanSinkDriver"));
+        TEST_ASSERT_FALSE(contains(text, "ActuatorPlanner"));
+        TEST_ASSERT_FALSE(contains(text, "gpio_set_level"));
+        TEST_ASSERT_FALSE(contains(text, "gpio_config"));
+        TEST_ASSERT_FALSE(contains(text, "adc_"));
+        TEST_ASSERT_FALSE(contains(text, "kBtsRis"));
+        TEST_ASSERT_FALSE(contains(text, "kBtsLis"));
+        const auto end = text.rfind("#endif");
+        TEST_ASSERT_TRUE(end != std::string::npos);
+        // Nothing but whitespace after the closing #endif of the flag guard.
+        TEST_ASSERT_TRUE(text.find_first_not_of(" \t\r\n", end + 6U) ==
+                         std::string::npos);
+    }
+}
+
+void test_bridge_idle_harness_is_built_and_included_only_with_its_flag() {
+    const auto cmake = readSource("main/CMakeLists.txt");
+    const auto block = cmake.find("if(APP_ISSUE_33_BRIDGE_IDLE_TEST)");
+    const auto source = cmake.find("issue_33_bridge_idle_harness.cpp");
+    TEST_ASSERT_TRUE(block != std::string::npos);
+    TEST_ASSERT_TRUE(source != std::string::npos);
+    TEST_ASSERT_TRUE(source > block);
+    // Listed exactly once and only inside the dedicated bring-up-only block.
+    TEST_ASSERT_TRUE(cmake.find("issue_33_bridge_idle_harness.cpp",
+                                source + 1U) == std::string::npos);
+    TEST_ASSERT_TRUE(contains(
+        cmake, "Issue #33 bridge idle test is allowed only in esp32_bringup"));
+    const auto app = readSource("main/app_main.cpp");
+    const auto include =
+        app.find("#include \"issue_33_bridge_idle_harness.hpp\"");
+    TEST_ASSERT_TRUE(include != std::string::npos);
+    TEST_ASSERT_TRUE(app.rfind("#ifdef APP_ISSUE_33_BRIDGE_IDLE_TEST",
+                               include) != std::string::npos);
+    TEST_ASSERT_TRUE(
+        include - app.rfind("#ifdef APP_ISSUE_33_BRIDGE_IDLE_TEST", include) <
+        80U);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -62,5 +113,7 @@ int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_main_never_calls_peltier_direction_commands);
     RUN_TEST(test_app_main_composes_the_bridge_without_planner_connection);
+    RUN_TEST(test_bridge_idle_harness_is_bringup_only_and_planner_free);
+    RUN_TEST(test_bridge_idle_harness_is_built_and_included_only_with_its_flag);
     return UNITY_END();
 }
