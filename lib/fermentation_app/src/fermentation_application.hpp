@@ -757,6 +757,8 @@ class FermentationApplication {
     [[nodiscard]] bool buildControlChain();
     // Final teardown: outputs off through the existing driver, then the chain
     // is destroyed (see ControlChain::shutdownOutputs).
+    void replaceRunPersistenceCoordinator(
+        std::unique_ptr<RunPersistenceCoordinator> coordinator);
     void teardownControlChain() noexcept;
     void handoffControlChain(const TemperatureControlLifecycleSnapshot& before,
                              RunPersistenceResult& persisted,

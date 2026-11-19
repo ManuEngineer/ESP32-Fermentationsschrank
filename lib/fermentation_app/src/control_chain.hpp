@@ -33,8 +33,11 @@ class ControlChain final {
     ControlChain(RunPersistenceCoordinator& persistence,
                  const ActuatorPlanSinkPorts& ports,
                  const ControlChainParameters& parameters);
+    ~ControlChain() = default;
     ControlChain(const ControlChain&) = delete;
     ControlChain& operator=(const ControlChain&) = delete;
+    ControlChain(ControlChain&&) = delete;
+    ControlChain& operator=(ControlChain&&) = delete;
 
     // Final teardown, distinct from the normal run STOP: the running control
     // is stopped first, then an explicit Idle result with both fans off is

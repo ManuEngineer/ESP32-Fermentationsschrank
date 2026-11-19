@@ -291,6 +291,18 @@ bool FermentationApplication::buildControlChain() {
     return controlChain_ != nullptr;
 }
 
+void FermentationApplication::replaceRunPersistenceCoordinator(
+    std::unique_ptr<RunPersistenceCoordinator> coordinator) {
+    // The chain references the old coordinator: tear it down first (outputs
+    // off), then rebind it to the coordinator of the new epoch. A failed
+    // rebuild leaves no chain (fail-closed) and requires service.
+    teardownControlChain();
+    runPersistenceCoordinator_ = std::move(coordinator);
+    if (!buildControlChain()) {
+        requireService(FaultCode::None, true);
+    }
+}
+
 void FermentationApplication::teardownControlChain() noexcept {
     freshStartActivation_ = FreshStartActivation{};
     if (controlChain_ == nullptr) {
@@ -2909,15 +2921,7 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     // authentication domain once more. The first resolution above deliberately
     // remained fail-closed while the reset handoff was still pending.
     initializeAuthentication(*stateStore_);
-    // The chain references the old coordinator: tear it down first (outputs
-    // off), then rebind it to the coordinator of the new epoch.
-    teardownControlChain();
-    runPersistenceCoordinator_ = std::move(coordinator);
-    if (!buildControlChain()) {
-        requireService(FaultCode::None, true);
-        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
-                reset.diagnostics};
-    }
+    replaceRunPersistenceCoordinator(std::move(coordinator));
     storageEpoch_ = currentEpoch;
     runIdentity_.reset();
     pendingResume_.reset();
