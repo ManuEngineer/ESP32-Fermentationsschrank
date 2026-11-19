@@ -90,6 +90,17 @@ Die vier PCB-festen MOSFET-Kanalzuordnungen sind als
 Die Boardfamilienidentitaet ist bestaetigt, die funktionale Kanalwirkung
 jedoch nicht.
 
+Ownerentscheidung (Issue #32): die vier baugleichen MOSFET-Kanaele werden in der
+SSOT einheitlich als `active_level: high` (GPIO LOW = AUS, HIGH = EIN) gefuehrt.
+Beobachtet ist LOW=AUS nur an OUT1/GPIO16 und OUT4/GPIO27; OUT2/GPIO17 und
+OUT3/GPIO26 uebernehmen die Polaritaet als begruendete Gleichheitsannahme, nicht
+als Einzelmess-PASS. `safe_boot_level` und `external_bias` bleiben unbestaetigt.
+Die Rollenzuordnung ist unveraendert: OUT1/16 Innenluefter, OUT2/17
+Aussenluefter, OUT3/26 Summer, OUT4/27 Reserve (im Endaufbau unbelegt). Luefter
+an OUT1 und OUT4 im aktuellen Testaufbau sind temporaere Funktionspruefasten.
+Die Firmware initialisiert alle vier Kanaele beim Start auf AUS; die Ausgaenge
+sind noch nicht mit Planner/Driver verbunden (keine geregelte Luefterfunktion).
+
 ## Peltier und Leistungspfad
 
 Geplant:

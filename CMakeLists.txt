@@ -14,7 +14,8 @@ set(EXTRA_COMPONENT_DIRS
 # The private Issue #90 Slice-7 harness needs the console UART only in its
 # dedicated bring-up build.  Keep the ESP-IDF UART/VFS components out of the
 # normal product component graph.
-if(APP_ISSUE_90_SLICE7_HARNESS OR APP_ISSUE_30_SENSOR_COMMISSIONING)
+if(APP_ISSUE_90_SLICE7_HARNESS OR APP_ISSUE_30_SENSOR_COMMISSIONING OR
+   APP_ISSUE_32_OUTPUT_PULSE)
     # Explicitly select the IDF console components for the optional harness
     # graph; optional component requirements are resolved only for selected
     # build components when MINIMAL_BUILD is enabled.
