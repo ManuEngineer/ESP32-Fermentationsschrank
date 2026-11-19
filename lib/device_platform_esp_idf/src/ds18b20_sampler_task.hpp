@@ -25,7 +25,7 @@ struct Ds18b20TaskBudget {
     int32_t coreId{0};
 };
 
-// Vom Owner freigegebenes Produktbudget (Issue #190, C3): Stack 4096 B,
+// Vom Owner freigegebenes Task-Budget (Issue #190, C3): Stack 4096 B,
 // Prioritaet 2, Core 1. Grundlage: hoechster beobachteter Stackbedarf 1376 B
 // bei 6144 B Probe-Budget (Bring-up-Messung, docs/audits/
 // ISSUE190_DS18B20_BRINGUP_EVIDENCE.md, M6); die Fehlerpfade CrcFault/BusFault
