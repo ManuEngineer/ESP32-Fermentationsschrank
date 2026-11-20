@@ -233,11 +233,28 @@ TemperatureControlApplicationOrchestrator::reevaluateRecoveryEvaluation(
                     before, current, time.monotonicMillis);
 }
 
+bool TemperatureControlApplicationOrchestrator::handoffCommitted(
+    const TemperatureControlLifecycleSnapshot& before,
+    RunPersistenceResult& result, RunCommandState& current,
+    std::uint64_t nowMonotonicMillis, bool recoveryBoundary) {
+    return completeInPlace(result, before, current, nowMonotonicMillis,
+                           recoveryBoundary);
+}
+
 RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
     RunPersistenceResult result,
     const TemperatureControlLifecycleSnapshot& before, RunCommandState& current,
     std::uint64_t nowMonotonicMillis, bool recoveryBoundary) {
-    if (result.status != RunPersistenceResultStatus::Applied) return result;
+    static_cast<void>(completeInPlace(result, before, current,
+                                      nowMonotonicMillis, recoveryBoundary));
+    return result;
+}
+
+bool TemperatureControlApplicationOrchestrator::completeInPlace(
+    RunPersistenceResult& result,
+    const TemperatureControlLifecycleSnapshot& before, RunCommandState& current,
+    std::uint64_t nowMonotonicMillis, bool recoveryBoundary) {
+    if (result.status != RunPersistenceResultStatus::Applied) return false;
 
     const bool newActiveRun = hasEffect(result, CommandEffect::RunStarted);
     std::optional<CommittedControlContextTransition> committedTransition;
@@ -250,8 +267,9 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
     static_cast<void>(consumeCommittedControlContextTransition(
         result, temperatureController_));
 
-    if (needsRuntimeReset(before, current.processState.state, recoveryBoundary,
-                          newActiveRun)) {
+    const bool runtimeReset = needsRuntimeReset(
+        before, current.processState.state, recoveryBoundary, newActiveRun);
+    if (runtimeReset) {
         TemperatureControlLifecycleBoundary boundary =
             TemperatureControlLifecycleBoundary::LeaveTemperatureControl;
         if (newActiveRun) {
@@ -294,7 +312,7 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
         // successful application boundary.
         evaluator_.reset();
     }
-    return result;
+    return runtimeReset;
 }
 
 TemperatureControlResult
