@@ -415,6 +415,80 @@ void test_a_late_fast_rise_is_caught_against_a_recent_baseline() {
     TEST_ASSERT_TRUE(tripped);
 }
 
+// R221-4: `Ok` needs a comparison reading inside the prescribed window. Trend
+// window 10 s, maximum sample age 60 s, two readings 55 s apart: the older one
+// is no valid baseline (older than the window), so nothing was judged.
+void test_two_readings_further_apart_than_the_window_never_yield_an_ok() {
+    ThermalSafetyLimits limits = testLimits();
+    limits.trendWindowMillis = 10'000U;
+    limits.maxSampleAgeMillis = 60'000U;
+    limits.invalidLatchMillis = 120'000U;
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(limits) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    auto result = supervisor.evaluate(samples(100'000U, 25.0, 30.0), 100'000U);
+    TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+    result = supervisor.evaluate(samples(155'000U, 25.0, 30.0), 155'000U);
+    TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+    TEST_ASSERT_TRUE(result.reason ==
+                     ThermalSafetyReason::TrendObservationPending);
+    // Readings that stay too sparse for the window never become Ok ...
+    for (std::uint64_t now = 210'000U; now < 600'000U; now += 55'000U) {
+        result = supervisor.evaluate(samples(now, 25.0, 30.0), now);
+        TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+        TEST_ASSERT_TRUE(result.reason ==
+                         ThermalSafetyReason::TrendObservationPending);
+    }
+    // ... while regular readings provide a baseline within the window.
+    std::uint64_t now = 600'000U;
+    bool ok = false;
+    for (int i = 0; i < 10 && !ok; ++i, now += 2'000U) {
+        ok = supervisor.evaluate(samples(now, 25.0, 30.0), now).status ==
+             ThermalSafetyStatus::Ok;
+    }
+    TEST_ASSERT_TRUE(ok);
+}
+
+// Backwards or out-of-order measurement timestamps are fail-closed: the
+// observation restarts and no `Ok` is given until it is rebuilt.
+void test_backwards_or_unordered_timestamps_are_fail_closed() {
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(testLimits()) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    const auto ok = primeToOk(supervisor, 10'000U);
+    TEST_ASSERT_TRUE(supervisor.evaluate(samples(ok, 25.0, 30.0), ok).status ==
+                     ThermalSafetyStatus::Ok);
+    // The next reading carries an older timestamp than the newest recorded one.
+    auto result = supervisor.evaluate(samples(ok - 2'000U, 25.0, 30.0), ok);
+    TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+    TEST_ASSERT_TRUE(result.reason ==
+                     ThermalSafetyReason::TrendObservationPending);
+    // Out-of-order arrival: 2 s, 4 s, 3 s later; the late one resets again.
+    ThermalSafetySupervisor other;
+    TEST_ASSERT_TRUE(other.configure(testLimits()) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    const auto start = primeToOk(other, 10'000U);
+    TEST_ASSERT_TRUE(
+        other.evaluate(samples(start + 2'000U, 25.0, 30.0), start + 2'000U)
+            .status == ThermalSafetyStatus::Ok);
+    TEST_ASSERT_TRUE(
+        other.evaluate(samples(start + 4'000U, 25.0, 30.0), start + 4'000U)
+            .status == ThermalSafetyStatus::Ok);
+    result =
+        other.evaluate(samples(start + 3'000U, 25.0, 30.0), start + 4'000U);
+    TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+    TEST_ASSERT_TRUE(result.reason ==
+                     ThermalSafetyReason::TrendObservationPending);
+    // It recovers only after a fresh, sufficient observation.
+    std::uint64_t now = start + 6'000U;
+    bool recovered = false;
+    for (int i = 0; i < 40 && !recovered; ++i, now += 2'000U) {
+        recovered = other.evaluate(samples(now, 25.0, 30.0), now).status ==
+                    ThermalSafetyStatus::Ok;
+    }
+    TEST_ASSERT_TRUE(recovered);
+}
+
 // Memory stays small: no per-sample history.
 void test_the_supervisor_keeps_a_small_fixed_history() {
     TEST_ASSERT_TRUE(sizeof(ThermalSafetySupervisor) < 1'600U);
@@ -519,6 +593,8 @@ int main(int, char**) {
     RUN_TEST(test_the_longest_window_stays_ok_for_a_slow_warming);
     RUN_TEST(test_irregular_sample_intervals_still_trip_on_a_dangerous_rise);
     RUN_TEST(test_a_late_fast_rise_is_caught_against_a_recent_baseline);
+    RUN_TEST(test_two_readings_further_apart_than_the_window_never_yield_an_ok);
+    RUN_TEST(test_backwards_or_unordered_timestamps_are_fail_closed);
     RUN_TEST(test_the_supervisor_keeps_a_small_fixed_history);
     RUN_TEST(test_evaluation_is_idempotent_for_identical_input);
     RUN_TEST(test_latch_refuses_configuration_and_survives_clearing);

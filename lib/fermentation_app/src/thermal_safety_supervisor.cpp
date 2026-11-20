@@ -198,8 +198,14 @@ void ThermalSafetySupervisor::resetTrend() noexcept {
 
 void ThermalSafetySupervisor::recordTrend(std::uint64_t timestampMillis,
                                           double celsius) noexcept {
-    if (trendLastMillis_.has_value() && timestampMillis <= *trendLastMillis_) {
+    if (trendLastMillis_.has_value() && timestampMillis == *trendLastMillis_) {
         return;  // idempotent for an already recorded reading
+    }
+    // A reading older than the newest recorded one (time stepping backwards or
+    // out-of-order arrival) cannot be placed in the history: fail-closed, the
+    // observation restarts from this reading (no `Ok` until observed again).
+    if (trendLastMillis_.has_value() && timestampMillis < *trendLastMillis_) {
+        resetTrend();
     }
     // A gap longer than the sample-age limit breaks the observation: readings
     // before it can no longer prove what happened in between.
@@ -226,17 +232,23 @@ ThermalSafetySupervisor::TrendJudgement ThermalSafetySupervisor::judgeTrend(
         return TrendJudgement::Pending;
     }
     // Worst rise over every baseline between half a window and one window old.
+    // `Within` needs at least one such baseline: without a comparison reading
+    // inside the prescribed window (e.g. samples further apart than the
+    // window) nothing was judged and no `Ok` may result.
     bool exceeded = false;
+    bool baselineFound = false;
     for (const auto& slot : trend_) {
         if (!slot.used || slot.timestampMillis >= newestMillis) continue;
         const std::uint64_t span = newestMillis - slot.timestampMillis;
         if (span < half || span > limits_.trendWindowMillis) continue;
+        baselineFound = true;
         const double minutes = static_cast<double>(span) / 60'000.0;
         if ((newestCelsius - slot.celsius) / minutes >
             limits_.coolingMaxRiseCelsiusPerMinute) {
             exceeded = true;
         }
     }
+    if (!baselineFound) return TrendJudgement::Pending;
     return exceeded ? TrendJudgement::Exceeded : TrendJudgement::Within;
 }
 
