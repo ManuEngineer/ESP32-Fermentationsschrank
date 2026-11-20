@@ -1,6 +1,12 @@
 # Issue #190 – G2-Gatepaket DEV-Bench-Test (Plan Rev. 3 `10cc3f7`, PR #220)
 
-Status: **vorbereitet, G2 NICHT erteilt.** `FLASH=NO`, `ACTUATOR_RELEASE=NO`,
+> **Historischer Nachweis der G2-Vorbereitung (Stand vor dem Test).** G2 wurde danach vom
+> Owner erteilt, der einmalige App-only-Flash ausgefuehrt und das Gate damit **verbraucht**
+> (`G2=CONSUMED`); das Ergebnis steht im Abschnitt „C2“ der Evidence-Datei. Die folgende
+> Aussage "G2 NICHT erteilt" beschreibt nur den damaligen Vorbereitungsstand. Kein
+> weiterer Flash ist freigegeben.
+
+Status (damals): **vorbereitet, G2 NICHT erteilt.** `FLASH=NO`, `ACTUATOR_RELEASE=NO`,
 `REAL_PELTIER_TEST=NOT_RUN`. Dieses Paket fuehrt nichts am Geraet aus; es enthaelt
 das zu pruefende Image und die Owner-Checkliste (Plan §7). Ein Flash setzt eine
 ausdrueckliche, separate G2-Freigabe **dieses exakten Hashes** und den
