@@ -117,3 +117,29 @@ einem App-only-Flash nicht geschrieben (sein Hash ist build-abhaengig: `38f987bc
 **Verbleibende Einschraenkungen:** esp-clang-Static-Analysis der ESP-IDF-Profile und voller Pre-Ready-Lauf nicht ausgefuehrt; kein produktiver
 Rearm-Pfad nach einem Trip (Neustart + erneutes Setzen); der Firmware-Schutz ersetzt keine unabhaengige Absicherung; nach Boot/Konfiguration
 ist der Peltier fuer die Haelfte des Trendfensters gesperrt (Absicht, fail-closed); C1/C2 brauchen die genannten Owner-Gates.
+
+## Review-Korrektur R221-4 (Fix Review auf `a14478a`, Fix-Code-HEAD `09c4b944ef8be1afbdaf5f6ffbb7d04510e9ec02`)
+
+**Befund:** `judgeTrend()` konnte `Within` (damit `Ok`) liefern, ohne dass eine Vergleichsmessung im Trendfenster existierte (z. B.
+Fenster 10 s, max. Probenalter 60 s, zwei Messungen 55 s auseinander: Beobachtungsspanne ≥ halbes Fenster, aber keine Baseline im Fenster).
+**Korrektur:** `Within` nur mit mindestens einer gueltigen Baseline mit Spanne zwischen halbem und ganzem Fenster; sonst
+`TrendObservationPending` (Peltier gesperrt). Rueckwaerts laufende oder ungeordnet eintreffende Messzeitstempel (aelter als die neueste
+erfasste Messung) verwerfen die Historie und starten die Beobachtung neu (fail-closed, kein `Ok` bis zur neuen Beobachtung); gleicher Zeitstempel
+bleibt idempotent.
+
+| Tests (`test_thermal_safety_supervisor`, 23) | Inhalt |
+|---|---|
+| `test_two_readings_further_apart_than_the_window_never_yield_an_ok` | Fenster 10 s, Probenalter 60 s, 55 s Abstand → `Blocked/TrendObservationPending`; dauerhaft zu seltene Proben nie `Ok`; regulaere Proben danach `Ok` |
+| `test_backwards_or_unordered_timestamps_are_fail_closed` | Zeitstempel rueckwaerts bzw. ungeordnet → Pending; `Ok` erst nach neuer ausreichender Beobachtung |
+| unveraendert PASS | 600-s-Fenster (Anstieg loest aus / langsame Erwaermung bleibt `Ok`), unregelmaessige Intervalle (1–4 s), spaeter schneller Anstieg, Luecke, Idempotenz, Speichergroesse |
+
+| Pruefung (Code-HEAD `09c4b94`, Arbeitsbaum sauber) | Ergebnis |
+|---|---|
+| native Suite | **1944 Testfaelle, alle bestanden** |
+| `run_pre_ready_gates.sh self-check` | `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` |
+| `build_esp_idf_profiles.py all --require-clean-source-tree` | PASS; Release 1 808 256 B, Bring-up 1 818 832 B; in beiden 0 Trial-Strings |
+| Trial-Image `build_r1_control_trial.py --clean`, Source-HEAD `09c4b944ef8be1afbdaf5f6ffbb7d04510e9ec02` (sauber), `esp32_bringup` + `APP_R1_CONTROL_TRIAL` | PASS; `esp32_fermentationsschrank.bin` 1 832 944 B, **SHA-256 `fdd0bf305c11487a8f85a2a3c2ca82378035d44ce1fa3af2a464d8605475d23e`**; Partitionstabelle SHA-256 `d7f180e4…ccd9d` (unveraendert); Kopie `../hw-evidence-pr221/trial-image/esp32_fermentationsschrank.r221-4.bin`; **nicht geflasht** |
+
+Dieses Image **ersetzt** `1b0be67f…` (Source `81c0afc`) und `86bf7eba…` (Source `67c7f08`); nur der hier genannte Hash gilt als Review-Vorlage fuer das
+Flash-Gate G-T. Verbleibende Einschraenkungen unveraendert (esp-clang/Pre-Ready nicht ausgefuehrt; kein produktiver Rearm-Pfad; Firmware-Schutz ersetzt keine
+unabhaengige Absicherung; Peltier nach Boot/Konfiguration/Datenluecke fuer das halbe Trendfenster gesperrt).
