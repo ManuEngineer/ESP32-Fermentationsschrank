@@ -17,6 +17,7 @@
 #include "run_persistence_coordinator.hpp"
 #include "sensor_quality_config.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "standard_program_catalog.hpp"
 #include "temperature_source.hpp"
 #include "virtual_time_source.hpp"
 
@@ -141,6 +142,25 @@ ActuatorPlannerParameters testPlannerParameters() {
     return parameters;
 }
 
+// TEST values only (wide on purpose): the firmware temperature safety must be
+// configured for any Peltier permission (R1 trial plan S6).
+ThermalSafetyLimits testThermalLimits() {
+    ThermalSafetyLimits limits;
+    limits.airEmergencyLowerCelsius = -30.0;
+    limits.airInterventionLowerCelsius = -20.0;
+    limits.airInterventionUpperCelsius = 60.0;
+    limits.airEmergencyUpperCelsius = 70.0;
+    limits.coolingEmergencyLowerCelsius = -30.0;
+    limits.coolingInterventionLowerCelsius = -20.0;
+    limits.coolingInterventionUpperCelsius = 80.0;
+    limits.coolingEmergencyUpperCelsius = 90.0;
+    limits.coolingMaxRiseCelsiusPerMinute = 50.0;
+    limits.trendWindowMillis = 60'000U;
+    limits.maxSampleAgeMillis = 5'000U;
+    limits.invalidLatchMillis = 20'000U;
+    return limits;
+}
+
 device_platform::SensorQualityConfig testQualityConfig() {
     return device_platform::SensorQualityConfig::create(
                3U, 5.0, -20.0, 80.0, 100.0, 10'000U, 3U, 2U, 2'000U)
@@ -184,7 +204,14 @@ struct Chain {
             FermentationApplicationTestAccess::chainPresent(application));
     }
 
-    void installPlannerParameters() {
+    void installThermalSafety() {
+        TEST_ASSERT_TRUE(
+            application.configureThermalSafety(testThermalLimits()) ==
+            ThermalSafetyConfigureResult::Accepted);
+    }
+
+    void installPlannerParameters(bool withThermalSafety = true) {
+        if (withThermalSafety) installThermalSafety();
         auto& service = FermentationApplicationTestAccess::configurationService(
             application);
         auto build = service.beginPreview();
@@ -205,6 +232,7 @@ struct Chain {
     // per-role evidence (as app_main does), then update().
     void step(std::uint64_t deltaMs = 1'000U) {
         time.advanceMonotonicMillis(deltaMs);
+        application.publishRawTemperatureSamples(producer->readRawSamples());
         if (publishEvidence) {
             const auto phase = application.publishedProcessState()
                                    .value_or(ProcessRuntimeState{})
@@ -218,6 +246,30 @@ struct Chain {
 
     void warmUpSensors(int ticks = 4) {
         for (int i = 0; i < ticks; ++i) step();
+    }
+
+    // Same as startManualRun() but reports a refused start instead of failing
+    // (R1 trial plan S2: no start without regulation readiness).
+    [[nodiscard]] bool tryStartManualRun() {
+        ManualTimedRunValues values;
+        values.targetTemperatureCelsius = 30.0;
+        values.durationMinutes = 60U;
+        values.qualificationBandCelsius = 0.5;
+        values.qualificationDurationMinutes = 10U;
+        values.maximumTargetReachMinutes = 180U;
+        FermentationUiCommandContext context;
+        context.expected = application.uiSnapshot().revisions;
+        context.monotonicMillis = time.monotonicMillis();
+        const auto prepared =
+            FermentationApplicationTestAccess::prepareStartManualTimedBody(
+                application, context, values);
+        if (!prepared.request.has_value()) return false;
+        const auto confirmed = application.confirmPrepared(prepared);
+        if (!confirmed.request.has_value()) return false;
+        static_cast<void>(
+            application.applyConfirmedPrepared(*confirmed.request));
+        return application.uiSnapshot().home.mode ==
+               FermentationHomeMode::ActiveRun;
     }
 
     void startManualRun() {
@@ -492,7 +544,9 @@ void test_sim_218_09_product_default_is_fail_closed() {
         Chain chain(kControlChainParametersUnconfiguredUntilIssue35, true);
         if (plannerSnapshot) chain.installPlannerParameters();
         chain.warmUpSensors();
-        chain.startManualRun();
+        // The product default (PI parameters unconfigured) never starts a run
+        // without effective regulation: the start is refused up front.
+        TEST_ASSERT_FALSE(chain.tryStartManualRun());
         for (int i = 0; i < 40; ++i) {
             chain.step();
             TEST_ASSERT_FALSE(chain.peltierOn());
@@ -550,6 +604,201 @@ void test_sim_218_10_no_ports_no_chain_and_late_attach_rejected() {
 void setUp() {}
 void tearDown() {}
 
+// ---------------------------------------------------------------------------
+// R1 trial plan S6/S2: firmware temperature safety and regulation readiness.
+// ---------------------------------------------------------------------------
+
+// A cooling-body excursion trips the supervisor: Peltier off at once, a visible
+// latched fault, the permitted fan run-on is not cut, and nothing re-arms
+// without a restart.
+void test_s6_trip_locks_peltier_is_visible_and_latched() {
+    Chain chain(testChainParameters());
+    chain.establishHeating();
+    TEST_ASSERT_TRUE(chain.peltierOn());
+    chain.cooling.setCelsius(85.0);  // above the cooling intervention limit
+    chain.step();
+    TEST_ASSERT_FALSE(chain.peltierOn());
+    chain.assertSafeOutputs();
+    const auto evaluation = chain.application.thermalSafetyEvaluation();
+    TEST_ASSERT_TRUE(evaluation.status == ThermalSafetyStatus::Tripped);
+    TEST_ASSERT_TRUE(evaluation.reason ==
+                     ThermalSafetyReason::CoolingUpperIntervention);
+    TEST_ASSERT_TRUE(chain.application.lifecycleState() ==
+                     ApplicationLifecycleState::ServiceRequired);
+    TEST_ASSERT_TRUE(chain.application.presentationState().faultCode ==
+                     FaultCode::TemperatureSafetyLimit);
+    // Values return to normal: the latch holds, nothing re-enables the Peltier
+    // and the configuration is refused until a restart.
+    chain.cooling.setCelsius(30.0);
+    for (int i = 0; i < 40; ++i) {
+        chain.step();
+        TEST_ASSERT_FALSE(chain.peltierOn());
+        chain.assertSafeOutputs();
+    }
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Tripped);
+    TEST_ASSERT_TRUE(
+        chain.application.configureThermalSafety(testThermalLimits()) ==
+        ThermalSafetyConfigureResult::Latched);
+    // The fan run-on of the planner ended on its own schedule (not stuck on).
+    TEST_ASSERT_FALSE(chain.outerFan.enabled());
+}
+
+void test_s6_trip_keeps_the_planner_outer_fan_run_on() {
+    Chain chain(testChainParameters());
+    chain.establishHeating();
+    TEST_ASSERT_TRUE(chain.outerFan.enabled());
+    chain.cooling.setCelsius(85.0);
+    chain.step();
+    TEST_ASSERT_FALSE(chain.peltierOn());
+    // The outer fan is switched off only after the configured run-on (3 s in
+    // this fixture) - never earlier than the Peltier, never left on forever.
+    bool fanWasOnAfterPeltierOff = chain.outerFan.enabled();
+    for (int i = 0; i < 12; ++i) {
+        chain.step(500U);
+        fanWasOnAfterPeltierOff =
+            fanWasOnAfterPeltierOff || chain.outerFan.enabled();
+        chain.assertSafeOutputs();
+    }
+    TEST_ASSERT_TRUE(fanWasOnAfterPeltierOff);
+    TEST_ASSERT_FALSE(chain.outerFan.enabled());
+}
+
+// Stale raw samples block (no latch); fresh samples bring it back to Ok.
+void test_s6_stale_raw_samples_block_without_latching() {
+    Chain chain(testChainParameters());
+    chain.establishHeating();
+    chain.time.advanceMonotonicMillis(6'000U);  // no new raw publication
+    chain.application.update();
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Blocked);
+    TEST_ASSERT_FALSE(chain.peltierOn());
+    chain.step();  // fresh raw samples again
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Ok);
+    TEST_ASSERT_TRUE(chain.application.lifecycleState() ==
+                     ApplicationLifecycleState::Ready);
+}
+
+// Without any limits the supervisor is Unconfigured: even complete other
+// evidence never releases the Peltier.
+void test_s6_unconfigured_thermal_safety_never_releases_the_peltier() {
+    Chain chain(testChainParameters());
+    chain.installPlannerParameters(false);
+    chain.air.setCelsius(20.0);
+    chain.cooling.setCelsius(20.0);
+    chain.product.setCelsius(20.0);
+    chain.warmUpSensors();
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Unconfigured);
+    TEST_ASSERT_FALSE(chain.tryStartManualRun());
+    for (int i = 0; i < 20; ++i) {
+        chain.step();
+        TEST_ASSERT_FALSE(chain.peltierOn());
+    }
+}
+
+// S2: the start admission needs regulation readiness at prepare AND confirm.
+void test_s2_start_admission_matrix() {
+    {  // everything ready -> start possible
+        Chain chain(testChainParameters());
+        chain.installPlannerParameters();
+        chain.warmUpSensors();
+        TEST_ASSERT_TRUE(chain.tryStartManualRun());
+    }
+    {  // no planner parameters
+        Chain chain(testChainParameters());
+        chain.installThermalSafety();
+        chain.warmUpSensors();
+        TEST_ASSERT_FALSE(chain.tryStartManualRun());
+    }
+    {  // PI parameters unconfigured
+        Chain chain(kControlChainParametersUnconfiguredUntilIssue35);
+        chain.installPlannerParameters();
+        chain.warmUpSensors();
+        TEST_ASSERT_FALSE(chain.tryStartManualRun());
+    }
+    {  // thermal safety not configured
+        Chain chain(testChainParameters());
+        chain.installPlannerParameters(false);
+        chain.warmUpSensors();
+        TEST_ASSERT_FALSE(chain.tryStartManualRun());
+    }
+    {  // thermal safety blocked (stale raw samples)
+        Chain chain(testChainParameters());
+        chain.installPlannerParameters();
+        chain.warmUpSensors();
+        chain.time.advanceMonotonicMillis(6'000U);
+        TEST_ASSERT_FALSE(chain.tryStartManualRun());
+    }
+    {  // thermal safety tripped (limit excursion before the start)
+        Chain chain(testChainParameters());
+        chain.installPlannerParameters();
+        chain.warmUpSensors();
+        chain.cooling.setCelsius(85.0);
+        chain.step();
+        TEST_ASSERT_FALSE(chain.tryStartManualRun());
+    }
+}
+
+// A state jump between prepare and confirm refuses the start at confirm.
+void test_s2_state_jump_between_prepare_and_confirm_is_refused() {
+    for (const int mode : {0, 1, 2}) {
+        Chain chain(testChainParameters());
+        chain.installPlannerParameters();
+        chain.warmUpSensors();
+        ManualTimedRunValues values;
+        values.targetTemperatureCelsius = 30.0;
+        values.durationMinutes = 60U;
+        values.qualificationBandCelsius = 0.5;
+        values.qualificationDurationMinutes = 10U;
+        values.maximumTargetReachMinutes = 180U;
+        FermentationUiCommandContext context;
+        context.expected = chain.application.uiSnapshot().revisions;
+        context.monotonicMillis = chain.time.monotonicMillis();
+        const auto prepared =
+            FermentationApplicationTestAccess::prepareStartManualTimedBody(
+                chain.application, context, values);
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+        if (mode == 0) {
+            chain.cooling.setCelsius(85.0);  // trip
+            chain.step();
+        } else if (mode == 1) {
+            chain.time.advanceMonotonicMillis(6'000U);  // raw samples go stale
+        } else {
+            chain.air.setFailed();  // raw sample fault -> blocked
+            chain.step();
+        }
+        const auto confirmed = chain.application.confirmPrepared(prepared);
+        TEST_ASSERT_FALSE(confirmed.request.has_value());
+        TEST_ASSERT_TRUE(chain.application.uiSnapshot().home.mode !=
+                         FermentationHomeMode::ActiveRun);
+    }
+}
+
+// The program start is refused before any identity-effective step.
+void test_s2_program_start_is_refused_before_the_command_identity_is_used() {
+    Chain chain(kControlChainParametersUnconfiguredUntilIssue35);
+    chain.warmUpSensors();
+    const auto before =
+        FermentationApplicationTestAccess::coordinator(chain.application)
+            .commandIdHighWater();
+    FermentationUiCommandContext context;
+    context.expected = chain.application.uiSnapshot().revisions;
+    context.monotonicMillis = chain.time.monotonicMillis();
+    FermentationUiStartProgramIntent intent;
+    intent.candidate.programId =
+        FactoryProgramCatalog::programs().front().program.id;
+    const auto result = chain.application.prepareStartProgram(context, intent);
+    TEST_ASSERT_TRUE(result.status ==
+                     FermentationApplicationRequestStatus::Unavailable);
+    TEST_ASSERT_FALSE(result.request.has_value());
+    const auto after =
+        FermentationApplicationTestAccess::coordinator(chain.application)
+            .commandIdHighWater();
+    TEST_ASSERT_TRUE(before == after);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_sim_218_01_positive_chain_and_stop);
@@ -562,5 +811,13 @@ int main(int, char**) {
     RUN_TEST(test_sim_218_08_final_teardown_ends_open_fan_run_on);
     RUN_TEST(test_sim_218_09_product_default_is_fail_closed);
     RUN_TEST(test_sim_218_10_no_ports_no_chain_and_late_attach_rejected);
+    RUN_TEST(test_s6_trip_locks_peltier_is_visible_and_latched);
+    RUN_TEST(test_s6_trip_keeps_the_planner_outer_fan_run_on);
+    RUN_TEST(test_s6_stale_raw_samples_block_without_latching);
+    RUN_TEST(test_s6_unconfigured_thermal_safety_never_releases_the_peltier);
+    RUN_TEST(test_s2_start_admission_matrix);
+    RUN_TEST(test_s2_state_jump_between_prepare_and_confirm_is_refused);
+    RUN_TEST(
+        test_s2_program_start_is_refused_before_the_command_identity_is_used);
     return UNITY_END();
 }

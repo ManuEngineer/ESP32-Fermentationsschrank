@@ -273,12 +273,44 @@ bool FermentationApplication::attachActuationPorts(
     if (platformServices_ != nullptr) {
         return false;
     }
+    controlChainRequested_ = true;
     if (!ports.complete()) {
         return false;
     }
     controlPorts_ = ports;
     controlParameters_ = parameters;
     return true;
+}
+
+bool FermentationApplication::controlReadyForStart() {
+    if (!controlChainRequested_) {
+        return true;
+    }
+    if (controlChain_ == nullptr || timeSource_ == nullptr ||
+        configurationService_ == nullptr) {
+        return false;
+    }
+    if (classifyTemperatureControlParameters(
+            controlChain_->controller.parameters()) !=
+        TemperatureControlParametersValidation::Valid) {
+        return false;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return false;
+    }
+    const auto& planner =
+        runtime.lease.get().serviceConfiguration().actuatorPlannerParameters;
+    if (!planner.has_value() ||
+        classifyActuatorPlannerParameters(*planner) !=
+            ActuatorPlannerParametersValidation::Valid) {
+        return false;
+    }
+    // Freshly evaluated here (idempotent); a trip is latched and made visible
+    // by the next control tick.
+    return thermalSafety_
+               .evaluate(rawTemperatureSamples_, timeSource_->monotonicMillis())
+               .status == ThermalSafetyStatus::Ok;
 }
 
 bool FermentationApplication::buildControlChain() {
@@ -350,6 +382,13 @@ FermentationApplication::prepareStartProgram(
     if (configurationService_ == nullptr || runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
+    }
+    // Regulation readiness before any identity- or persistence-effective step
+    // (R1 trial plan S2): never start a run that would be active without
+    // effective regulation.
+    if (!controlReadyForStart()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
     }
     if (!context.expected.expectedProgramCatalogRevision.has_value()) {
         return requestFailure(
@@ -1491,6 +1530,9 @@ bool FermentationApplication::revalidatePreparedRequest(
     FermentationApplicationPreparedRequest& request) {
     const auto evidence = resolveRuntimeEvidence();
     bool valid = true;
+    // Re-evaluated at confirm time: a state jump between prepare and confirm
+    // (blocked/tripped thermal safety, lost parameters) refuses the start.
+    const bool controlReady = controlReadyForStart();
     const auto productEvidenceRegressed = [&request, &evidence] {
         return request.owningPlausibility_.has_value() &&
                request.owningPlausibility_->product.quality ==
@@ -1499,7 +1541,7 @@ bool FermentationApplication::revalidatePreparedRequest(
                    device_platform::SensorQuality::Valid;
     };
     std::visit(
-        [&request, &evidence, &valid,
+        [&request, &evidence, &valid, &controlReady,
          &productEvidenceRegressed](auto& prepared) {
             using Request = std::decay_t<decltype(prepared)>;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
@@ -1508,7 +1550,7 @@ bool FermentationApplication::revalidatePreparedRequest(
                 prepared.coolingSensorValid = evidence.coolingSensorValid;
                 prepared.productSensorValid = evidence.productSensorValid;
                 valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
-                        prepared.coolingSensorValid &&
+                        prepared.coolingSensorValid && controlReady &&
                         !(prepared.sensorMode == RunSensorMode::Product &&
                           productEvidenceRegressed());
             } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
@@ -1517,7 +1559,7 @@ bool FermentationApplication::revalidatePreparedRequest(
                 prepared.coolingSensorValid = evidence.coolingSensorValid;
                 prepared.productSensorValid = evidence.productSensorValid;
                 valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
-                        prepared.coolingSensorValid &&
+                        prepared.coolingSensorValid && controlReady &&
                         !(prepared.plan.sensorMode == RunSensorMode::Product &&
                           productEvidenceRegressed());
             } else if constexpr (std::is_same_v<Request, StopRequest>) {
@@ -1573,6 +1615,18 @@ void FermentationApplication::publishRawTemperatureSamples(
     const RawTemperatureSamples& samples) {
     const auto guard = applicationCallSerializer_.enter();
     rawTemperatureSamples_ = samples;
+}
+
+ThermalSafetyConfigureResult FermentationApplication::configureThermalSafety(
+    const ThermalSafetyLimits& limits) {
+    const auto guard = applicationCallSerializer_.enter();
+    return thermalSafety_.configure(limits);
+}
+
+ThermalSafetyEvaluation FermentationApplication::thermalSafetyEvaluation()
+    const {
+    const auto guard = applicationCallSerializer_.enter();
+    return thermalSafety_.last();
 }
 
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
@@ -2725,6 +2779,16 @@ void FermentationApplication::tickControlChain() {
     evidence.peltierSensor = &sensors.cooling;
     evidence.sensorSelectionRuntime = &run.sensorSelectionRuntime;
     evidence.actuatorPlanner = &chain.planner;
+    // Firmware temperature safety on the raw cooling-body/air readings,
+    // evaluated now (idempotent for identical samples and time).
+    const auto thermal = thermalSafety_.evaluate(rawTemperatureSamples_, now);
+    evidence.thermalSafety = thermal.status;
+    if (thermal.status == ThermalSafetyStatus::Tripped &&
+        lifecycleState_ != ApplicationLifecycleState::ServiceRequired) {
+        // Visible, latched safety fault in the existing fault path; the
+        // interlock stays denied and the planner keeps its fan semantics.
+        requireService(FaultCode::TemperatureSafetyLimit);
+    }
 
     ActuatorSafetyGateInput gate;
     gate.status = ActuationInterlock::evaluate(evidence).permission;

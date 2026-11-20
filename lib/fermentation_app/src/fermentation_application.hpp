@@ -10,6 +10,7 @@
 #include "boot_classification.hpp"
 #include "process_state_machine.hpp"
 #include "raw_temperature_samples.hpp"
+#include "thermal_safety_supervisor.hpp"
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
 #include "factory_reset_flow.hpp"
@@ -384,6 +385,13 @@ class FermentationApplication {
     // runtime evidence for start admission, control, persistence or the
     // interlock's sensor judgement.
     void publishRawTemperatureSamples(const RawTemperatureSamples& samples);
+    // Firmware temperature safety (R1 trial plan S6). The product never calls
+    // this: the supervisor stays `Unconfigured` and the Peltier permission
+    // stays denied. Only an owner-approved trial/commissioning composition may
+    // set limits (volatile; a latched trip refuses it until the next restart).
+    [[nodiscard]] ThermalSafetyConfigureResult configureThermalSafety(
+        const ThermalSafetyLimits& limits);
+    [[nodiscard]] ThermalSafetyEvaluation thermalSafetyEvaluation() const;
     // Optional R1 control chain (#218). Must be called before begin(); only
     // abstract ports and the single regulator parameter injection point are
     // accepted. Returns false after begin() or for incomplete ports. Without
@@ -728,6 +736,11 @@ class FermentationApplication {
     std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
     CrossRolePlausibilityContext owningRuntimeEvidence_{};
     RawTemperatureSamples rawTemperatureSamples_{};
+    ThermalSafetySupervisor thermalSafety_;
+    // Set by every pre-begin attachActuationPorts() attempt: this composition
+    // intends to regulate, so a start needs a ready control chain (R1 trial
+    // plan S2). Compositions that never attach ports keep the old behaviour.
+    bool controlChainRequested_{false};
     mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
     mutable FermentationUiProjectionInput uiProjectionInput_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
@@ -763,6 +776,10 @@ class FermentationApplication {
     std::uint64_t lastControlTickMillis_{0U};
 
     [[nodiscard]] bool buildControlChain();
+    // Start admission: chain present, valid PI and planner parameters and an
+    // `Ok` firmware temperature safety on fresh, currently evaluated raw
+    // samples. Always true for a composition without control ports.
+    [[nodiscard]] bool controlReadyForStart();
     // Final teardown: outputs off through the existing driver, then the chain
     // is destroyed (see ControlChain::shutdownOutputs).
     [[nodiscard]] bool replaceRunPersistenceCoordinator(
