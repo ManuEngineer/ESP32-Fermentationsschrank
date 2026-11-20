@@ -49,6 +49,10 @@ enum class ThermalSafetyReason : std::uint8_t {
     CoolingUpperIntervention,
     CoolingUpperEmergency,
     CoolingRiseRate,
+    // Not enough continuous observation of the cooling body yet to judge the
+    // trend (after configuration or a gap): never an `Ok`, the Peltier stays
+    // blocked until the observation covers at least half the trend window.
+    TrendObservationPending,
 };
 
 [[nodiscard]] const char* thermalSafetyReasonName(
@@ -82,6 +86,9 @@ enum class ThermalSafetyConfigureResult : std::uint8_t {
     Accepted,
     InvalidLimits,
     Latched,
+    // Application level: a run is active or the run state is unknown. The
+    // protection must not be reconfigured while a run (power phase) exists.
+    RunActiveOrUnknown,
 };
 
 // Firmware-fixed outer bounds of every parameterisable value.
@@ -124,22 +131,34 @@ class ThermalSafetySupervisor final {
     }
 
    private:
-    struct TrendPoint {
+    // Time-bucketed trend history: each slot keeps the FIRST reading of one
+    // time bucket of width ceil(window / 30). 32 slots cover the longest
+    // permitted window (600 s) with any sample interval (2 s or irregular) in
+    // 768 bytes; a plain sample ring would only reach ~126 s at 2 s cycles.
+    struct TrendSlot {
+        std::uint64_t bucketIndex{0U};
         std::uint64_t timestampMillis{0U};
         double celsius{0.0};
+        bool used{false};
     };
-    static constexpr std::size_t kTrendCapacity = 64U;
+    static constexpr std::size_t kTrendSlots = 32U;
+    static constexpr std::uint64_t kTrendBucketsPerWindow = 30U;
 
     ThermalSafetyEvaluation trip(ThermalSafetyReason reason) noexcept;
+    void resetTrend() noexcept;
     void recordTrend(std::uint64_t timestampMillis, double celsius) noexcept;
-    [[nodiscard]] bool trendExceeded() const noexcept;
+    enum class TrendJudgement : std::uint8_t { Pending, Within, Exceeded };
+    [[nodiscard]] TrendJudgement judgeTrend(
+        std::uint64_t newestMillis, double newestCelsius) const noexcept;
 
     bool configured_{false};
     ThermalSafetyLimits limits_{};
     std::optional<ThermalSafetyReason> latched_;
     std::optional<std::uint64_t> invalidSinceMillis_;
-    std::array<TrendPoint, kTrendCapacity> trend_{};
-    std::size_t trendCount_{0U};
+    std::array<TrendSlot, kTrendSlots> trend_{};
+    std::uint64_t trendBucketWidthMillis_{1U};
+    std::optional<std::uint64_t> trendFirstMillis_;
+    std::optional<std::uint64_t> trendLastMillis_;
     ThermalSafetyEvaluation last_{};
 };
 

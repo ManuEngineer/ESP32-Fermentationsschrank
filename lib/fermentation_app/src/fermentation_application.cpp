@@ -1687,6 +1687,16 @@ void FermentationApplication::publishRawTemperatureSamples(
 ThermalSafetyConfigureResult FermentationApplication::configureThermalSafety(
     const ThermalSafetyLimits& limits) {
     const auto guard = applicationCallSerializer_.enter();
+    // The protection is never reconfigured while a run exists: a new
+    // configuration resets the trend history and the invalid-episode timer
+    // and could widen limits during a power phase. Without the run state
+    // "no active run" cannot be proven: fail closed (same predicate as the
+    // planner-parameter writer). A refused call changes nothing.
+    if (runtimeRunState_ == nullptr ||
+        runtimeRunState_->activeProgramRun.has_value() ||
+        runtimeRunState_->activeManualRun.has_value()) {
+        return ThermalSafetyConfigureResult::RunActiveOrUnknown;
+    }
     return thermalSafety_.configure(limits);
 }
 
@@ -1699,6 +1709,11 @@ ThermalSafetyEvaluation FermentationApplication::thermalSafetyEvaluation()
 void FermentationApplication::clearThermalSafetyConfiguration() {
     const auto guard = applicationCallSerializer_.enter();
     thermalSafety_.clearConfiguration();
+    // Safety-directed: the unconfigured protection denies the Peltier
+    // permission at once (re-evaluated now, not on the next loop), the planner
+    // keeps its fan run-on, and a refused re-configuration during the run
+    // (see configureThermalSafety) means nothing can restart silently.
+    tickControlChain();
 }
 
 ThermalSafetyLimits FermentationApplication::thermalSafetyLimits() const {

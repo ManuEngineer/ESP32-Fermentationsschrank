@@ -67,7 +67,13 @@ void logResult(const char* command, bool pass, int detailA, int detailB) {
 void Harness::start() noexcept {
     ESP_LOGW(kTag,
              "R1_TRIAL TRIAL_NOT_COMMISSIONED bring_up_only=YES "
-             "peltier_release=NO release_profile=NO");
+             "release_profile=NO control_chain_attached=YES "
+             "initial_outputs=OFF real_gpio_bts7960_outputs_possible=YES "
+             "(explicit run + permission only)");
+    ESP_LOGW(kTag,
+             "R1_TRIAL peltier_power_path_must_be_physically_disconnected_for_"
+             "C0_C1=EXTERNAL_PRECONDITION (APP_REAL_ACTUATORS_ENABLED=0 is a "
+             "build policy flag, NOT a physical inhibit)");
     ESP_LOGW(kTag,
              "R1_TRIAL compile-time trial values are PROPOSAL_NOT_APPROVED; "
              "planner and thermal limits are set only at the gates");
@@ -148,7 +154,9 @@ void Harness::logStatus() noexcept {
     showPlanner();
     const auto& presentation = application_.presentationState();
     ESP_LOGI(
-        kTag, "R1_TRIAL_STATUS lifecycle=%d fault_code=0x%04X run_active=%d",
+        kTag,
+        "R1_TRIAL_STATUS control_chain=attached real_outputs_possible=1 "
+        "lifecycle=%d fault_code=0x%04X run_active=%d",
         static_cast<int>(application_.lifecycleState()),
         static_cast<unsigned>(presentation.faultCode),
         application_.uiSnapshot().home.mode == FermentationHomeMode::ActiveRun

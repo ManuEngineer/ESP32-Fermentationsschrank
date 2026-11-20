@@ -155,7 +155,8 @@ ThermalSafetyLimits testThermalLimits() {
     limits.coolingInterventionUpperCelsius = 80.0;
     limits.coolingEmergencyUpperCelsius = 90.0;
     limits.coolingMaxRiseCelsiusPerMinute = 50.0;
-    limits.trendWindowMillis = 60'000U;
+    // Shortest permitted trend window: Ok needs half of it observed (5 s).
+    limits.trendWindowMillis = 10'000U;
     limits.maxSampleAgeMillis = 5'000U;
     limits.invalidLatchMillis = 20'000U;
     return limits;
@@ -244,7 +245,7 @@ struct Chain {
         application.update();
     }
 
-    void warmUpSensors(int ticks = 4) {
+    void warmUpSensors(int ticks = 8) {
         for (int i = 0; i < ticks; ++i) step();
     }
 
@@ -637,9 +638,12 @@ void test_s6_trip_locks_peltier_is_visible_and_latched() {
     }
     TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
                      ThermalSafetyStatus::Tripped);
+    // Re-configuration is refused while the run exists (and the latch holds).
     TEST_ASSERT_TRUE(
         chain.application.configureThermalSafety(testThermalLimits()) ==
-        ThermalSafetyConfigureResult::Latched);
+        ThermalSafetyConfigureResult::RunActiveOrUnknown);
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Tripped);
     // The fan run-on of the planner ended on its own schedule (not stuck on).
     TEST_ASSERT_FALSE(chain.outerFan.enabled());
 }
@@ -673,7 +677,13 @@ void test_s6_stale_raw_samples_block_without_latching() {
     TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
                      ThermalSafetyStatus::Blocked);
     TEST_ASSERT_FALSE(chain.peltierOn());
-    chain.step();  // fresh raw samples again
+    chain.step();  // fresh raw samples again after a gap: observation restarts
+    auto evaluation = chain.application.thermalSafetyEvaluation();
+    TEST_ASSERT_TRUE(evaluation.status == ThermalSafetyStatus::Blocked);
+    TEST_ASSERT_TRUE(evaluation.reason ==
+                     ThermalSafetyReason::TrendObservationPending);
+    TEST_ASSERT_FALSE(chain.peltierOn());
+    for (int i = 0; i < 6; ++i) chain.step();  // half of the 10 s window
     TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
                      ThermalSafetyStatus::Ok);
     TEST_ASSERT_TRUE(chain.application.lifecycleState() ==
@@ -696,6 +706,148 @@ void test_s6_unconfigured_thermal_safety_never_releases_the_peltier() {
         chain.step();
         TEST_ASSERT_FALSE(chain.peltierOn());
     }
+}
+
+// R221-2: the protection is never reconfigured while a run exists. A refused
+// call changes neither the limits nor the state, the latch or the running
+// invalid-episode timer.
+void test_s6_configuration_is_refused_during_an_active_run() {
+    Chain chain(testChainParameters());
+    chain.establishHeating();
+    TEST_ASSERT_TRUE(chain.application.uiSnapshot().home.mode ==
+                     FermentationHomeMode::ActiveRun);
+    const auto limitsBefore = chain.application.thermalSafetyLimits();
+    auto wider = testThermalLimits();
+    wider.coolingInterventionUpperCelsius = 85.0;  // would widen the limit
+    wider.coolingEmergencyUpperCelsius = 95.0;
+    TEST_ASSERT_TRUE(chain.application.configureThermalSafety(wider) ==
+                     ThermalSafetyConfigureResult::RunActiveOrUnknown);
+    TEST_ASSERT_TRUE(
+        chain.application.configureThermalSafety(testThermalLimits()) ==
+        ThermalSafetyConfigureResult::RunActiveOrUnknown);
+    const auto limitsAfter = chain.application.thermalSafetyLimits();
+    TEST_ASSERT_TRUE(limitsAfter.coolingInterventionUpperCelsius ==
+                     limitsBefore.coolingInterventionUpperCelsius);
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Ok);
+    TEST_ASSERT_TRUE(chain.application.uiSnapshot().home.mode ==
+                     FermentationHomeMode::ActiveRun);
+    // The original (narrower) limit is still in force: a value between the old
+    // and the refused wider limit trips.
+    chain.cooling.setCelsius(82.0);
+    chain.step();
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Tripped);
+    TEST_ASSERT_FALSE(chain.peltierOn());
+}
+
+// A running invalid-reading episode is not reset by a refused configuration:
+// the loss latch still fires on its original schedule.
+void test_s6_a_refused_configuration_does_not_reset_the_invalid_episode() {
+    Chain chain(testChainParameters());
+    chain.establishHeating();
+    chain.cooling.setFailed();  // raw BusFault: Blocked, timer starts
+    for (int i = 0; i < 15; ++i) {
+        chain.step();
+        TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                         ThermalSafetyStatus::Blocked);
+    }
+    TEST_ASSERT_TRUE(
+        chain.application.configureThermalSafety(testThermalLimits()) ==
+        ThermalSafetyConfigureResult::RunActiveOrUnknown);
+    for (int i = 0; i < 4; ++i) chain.step();  // the 20 s latch is near
+    for (int i = 0; i < 3; ++i) chain.step();  // passed on the original timer
+    const auto evaluation = chain.application.thermalSafetyEvaluation();
+    TEST_ASSERT_TRUE(evaluation.status == ThermalSafetyStatus::Tripped);
+    TEST_ASSERT_TRUE(evaluation.reason == ThermalSafetyReason::SampleLoss);
+    TEST_ASSERT_FALSE(chain.peltierOn());
+}
+
+// The trend history survives a refused configuration (a dangerous rise during
+// the run still trips on its original observation).
+void test_s6_a_refused_configuration_keeps_the_trend_history() {
+    auto limits = testThermalLimits();
+    limits.coolingMaxRiseCelsiusPerMinute = 6.0;
+    Chain chain(testChainParameters());
+    chain.installPlannerParameters(false);
+    TEST_ASSERT_TRUE(chain.application.configureThermalSafety(limits) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    chain.air.setCelsius(20.0);
+    chain.cooling.setCelsius(20.0);
+    chain.product.setCelsius(20.0);
+    chain.warmUpSensors();
+    TEST_ASSERT_TRUE(chain.tryStartManualRun());
+    double cooling = 20.0;
+    bool tripped = false;
+    for (int i = 0; i < 40 && !tripped; ++i) {
+        cooling += 0.5;  // +30 K/min at 1 s steps
+        chain.cooling.setCelsius(cooling);
+        chain.step();
+        if (i == 3) {
+            TEST_ASSERT_TRUE(chain.application.configureThermalSafety(limits) ==
+                             ThermalSafetyConfigureResult::RunActiveOrUnknown);
+        }
+        tripped = chain.application.thermalSafetyEvaluation().status ==
+                  ThermalSafetyStatus::Tripped;
+    }
+    TEST_ASSERT_TRUE(tripped);
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().reason ==
+                         ThermalSafetyReason::CoolingRiseRate ||
+                     chain.application.thermalSafetyEvaluation().reason ==
+                         ThermalSafetyReason::CoolingUpperIntervention);
+    TEST_ASSERT_FALSE(chain.peltierOn());
+}
+
+// `thermal clear` during a run is safety-directed: the Peltier is blocked at
+// once, the fan run-on is kept, and nothing restarts silently (a refused
+// re-configuration, the run keeps its blocked gate).
+void test_s6_clear_during_a_run_blocks_the_peltier_and_cannot_restart_silently() {
+    Chain chain(testChainParameters());
+    chain.establishHeating();
+    TEST_ASSERT_TRUE(chain.peltierOn());
+    chain.application.clearThermalSafetyConfiguration();
+    // Immediately (no further loop iteration) the Peltier is off.
+    TEST_ASSERT_FALSE(chain.peltierOn());
+    chain.assertSafeOutputs();
+    TEST_ASSERT_TRUE(chain.application.thermalSafetyEvaluation().status ==
+                     ThermalSafetyStatus::Unconfigured);
+    // The planner keeps its run-on schedule and ends it by itself.
+    bool fanOn = chain.outerFan.enabled();
+    for (int i = 0; i < 14; ++i) {
+        chain.step(500U);
+        fanOn = fanOn || chain.outerFan.enabled();
+        TEST_ASSERT_FALSE(chain.peltierOn());
+        chain.assertSafeOutputs();
+    }
+    TEST_ASSERT_TRUE(fanOn);
+    TEST_ASSERT_FALSE(chain.outerFan.enabled());
+    // No silent restart: a re-configuration during the run is refused, the
+    // gate stays denied for any amount of time.
+    TEST_ASSERT_TRUE(
+        chain.application.configureThermalSafety(testThermalLimits()) ==
+        ThermalSafetyConfigureResult::RunActiveOrUnknown);
+    for (int i = 0; i < 40; ++i) {
+        chain.step();
+        TEST_ASSERT_FALSE(chain.peltierOn());
+    }
+    TEST_ASSERT_TRUE(chain.application.uiSnapshot().home.mode ==
+                     FermentationHomeMode::ActiveRun);
+    // After the run ends, the protection can be configured again, but a new
+    // start is needed (and refused until everything is ready).
+    chain.stopRun();
+    TEST_ASSERT_TRUE(
+        chain.application.configureThermalSafety(testThermalLimits()) ==
+        ThermalSafetyConfigureResult::Accepted);
+    TEST_ASSERT_FALSE(chain.peltierOn());
+}
+
+// Not started: the run state is unknown, so the configuration is refused.
+void test_s6_configuration_without_a_run_state_is_refused() {
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(application.configureThermalSafety(testThermalLimits()) ==
+                     ThermalSafetyConfigureResult::RunActiveOrUnknown);
+    TEST_ASSERT_FALSE(application.thermalSafetyEvaluation().status ==
+                      ThermalSafetyStatus::Ok);
 }
 
 // S2: the start admission needs regulation readiness at prepare AND confirm.
@@ -815,6 +967,13 @@ int main(int, char**) {
     RUN_TEST(test_s6_trip_keeps_the_planner_outer_fan_run_on);
     RUN_TEST(test_s6_stale_raw_samples_block_without_latching);
     RUN_TEST(test_s6_unconfigured_thermal_safety_never_releases_the_peltier);
+    RUN_TEST(test_s6_configuration_is_refused_during_an_active_run);
+    RUN_TEST(
+        test_s6_a_refused_configuration_does_not_reset_the_invalid_episode);
+    RUN_TEST(test_s6_a_refused_configuration_keeps_the_trend_history);
+    RUN_TEST(
+        test_s6_clear_during_a_run_blocks_the_peltier_and_cannot_restart_silently);
+    RUN_TEST(test_s6_configuration_without_a_run_state_is_refused);
     RUN_TEST(test_s2_start_admission_matrix);
     RUN_TEST(test_s2_state_jump_between_prepare_and_confirm_is_refused);
     RUN_TEST(

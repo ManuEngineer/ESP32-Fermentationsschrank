@@ -242,6 +242,36 @@ void test_app_main_reaches_the_trial_only_inside_its_flag() {
     TEST_ASSERT_TRUE(references >= 4U);
 }
 
+// R221-3: the boot log must state the real actuator situation. The build
+// policy flag APP_REAL_ACTUATORS_ENABLED=0 is no physical inhibit: where the
+// control chain is attached, an explicit run with a granted permission can
+// drive real GPIO/BTS7960 outputs. The former wording ("real actuators:
+// disabled", "not_connected_to_planner") was false since #219.
+void test_boot_log_states_the_actuator_situation_truthfully() {
+    const auto text = readSource("main/app_main.cpp");
+    TEST_ASSERT_FALSE(contains(text, "real actuators: disabled"));
+    TEST_ASSERT_FALSE(contains(text, "not_connected_to_planner"));
+    TEST_ASSERT_TRUE(contains(text, "real actuators: initial_off"));
+    TEST_ASSERT_TRUE(contains(text, "not a physical inhibit"));
+    TEST_ASSERT_TRUE(contains(text, "attached_to_control_chain"));
+    TEST_ASSERT_TRUE(contains(text, "not_attached_manual_harness"));
+    TEST_ASSERT_TRUE(contains(text, "ready_initial_all_off"));
+    // The trial harness separates initial-off, attached chain and possible
+    // real outputs and names the physical disconnection as an external
+    // precondition (never as something the build flag guarantees).
+    const auto harness = readSource("main/r1_control_trial_harness.cpp");
+    TEST_ASSERT_TRUE(contains(harness, "control_chain_attached=YES"));
+    TEST_ASSERT_TRUE(contains(harness, "initial_outputs=OFF"));
+    TEST_ASSERT_TRUE(
+        contains(harness, "real_gpio_bts7960_outputs_possible=YES"));
+    TEST_ASSERT_TRUE(contains(harness, "EXTERNAL_PRECONDITION"));
+    TEST_ASSERT_TRUE(contains(harness, "NOT a physical inhibit"));
+    TEST_ASSERT_FALSE(contains(harness, "peltier_release=NO"));
+    // The legacy #90 runner still recognises the truthful marker.
+    const auto runner = readSource("scripts/issue_90_slice7_product_runner.py");
+    TEST_ASSERT_TRUE(contains(runner, "real actuators: initial_off"));
+}
+
 int main(int argc, char** argv) {
     static_cast<void>(argc);
     static_cast<void>(argv);
@@ -254,5 +284,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_r1_control_trial_is_bringup_only_and_actuator_free);
     RUN_TEST(test_r1_control_trial_is_built_only_in_its_cmake_block);
     RUN_TEST(test_app_main_reaches_the_trial_only_inside_its_flag);
+    RUN_TEST(test_boot_log_states_the_actuator_situation_truthfully);
     return UNITY_END();
 }

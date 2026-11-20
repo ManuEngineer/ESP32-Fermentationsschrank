@@ -54,6 +54,26 @@ RawTemperatureSamples samples(std::uint64_t stamp, double air, double cooling) {
     return result;
 }
 
+// Feeds constant readings every `stepMs` until the observation covers at least
+// half of the trend window; returns the time of the Ok evaluation. Only then is
+// `Ok` possible (no judgement without enough observation).
+std::uint64_t primeToOk(ThermalSafetySupervisor& supervisor,
+                        std::uint64_t start, double air = 25.0,
+                        double cooling = 30.0, std::uint64_t stepMs = 2'000U) {
+    const auto window = supervisor.limits().trendWindowMillis;
+    std::uint64_t now = start;
+    for (;;) {
+        const auto result =
+            supervisor.evaluate(samples(now, air, cooling), now);
+        if (result.status == ThermalSafetyStatus::Ok) return now;
+        TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+        TEST_ASSERT_TRUE(result.reason ==
+                         ThermalSafetyReason::TrendObservationPending);
+        TEST_ASSERT_TRUE(now - start <= window);
+        now += stepMs;
+    }
+}
+
 void test_unconfigured_is_the_default_and_denies() {
     ThermalSafetySupervisor supervisor;
     const auto result =
@@ -109,15 +129,41 @@ void test_limit_validation_rejects_every_malformed_set() {
     expectRejected(l);
 }
 
-void test_blocked_until_first_valid_evaluation_then_ok() {
+void test_blocked_until_enough_observation_then_ok() {
     ThermalSafetySupervisor supervisor;
     TEST_ASSERT_TRUE(supervisor.configure(testLimits()) ==
                      ThermalSafetyConfigureResult::Accepted);
     TEST_ASSERT_TRUE(supervisor.last().status == ThermalSafetyStatus::Blocked);
-    const auto result =
-        supervisor.evaluate(samples(10'000U, 25.0, 30.0), 10'000U);
+    // The first valid reading cannot prove a trend: never Ok. Readings keep
+    // coming every 2 s; pending until half of the 60 s window is observed.
+    ThermalSafetyEvaluation result;
+    for (std::uint64_t now = 10'000U; now < 40'000U; now += 2'000U) {
+        result = supervisor.evaluate(samples(now, 25.0, 30.0), now);
+        TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+        TEST_ASSERT_TRUE(result.reason ==
+                         ThermalSafetyReason::TrendObservationPending);
+    }
+    // Half of the window observed (30 s): judged and Ok.
+    result = supervisor.evaluate(samples(40'000U, 25.0, 30.0), 40'000U);
     TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Ok);
     TEST_ASSERT_TRUE(result.reason == ThermalSafetyReason::None);
+}
+
+void test_a_gap_breaks_the_observation_and_never_yields_an_ok() {
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(testLimits()) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    const auto ok = primeToOk(supervisor, 10'000U);
+    TEST_ASSERT_TRUE(supervisor.evaluate(samples(ok, 25.0, 30.0), ok).status ==
+                     ThermalSafetyStatus::Ok);
+    // Readings stop for longer than the sample-age limit, then resume: the old
+    // history is discarded and the observation starts again.
+    const auto resume = ok + 12'000U;
+    const auto result =
+        supervisor.evaluate(samples(resume, 25.0, 30.0), resume);
+    TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+    TEST_ASSERT_TRUE(result.reason ==
+                     ThermalSafetyReason::TrendObservationPending);
 }
 
 void test_every_limit_level_trips_and_latches() {
@@ -186,13 +232,11 @@ void test_recovered_readings_clear_the_invalid_timer_but_not_a_trip() {
     bad.air.reset();
     TEST_ASSERT_TRUE(supervisor.evaluate(bad, 10'000U).status ==
                      ThermalSafetyStatus::Blocked);
-    TEST_ASSERT_TRUE(
-        supervisor.evaluate(samples(18'000U, 25.0, 30.0), 18'000U).status ==
-        ThermalSafetyStatus::Ok);
+    const auto ok = primeToOk(supervisor, 18'000U);
     // A new invalid episode starts a fresh timer.
-    TEST_ASSERT_TRUE(supervisor.evaluate(bad, 19'000U).status ==
+    TEST_ASSERT_TRUE(supervisor.evaluate(bad, ok + 1'000U).status ==
                      ThermalSafetyStatus::Blocked);
-    TEST_ASSERT_TRUE(supervisor.evaluate(bad, 38'999U).status ==
+    TEST_ASSERT_TRUE(supervisor.evaluate(bad, ok + 19'999U).status ==
                      ThermalSafetyStatus::Blocked);
 }
 
@@ -241,26 +285,139 @@ void test_sustained_rise_trips_but_a_short_step_does_not() {
     ThermalSafetySupervisor supervisor;
     TEST_ASSERT_TRUE(supervisor.configure(testLimits()) ==
                      ThermalSafetyConfigureResult::Accepted);
-    // 2 s cycle; +10 K/min would trip over a long enough span.
+    // 2 s cycle; +10 K/min (limit 6 K/min) over a 60 s window.
     std::uint64_t now = 10'000U;
     double cooling = 20.0;
     ThermalSafetyEvaluation result;
-    // A first 20 s of +10 K/min is below half of the window: no decision yet.
-    for (int i = 0; i < 10; ++i) {
-        result = supervisor.evaluate(samples(now, 25.0, cooling), now);
-        TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Ok);
-        now += 2'000U;
-        cooling += 10.0 / 30.0;
-    }
     bool tripped = false;
-    for (int i = 0; i < 20 && !tripped; ++i) {
+    for (int i = 0; i < 60 && !tripped; ++i) {
         result = supervisor.evaluate(samples(now, 25.0, cooling), now);
+        // Until half the window is observed there is no Ok (pending).
+        if (now - 10'000U < 30'000U) {
+            TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+        }
         tripped = result.status == ThermalSafetyStatus::Tripped;
         now += 2'000U;
         cooling += 10.0 / 30.0;
     }
     TEST_ASSERT_TRUE(tripped);
     TEST_ASSERT_TRUE(result.reason == ThermalSafetyReason::CoolingRiseRate);
+    // It trips as soon as half a window of a dangerous rise is observable.
+    TEST_ASSERT_TRUE(now - 2'000U - 10'000U <= 36'000U);
+}
+
+// R221-1: the longest permitted window (600 s) at the real ~2 s sensor cycle
+// must be evaluable. The former 64-point ring covered only ~126 s, so the rise
+// alarm could never fire.
+void test_the_longest_window_trips_on_a_dangerous_rise_at_two_second_samples() {
+    ThermalSafetyLimits limits = testLimits();
+    limits.trendWindowMillis = kThermalSafetyMaxTrendWindowMillis;  // 600 s
+    limits.coolingInterventionUpperCelsius = 90.0;
+    limits.coolingEmergencyUpperCelsius = 100.0;
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(limits) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    std::uint64_t now = 10'000U;
+    double cooling = 20.0;
+    bool tripped = false;
+    ThermalSafetyEvaluation result;
+    for (int i = 0; i < 400 && !tripped; ++i) {  // up to 800 s
+        result = supervisor.evaluate(samples(now, 25.0, cooling), now);
+        tripped = result.status == ThermalSafetyStatus::Tripped;
+        now += 2'000U;
+        cooling += 10.0 / 30.0;  // +10 K/min > 6 K/min
+    }
+    TEST_ASSERT_TRUE(tripped);
+    TEST_ASSERT_TRUE(result.reason == ThermalSafetyReason::CoolingRiseRate);
+    // Within half a window plus margin of observation, not after minutes more.
+    TEST_ASSERT_TRUE(now - 2'000U - 10'000U <= 330'000U);
+}
+
+void test_the_longest_window_stays_ok_for_a_slow_warming() {
+    ThermalSafetyLimits limits = testLimits();
+    limits.trendWindowMillis = kThermalSafetyMaxTrendWindowMillis;
+    limits.coolingInterventionUpperCelsius = 90.0;
+    limits.coolingEmergencyUpperCelsius = 100.0;
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(limits) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    std::uint64_t now = 10'000U;
+    double cooling = 20.0;
+    for (int i = 0; i < 600; ++i) {  // 1200 s at +2 K/min < 6 K/min
+        const auto result =
+            supervisor.evaluate(samples(now, 25.0, cooling), now);
+        TEST_ASSERT_TRUE(result.status != ThermalSafetyStatus::Tripped);
+        if (now - 10'000U >= 300'000U) {
+            TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Ok);
+        } else {
+            TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+        }
+        now += 2'000U;
+        cooling += 2.0 / 30.0;
+    }
+}
+
+// Irregular sample intervals (1 s ... 4 s, deterministic pseudo-random) must
+// not hide the same dangerous rise.
+void test_irregular_sample_intervals_still_trip_on_a_dangerous_rise() {
+    ThermalSafetyLimits limits = testLimits();
+    limits.trendWindowMillis = 300'000U;
+    limits.coolingInterventionUpperCelsius = 90.0;
+    limits.coolingEmergencyUpperCelsius = 100.0;
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(limits) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    std::uint64_t now = 10'000U;
+    std::uint32_t seed = 12345U;
+    bool tripped = false;
+    ThermalSafetyEvaluation result;
+    for (int i = 0; i < 600 && !tripped; ++i) {
+        const double minutes = static_cast<double>(now - 10'000U) / 60'000.0;
+        result =
+            supervisor.evaluate(samples(now, 25.0, 20.0 + 10.0 * minutes), now);
+        tripped = result.status == ThermalSafetyStatus::Tripped;
+        seed = seed * 1664525U + 1013904223U;
+        now += 1'000U + (seed >> 16U) % 3'001U;  // 1..4 s
+    }
+    TEST_ASSERT_TRUE(tripped);
+    TEST_ASSERT_TRUE(result.reason == ThermalSafetyReason::CoolingRiseRate);
+}
+
+// A rise that starts late is caught against a recent baseline, not only the
+// oldest one: 40 K within the last 200 s of a 600 s window.
+void test_a_late_fast_rise_is_caught_against_a_recent_baseline() {
+    ThermalSafetyLimits limits = testLimits();
+    limits.trendWindowMillis = kThermalSafetyMaxTrendWindowMillis;
+    limits.coolingInterventionUpperCelsius = 100.0;
+    limits.coolingEmergencyUpperCelsius = 110.0;
+    limits.coolingMaxRiseCelsiusPerMinute = 6.0;
+    // Needs the measuring range: use a wide emergency band.
+    limits.coolingEmergencyUpperCelsius = 120.0;
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(limits) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    std::uint64_t now = 10'000U;
+    // 400 s flat at 20 degrees C, then +20 K/min.
+    for (int i = 0; i < 200; ++i, now += 2'000U) {
+        TEST_ASSERT_TRUE(
+            supervisor.evaluate(samples(now, 25.0, 20.0), now).status !=
+            ThermalSafetyStatus::Tripped);
+    }
+    double cooling = 20.0;
+    bool tripped = false;
+    for (int i = 0; i < 120 && !tripped; ++i) {
+        cooling += 20.0 / 30.0;
+        tripped =
+            supervisor.evaluate(samples(now, 25.0, cooling), now).status ==
+            ThermalSafetyStatus::Tripped;
+        now += 2'000U;
+    }
+    TEST_ASSERT_TRUE(tripped);
+}
+
+// Memory stays small: no per-sample history.
+void test_the_supervisor_keeps_a_small_fixed_history() {
+    TEST_ASSERT_TRUE(sizeof(ThermalSafetySupervisor) < 1'600U);
 }
 
 void test_a_slow_rise_never_trips() {
@@ -272,7 +429,10 @@ void test_a_slow_rise_never_trips() {
     for (int i = 0; i < 80; ++i) {
         const auto result =
             supervisor.evaluate(samples(now, 25.0, cooling), now);
-        TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Ok);
+        TEST_ASSERT_TRUE(result.status != ThermalSafetyStatus::Tripped);
+        if (now - 10'000U >= 30'000U) {
+            TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Ok);
+        }
         now += 2'000U;
         cooling += 2.0 / 30.0;  // +2 K/min < 6 K/min
     }
@@ -282,10 +442,20 @@ void test_evaluation_is_idempotent_for_identical_input() {
     ThermalSafetySupervisor supervisor;
     TEST_ASSERT_TRUE(supervisor.configure(testLimits()) ==
                      ThermalSafetyConfigureResult::Accepted);
+    const auto ok = primeToOk(supervisor, 10'000U);
     for (int i = 0; i < 200; ++i) {
         TEST_ASSERT_TRUE(
-            supervisor.evaluate(samples(10'000U, 25.0, 30.0), 10'000U).status ==
+            supervisor.evaluate(samples(ok, 25.0, 30.0), ok).status ==
             ThermalSafetyStatus::Ok);
+    }
+    // Repeating a pending evaluation never advances the observation.
+    ThermalSafetySupervisor pending;
+    TEST_ASSERT_TRUE(pending.configure(testLimits()) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    for (int i = 0; i < 200; ++i) {
+        TEST_ASSERT_TRUE(
+            pending.evaluate(samples(10'000U, 25.0, 30.0), 10'000U).status ==
+            ThermalSafetyStatus::Blocked);
     }
 }
 
@@ -320,6 +490,9 @@ void test_names_are_stable() {
     TEST_ASSERT_EQUAL_STRING(
         "cooling_rise_rate",
         thermalSafetyReasonName(ThermalSafetyReason::CoolingRiseRate));
+    TEST_ASSERT_EQUAL_STRING(
+        "trend_observation_pending",
+        thermalSafetyReasonName(ThermalSafetyReason::TrendObservationPending));
 }
 
 }  // namespace
@@ -331,7 +504,8 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unconfigured_is_the_default_and_denies);
     RUN_TEST(test_limit_validation_rejects_every_malformed_set);
-    RUN_TEST(test_blocked_until_first_valid_evaluation_then_ok);
+    RUN_TEST(test_blocked_until_enough_observation_then_ok);
+    RUN_TEST(test_a_gap_breaks_the_observation_and_never_yields_an_ok);
     RUN_TEST(test_every_limit_level_trips_and_latches);
     RUN_TEST(test_emergency_level_wins_over_intervention);
     RUN_TEST(test_invalid_readings_block_and_latch_after_the_configured_time);
@@ -340,6 +514,12 @@ int main(int, char**) {
     RUN_TEST(test_a_limit_excursion_trips_even_if_the_other_sensor_is_invalid);
     RUN_TEST(test_sustained_rise_trips_but_a_short_step_does_not);
     RUN_TEST(test_a_slow_rise_never_trips);
+    RUN_TEST(
+        test_the_longest_window_trips_on_a_dangerous_rise_at_two_second_samples);
+    RUN_TEST(test_the_longest_window_stays_ok_for_a_slow_warming);
+    RUN_TEST(test_irregular_sample_intervals_still_trip_on_a_dangerous_rise);
+    RUN_TEST(test_a_late_fast_rise_is_caught_against_a_recent_baseline);
+    RUN_TEST(test_the_supervisor_keeps_a_small_fixed_history);
     RUN_TEST(test_evaluation_is_idempotent_for_identical_input);
     RUN_TEST(test_latch_refuses_configuration_and_survives_clearing);
     RUN_TEST(test_clearing_the_configuration_returns_to_unconfigured);

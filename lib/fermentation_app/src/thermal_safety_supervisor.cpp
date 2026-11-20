@@ -113,6 +113,8 @@ const char* thermalSafetyReasonName(ThermalSafetyReason reason) noexcept {
             return "cooling_upper_emergency";
         case ThermalSafetyReason::CoolingRiseRate:
             return "cooling_rise_rate";
+        case ThermalSafetyReason::TrendObservationPending:
+            return "trend_observation_pending";
     }
     return "unknown";
 }
@@ -161,7 +163,11 @@ ThermalSafetyConfigureResult ThermalSafetySupervisor::configure(
     limits_ = limits;
     configured_ = true;
     invalidSinceMillis_.reset();
-    trendCount_ = 0U;
+    trendBucketWidthMillis_ =
+        (limits_.trendWindowMillis + kTrendBucketsPerWindow - 1U) /
+        kTrendBucketsPerWindow;
+    if (trendBucketWidthMillis_ == 0U) trendBucketWidthMillis_ = 1U;
+    resetTrend();
     last_ = ThermalSafetyEvaluation{ThermalSafetyStatus::Blocked,
                                     ThermalSafetyReason::SampleMissing};
     return ThermalSafetyConfigureResult::Accepted;
@@ -171,7 +177,7 @@ void ThermalSafetySupervisor::clearConfiguration() noexcept {
     configured_ = false;
     limits_ = ThermalSafetyLimits{};
     invalidSinceMillis_.reset();
-    trendCount_ = 0U;
+    resetTrend();
     if (!latched_.has_value()) {
         last_ = ThermalSafetyEvaluation{};
     }
@@ -184,43 +190,54 @@ ThermalSafetyEvaluation ThermalSafetySupervisor::trip(
     return last_;
 }
 
-void ThermalSafetySupervisor::recordTrend(std::uint64_t timestampMillis,
-                                          double celsius) noexcept {
-    if (trendCount_ > 0U &&
-        timestampMillis <= trend_[trendCount_ - 1U].timestampMillis) {
-        return;
-    }
-    // Drop points that left the window relative to the newest one.
-    std::size_t first = 0U;
-    while (first < trendCount_ &&
-           timestampMillis - trend_[first].timestampMillis >
-               limits_.trendWindowMillis) {
-        ++first;
-    }
-    if (first > 0U) {
-        for (std::size_t i = first; i < trendCount_; ++i) {
-            trend_[i - first] = trend_[i];
-        }
-        trendCount_ -= first;
-    }
-    if (trendCount_ == kTrendCapacity) {
-        for (std::size_t i = 1U; i < trendCount_; ++i)
-            trend_[i - 1U] = trend_[i];
-        --trendCount_;
-    }
-    trend_[trendCount_++] = TrendPoint{timestampMillis, celsius};
+void ThermalSafetySupervisor::resetTrend() noexcept {
+    for (auto& slot : trend_) slot = TrendSlot{};
+    trendFirstMillis_.reset();
+    trendLastMillis_.reset();
 }
 
-bool ThermalSafetySupervisor::trendExceeded() const noexcept {
-    if (trendCount_ < 2U) return false;
-    const auto& oldest = trend_[0];
-    const auto& newest = trend_[trendCount_ - 1U];
-    const auto span = newest.timestampMillis - oldest.timestampMillis;
-    // A rate needs a meaningful span; otherwise one noisy step would trip.
-    if (span < limits_.trendWindowMillis / 2U) return false;
-    const double minutes = static_cast<double>(span) / 60'000.0;
-    return (newest.celsius - oldest.celsius) / minutes >
-           limits_.coolingMaxRiseCelsiusPerMinute;
+void ThermalSafetySupervisor::recordTrend(std::uint64_t timestampMillis,
+                                          double celsius) noexcept {
+    if (trendLastMillis_.has_value() && timestampMillis <= *trendLastMillis_) {
+        return;  // idempotent for an already recorded reading
+    }
+    // A gap longer than the sample-age limit breaks the observation: readings
+    // before it can no longer prove what happened in between.
+    if (trendLastMillis_.has_value() &&
+        timestampMillis - *trendLastMillis_ > limits_.maxSampleAgeMillis) {
+        resetTrend();
+    }
+    if (!trendFirstMillis_.has_value()) trendFirstMillis_ = timestampMillis;
+    trendLastMillis_ = timestampMillis;
+    const std::uint64_t bucket = timestampMillis / trendBucketWidthMillis_;
+    auto& slot = trend_[bucket % kTrendSlots];
+    if (slot.used && slot.bucketIndex == bucket)
+        return;  // keep the first reading
+    slot = TrendSlot{bucket, timestampMillis, celsius, true};
+}
+
+ThermalSafetySupervisor::TrendJudgement ThermalSafetySupervisor::judgeTrend(
+    std::uint64_t newestMillis, double newestCelsius) const noexcept {
+    // Observed continuously for at least half the window? Otherwise the trend
+    // cannot be judged and no `Ok` may be given.
+    const std::uint64_t half = limits_.trendWindowMillis / 2U;
+    if (!trendFirstMillis_.has_value() ||
+        newestMillis - *trendFirstMillis_ < half) {
+        return TrendJudgement::Pending;
+    }
+    // Worst rise over every baseline between half a window and one window old.
+    bool exceeded = false;
+    for (const auto& slot : trend_) {
+        if (!slot.used || slot.timestampMillis >= newestMillis) continue;
+        const std::uint64_t span = newestMillis - slot.timestampMillis;
+        if (span < half || span > limits_.trendWindowMillis) continue;
+        const double minutes = static_cast<double>(span) / 60'000.0;
+        if ((newestCelsius - slot.celsius) / minutes >
+            limits_.coolingMaxRiseCelsiusPerMinute) {
+            exceeded = true;
+        }
+    }
+    return exceeded ? TrendJudgement::Exceeded : TrendJudgement::Within;
 }
 
 ThermalSafetyEvaluation ThermalSafetySupervisor::evaluate(
@@ -280,7 +297,17 @@ ThermalSafetyEvaluation ThermalSafetySupervisor::evaluate(
     invalidSinceMillis_.reset();
 
     recordTrend(cooling.timestampMillis, cooling.celsius);
-    if (trendExceeded()) return trip(ThermalSafetyReason::CoolingRiseRate);
+    switch (judgeTrend(cooling.timestampMillis, cooling.celsius)) {
+        case TrendJudgement::Exceeded:
+            return trip(ThermalSafetyReason::CoolingRiseRate);
+        case TrendJudgement::Pending:
+            last_ = ThermalSafetyEvaluation{
+                ThermalSafetyStatus::Blocked,
+                ThermalSafetyReason::TrendObservationPending};
+            return last_;
+        case TrendJudgement::Within:
+            break;
+    }
 
     last_ = ThermalSafetyEvaluation{ThermalSafetyStatus::Ok,
                                     ThermalSafetyReason::None};
