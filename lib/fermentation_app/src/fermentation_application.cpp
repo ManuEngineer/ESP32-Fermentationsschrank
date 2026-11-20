@@ -1343,6 +1343,73 @@ FermentationApplication::applySensorCommissioning(
         });
 }
 
+std::optional<FermentationActuatorPlannerSnapshot>
+FermentationApplication::actuatorPlannerParameters() const {
+    const auto guard = applicationCallSerializer_.enter();
+    if (configurationService_ == nullptr) {
+        return std::nullopt;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return std::nullopt;
+    }
+    FermentationActuatorPlannerSnapshot snapshot;
+    snapshot.revision = runtime.lease.get().serviceConfigurationRevision();
+    snapshot.parameters =
+        runtime.lease.get().serviceConfiguration().actuatorPlannerParameters;
+    return snapshot;
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applyActuatorPlannerParameters(
+    const std::optional<ActuatorPlannerParameters>& parameters,
+    const std::optional<ServiceConfigurationRevision>& expectedRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    if (configurationService_ == nullptr || runtimeRunState_ == nullptr) {
+        return {Preview::ConfigurationRuntimeUnavailable,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // The per-run snapshot is taken at the fresh start: never change the
+    // source while a run exists.
+    if (runtimeRunState_->activeProgramRun.has_value() ||
+        runtimeRunState_->activeManualRun.has_value()) {
+        return {Preview::NotAllowed, Commit::ConfigurationRuntimeFailure};
+    }
+    if (parameters.has_value() &&
+        classifyActuatorPlannerParameters(*parameters) !=
+            ActuatorPlannerParametersValidation::Valid) {
+        return {Preview::InvalidCandidate,
+                Commit::ConfigurationValidationFailure};
+    }
+    if (!expectedRevision.has_value()) {
+        return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
+    }
+    UserConfigurationRevision userRevision{0U};
+    {
+        const auto runtime = configurationService_->acquireRuntime();
+        if (runtime.status !=
+            RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            return {Preview::ConfigurationRuntimeUnavailable,
+                    Commit::ConfigurationRuntimeFailure};
+        }
+        if (runtime.lease.get().serviceConfigurationRevision() !=
+            *expectedRevision) {
+            return {Preview::StateChanged,
+                    Commit::ConfigurationConflictFailure};
+        }
+        userRevision = runtime.lease.get().userConfigurationRevision();
+    }
+    return commitConfigurationChange(
+        *configurationService_, userRevision,
+        {ChangeOriginKind::InternalSystem, 1U},
+        {ChangeOperationKind::NormalEdit, 1U},
+        [&parameters](ConfigurationPreviewBuildLease& lease) {
+            lease.serviceConfiguration().actuatorPlannerParameters = parameters;
+        });
+}
+
 ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(
     const FermentationUiProgramEditRequest& request,
     const std::optional<ProgramCatalogRevision>& expectedProgramCatalogRevision,

@@ -256,6 +256,13 @@ struct FermentationSensorCommissioningSnapshot {
     std::optional<SensorCommissioningRecord> record;
 };
 
+// Persisted actuator planner parameters (service configuration) with the
+// service revision a later change refers to (R1 trial plan S4).
+struct FermentationActuatorPlannerSnapshot {
+    ServiceConfigurationRevision revision{0U};
+    std::optional<ActuatorPlannerParameters> parameters;
+};
+
 class FermentationApplication {
    public:
     FermentationApplication() noexcept;
@@ -349,6 +356,18 @@ class FermentationApplication {
     // runtime exists (unbound).
     [[nodiscard]] std::optional<FermentationSensorCommissioningSnapshot>
     sensorCommissioning() const;
+    // Actuator planner parameters in the ServiceConfiguration (R1 trial plan
+    // S4, owner decision D2). Written only through preview, revision
+    // validation and confirmation, never while a run is active, and only with
+    // `Valid` parameters; `nullopt` clears them (a later fresh start then has
+    // no planner snapshot and stays refused). No UI/Web caller exists; the
+    // canonical read path of a run stays FreshStartSnapshotProvenance.
+    [[nodiscard]] ApplicationConfigurationChangeResult
+    applyActuatorPlannerParameters(
+        const std::optional<ActuatorPlannerParameters>& parameters,
+        const std::optional<ServiceConfigurationRevision>& expectedRevision);
+    [[nodiscard]] std::optional<FermentationActuatorPlannerSnapshot>
+    actuatorPlannerParameters() const;
     // Owning ProgramCatalog mutation for the local program management (Issue
     // #172, S6): usage evidence comes from the runtime run state, never from
     // the UI; preview, validation and confirmation run through the
