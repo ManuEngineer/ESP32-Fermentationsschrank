@@ -174,13 +174,20 @@ bitgleich ohne/mit Rohanzeige; Renderer-Text (Status/Diagnose); Web-JSON unverae
 
 `prepareStartProgram` verweigert mit dem bestehenden `Unavailable`, wenn nicht
 gilt: Kette vorhanden **und** `classifyTemperatureControlParameters(PI)==Valid`
-**und** `classifyActuatorPlannerParameters(Lease-Parameter)==Valid` **und** der
-Firmware-Temperaturschutz (S6) konfiguriert und nicht verriegelt. Die Pruefung liegt
+**und** `classifyActuatorPlannerParameters(Lease-Parameter)==Valid` **und**
+`thermalSafety == Ok` des Firmware-Temperaturschutzes (S6) auf **frischen, aktuell
+evaluierten, gueltigen Rohproben** (nicht nur „konfiguriert und nicht `Tripped`“:
+`Unconfigured`, `Blocked`, `Tripped`, fehlende/alte/fehlerhafte Rohproben oder eine
+verletzte Temperatur-/Trendgrenze verweigern den Start; keine vorgespiegelte
+`Ok`-Evidenz). Die Pruefung liegt
 **vor** jeder identitaets-/persistenzwirksamen Nebenwirkung (vor
 `runIdentity_->allocateForApplication()`), wird in
 `revalidatePreparedRequest` (Confirm/Revalidate) wiederholt und gilt nach
 Rebuild/Recovery. Das schliesst den Fall „Sensoren zunaechst qualifiziert, aber
-PI-/Planner-Snapshot fehlt“. Keine Parallelsafety, nur eine zusaetzliche
+PI-/Planner-Snapshot fehlt“ und den Fall „Lauf aktiv bei `Blocked`“ (Klasse „aktiv
+ohne wirksame Regelung“). Zustandssprung zwischen Prepare und Confirm (z. B.
+`Ok` → `Blocked`/`Tripped`/Stale/Grenzverletzung) wird beim Confirm erneut
+bewertet und verweigert. Keine Parallelsafety, nur eine zusaetzliche
 Bedingung in der bestehenden Admission.
 
 ### 6.2 Parameterquellen und Trial-Profil (S3–S5)
@@ -244,8 +251,9 @@ Treiberdefekt oder ausbleibender Sensorabfrage aus).
     `Tripped` (Latch) – fail-closed, nicht durch Trial-PI-/Luftlimits umgehbar.
   - **Eingriffsgrenze/Notgrenze:** `Tripped` verriegelt, beide Richtungen gesperrt, kein
     automatischer Gegenrichtungsversuch im Trial (Versuchszahl `0`).
-  - **Nicht konfiguriert:** `Unconfigured` zaehlt wie `Blocked` (Peltier AUS); im
-    Release dauerhaft so.
+  - **Nicht konfiguriert:** `Unconfigured` zaehlt wie `Blocked` (Peltier AUS, **kein**
+    `Allowed`); im Release dauerhaft so. Es gibt **keinen C1-Bypass** in Interlock,
+    Planner oder Start-Admission.
 - **Verdrahtung:** neues Feld `thermalSafety` in `ActuationEvidence`, neuer stabiler
   `FaultCode::TemperatureSafetyLimit`, `kFaultCount` 8→9, in `kFaultPriority`; jeder
   Zustand ≠ `Ok` ⇒ Interlock ≠ `Allowed`. Der Latch liegt im Supervisor (Interlock
@@ -261,13 +269,36 @@ Treiberdefekt oder ausbleibender Sensorabfrage aus).
   Parameter stehen **nie** persistent. Ein produktiver Service-PIN-Reset mit
   Stabilitaetspruefung gemaess `SAFETY_COMPONENT_FAULTS.md` existiert nicht und ist
   **kein** Teil dieses PR (→ #35/#36); das wird nicht als erfuellt behauptet.
-- **Grenzwerte/Totzeiten/Trend:** keine Zahl in diesem Plan. Firmwarefeste
-  Aussengrenzen und Trial-Grenzen werden mit dem tatsaechlichen Aufbau (Peltier-
-  Datenblatt, Kuehlkoerper, Bench) am Gate G-C2 vom Owner genannt.
+- **Grenzwerte/Totzeiten/Trend – zwei Konfigurationsstufen (konsistent mit §8):**
+  keine Zahl in diesem Plan. Weil der Interlock nur bei `thermalSafety == Ok` freigibt,
+  braucht schon C1 eine gueltige Thermal-Konfiguration:
+  1. **C1-Thermalkonfiguration (Gate G-P1):** technisch gueltige, als *Trial/C1*
+     beschriftete Grenzen (Eingriffs-/Notgrenze, Trend, Mindestframes/Alter) innerhalb
+     der firmwarefesten Aussengrenzen, vom Owner zusammen mit Sensor-/PI-/Planner-
+     Parametern unter **G-P1** freigegeben, **waehrend der Peltier-Leistungspfad
+     nachweislich stromlos** bleibt. Sie ersetzt **nicht** die C2-Thermikgrenzen und
+     keine Hardware-Absicherung.
+  2. **C2-Thermalkonfiguration (Gate G-P2):** am realen Aufbau (Peltier-Datenblatt,
+     Kuehlkoerper, Bench) verschaerfte/angepasste Temperatur-, Trend-, Last- und
+     Abbruchgrenzen; werden **vor** C2 per `thermal limits set` neu gesetzt (RAM,
+     fluechtig) bzw. bei geaenderten compile-time Werten per neuem Build.
+  (Alternative nach Ownerwahl: vor C1 alle geeigneten Grenzen freigeben, falls das
+  weniger Komplexitaet bedeutet.) C0 bleibt lesend und actor-frei: keine Pflicht zu
+  einer freigegebenen Peltier-/Thermalkonfiguration.
+
+**Zusaetzliche Pruefpunkte im S6-Review:** `requireService(TemperatureSafetyLimit)` sperrt
+den Peltierpfad unmittelbar und unterbricht den vorgesehenen Aussenluefter-Nachlauf
+nicht (`lifecycleState_ != Ready` aendert `applicationReadiness`, Interlock und
+Planner – Wirkung je Konsument nachweisen); alle Konsumenten und Test-Switches des
+`FaultCode` fuer die neue ID mitpruefen; `FaultMask` ist `uint16_t` (9 Bits
+ausreichend); kein neues Modul nur fuer diese Pruefungen.
 
 Tests (digital): jeder Grund → `Blocked`/`Tripped`, Latch haelt bis Neustart,
 Peltier nie bei `Unconfigured`/`Blocked`/`Tripped`, Aussenluefter-Nachlauf im Trip,
-Start-Admission verweigert bei `Unconfigured`/`Tripped`, Fault sichtbar, keine
+Start-Admission (Prepare **und** Confirm) verweigert bei `Unconfigured`, `Blocked`,
+`Tripped`, Stale-Rohproben und Temperatur-/Trendgrenzverletzung, auch bei
+Zustandssprung zwischen Prepare und Confirm; positive Admission nur bei `Ok` mit
+C1-Konfiguration und frischen Rohproben; Fault sichtbar, keine
 Beeinflussung durch Anzeige-Eingabe, Release-Default fail-closed.
 
 ## 8. Teil C – Gestufter integrierter Regelversuch (Hardware nur nach Owner-Gate)
@@ -282,8 +313,8 @@ gueltige PI-/Planner-/Schutzparameter und G4.
 | Stufe | Inhalt | Gate | Peltier-Leistung | Nachweise |
 |---|---|---|---|---|
 | C0 | Boot, nur Anzeige (§5) | G-T + G-C0 | **stromlos** | Messwerte auf Display, Rollen, Frische |
-| C1 | Programmstart mit bewusst gesetzten **C1-Parametern**; BTS7960-Logik angeschlossen, **Leistungspfad physisch nachweislich stromlos**; Luefter an OUT1/OUT2 | G-P1 (Parameter) + G-C1 | **stromlos** | echte `ControlRequest`, Planner→Driver-Signale, Innen-/Aussenluefterzustaende, **Aussenluefter-Nachlauf bei Stop**, Fail-closed bei Sensorverlust/Trip (Schutz S6 digital+Bench), Admission G4 → #32 |
-| C2 | Peltierleistung, beaufsichtigt, unabhaengige Schutzebene (a) **und** Firmware-Cutoff (b) | G-P2 (C2-Parameter + Thermikgrenzen) + G-C2 + physische Vorbedingungen | **bestromt** | Heiz-/Kuehlanforderung, Sollwert erreichen/halten, Richtungswechsel/Totzeit, Sicherheitsabschaltung → #33/#34/#35 |
+| C1 | Programmstart mit bewusst gesetzten **C1-Parametern inkl. C1-Thermalkonfiguration (§7)**; BTS7960-Logik angeschlossen, **Leistungspfad physisch nachweislich stromlos**; Luefter an OUT1/OUT2 | G-P1 (Sensor-/PI-/Planner-/**Thermal-Schutz**-Parameter, Trial/C1) + G-C1 | **stromlos** | echte `ControlRequest`, Planner→Driver-Signale, Innen-/Aussenluefterzustaende, **Aussenluefter-Nachlauf bei Stop**, Fail-closed bei Sensorverlust/Trip (Schutz S6 digital+Bench), Admission G4 → #32 |
+| C2 | Peltierleistung, beaufsichtigt, unabhaengige Schutzebene (a) **und** Firmware-Cutoff (b) | G-P2 (angepasste C2-Parameter, verschaerfte Thermik-/Trend-/Abbruchgrenzen) + G-C2 + physische Vorbedingungen | **bestromt** | Heiz-/Kuehlanforderung, Sollwert erreichen/halten, Richtungswechsel/Totzeit, Sicherheitsabschaltung → #33/#34/#35 |
 
 **C2-Vorbedingungen (alle am Geraet vom Owner zu bestaetigen, sonst `C2=BLOCKED`):**
 (a) **Unabhaengige Schutzebene**, nachpruefbar: 7,5-A-Ueberstromsicherung im
@@ -345,8 +376,9 @@ legitim zugeordnet ist; keine Umetikettierung elektrischer Fehler-/Boot-Reset-Be
 ## 11. Entscheidungen und Gates
 
 Entschieden: D2, D3, D4, D5 (Prinzip), D7. **Offen:** **D1** Freigabe der exakten
-Plan-SHA; **D6 getrennt:** G-P1 (C1-Parameter) und G-P2 (C2-Parameter, Thermik-/
-Sicherheitsgrenzen anhand tatsaechlicher Parameter/Aufbau); **G-T** (App-only-Flash,
+Plan-SHA; **D6 getrennt:** G-P1 (C1-Parameter inkl. C1-Thermalschutzkonfiguration bei
+stromlosem Peltier) und G-P2 (C2-Parameter, verschaerfte Thermik-/Trend-/Abbruchgrenzen
+anhand tatsaechlicher Parameter/Aufbau); **G-T** (App-only-Flash,
 Image-Hash); **G-C0, G-C1, G-C2** (physische Freigaben). Alle `NOT_GRANTED`.
 Risiken: Trial-Werte thermisch ungeeignet (beaufsichtigt, strombegrenzt, kurz);
 persistierte Plannerwerte verbleiben (inert + semantischer Cleanup);
@@ -366,7 +398,9 @@ fehlender produktiver Fault-Reset bleibt ausdruecklich offen (#35/#36).
   Mindest-Aus/Totzeit/Nachlauf als Ownerwerte.
 - **Sensorqualitaet je Rolle:** innerhalb `sensor_limits.hpp`-Obergrenzen; Kuehlkoerper
   mit weiterem Plausibilitaetsbereich als Luft.
-- **Schutz S6:** Grenzen/Trend/Totzeiten ausschliesslich aus Aufbau und Owner (G-P2).
+- **Schutz S6:** Grenzen/Trend/Totzeiten ausschliesslich vom Owner: C1-Stufe (technisch
+  gueltig, Peltier stromlos) unter G-P1, C2-Stufe (verschaerft, am realen Aufbau)
+  unter G-P2; keine Zahl durch Review oder Agent.
 - Jeder uebernommene Wert wird im Trial-Header mit Quelle, Gueltigkeit (nur
   Trial-Image/Versuch), Schutzgrenzen und Abloesebedingung durch #34/#35 dokumentiert;
   die konkreten Zahlen erscheinen erstmals im S5-/S6-Commit nach den digitalen
