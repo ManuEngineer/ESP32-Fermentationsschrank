@@ -227,3 +227,27 @@ alle Ausgaenge inaktiv).
 
 **Endzustand Board:** laeuft das Release-Image `cad364c0…d6db` (Source `c782156`),
 Partitionen unveraendert, persistierte Bindung unveraendert, alle Sensoren angeschlossen.
+
+## C1 – DEV-Harness mit Produktbudget 4096/2/1 (Plan Rev. 3 `10cc3f7`, PR #220; digital, `FLASH=NO`)
+
+Scope: Im Bring-up-Harness (`APP_ISSUE_30_SENSOR_COMMISSIONING`) wird statt des
+Probe-Budgets 6144/2/1 das freigegebene `kApprovedDs18b20TaskBudget` (4096/2/1)
+verwendet (Ownerentscheid D2=B); Log `ds18b20 budget: approved product budget
+(bring-up harness)`. Release-Pfad unveraendert. **Keine Hardwaremessung; alle
+Hardware-Restnachweise (Bindung, frische Werte, Stack-HWM unter 4096) bleiben
+`NOT_RUN`/`NOT_PROVEN` bis zum separaten Gate G2.**
+
+| Pruefung (Code-HEAD `0370b32`, Arbeitsbaum sauber) | Ergebnis |
+|---|---|
+| `test_ds18b20_sampling`, `test_r1_control_chain_integration`, `test_temperature_source` | PASS (39 Faelle) |
+| `scripts/check_architecture_boundaries.py` | PASS |
+| `run_pre_ready_gates.sh self-check` | `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` (clang-format PASS, clang-tidy `NOT_REQUIRED`) |
+| Harness-Build `build_issue30_sensor_commissioning.py --clean` | PASS; 1 828 432 B, SHA-256 `ce388bc2a1d91dcbd85ed62fed44fae474b06217e1c482a035ca91f3a2c5eca1`; enthaelt `approved product budget (bring-up harness)`, kein `PROBE budget` |
+| Release-Build `build_esp_idf_profiles.py release --require-clean-source-tree` | PASS; 1 805 040 B (identisch zur Groesse des Release-Builds vor der Aenderung), 0 Treffer fuer `ISSUE30`/`PROBE`/`ISSUE190`/`bring-up harness`; nur CMake-Komponentenvalidierungs-Hinweise, keine Compilerwarnung |
+
+Grenzen: Der Release-Hash (`470904b1…`) ist nicht bitgleich zum frueheren Build
+(keine Reproduzierbarkeitsbehauptung); die Aussage "Release unveraendert" stuetzt
+sich auf identische Groesse, Quelltextdiff (nur `#ifdef`-Block und Hilfsfunktion)
+und die fehlenden Harness-Strings. Der Harness-Hash ist ein Clean-Tree-Build; ein
+G2-Flash nutzt den dann freigegebenen Hash. Kein ESP-IDF-esp-clang-Gesamtlauf,
+kein Pre-Ready-Lauf.
