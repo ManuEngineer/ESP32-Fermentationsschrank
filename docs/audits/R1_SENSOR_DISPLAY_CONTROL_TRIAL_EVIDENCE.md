@@ -143,3 +143,19 @@ bleibt idempotent.
 Dieses Image **ersetzt** `1b0be67f…` (Source `81c0afc`) und `86bf7eba…` (Source `67c7f08`); nur der hier genannte Hash gilt als Review-Vorlage fuer das
 Flash-Gate G-T. Verbleibende Einschraenkungen unveraendert (esp-clang/Pre-Ready nicht ausgefuehrt; kein produktiver Rearm-Pfad; Firmware-Schutz ersetzt keine
 unabhaengige Absicherung; Peltier nach Boot/Konfiguration/Datenluecke fuer das halbe Trendfenster gesperrt).
+
+## Finaler Stand fuer das Fix-Review R221-4 (Code-HEAD `307c38281447243a1abed5a226cfa337bff3e9a3`)
+
+Der Fix R221-4 steckt in `09c4b94` (siehe oben); `307c382` ergaenzt den exakten Auftragsfall (Fenster 10 s, `maxSampleAgeMillis=60000`,
+`invalidLatchMillis=60000`, 20 °C bei 1 s und 30 °C bei 56 s → `Blocked/TrendObservationPending`). Firmware-Quellen unveraendert gegenueber `09c4b94`.
+Rueckwaerts laufende Zeitstempel: Historie verworfen (kein Integer-Underflow, da nur `newest - ts` mit `ts < newest` gerechnet wird); gefaehrlicher
+Anstieg loest weiter `Tripped/CoolingRiseRate` aus; 600-s-Fenster und unregelmaessige Intervalle bleiben PASS.
+
+| Pruefung (Code-HEAD `307c382`, Arbeitsbaum sauber) | Ergebnis |
+|---|---|
+| native Suite | **1945 Testfaelle, alle bestanden** (`test_thermal_safety_supervisor`: 24) |
+| Builder-Self-Check | `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` |
+| `esp32_bringup` / `esp32_release` | PASS; 1 818 832 B / 1 808 256 B; 0 Treffer fuer `TRIAL_NOT_COMMISSIONED`, `R1_TRIAL`, `thermal set`, `planner set`, `r1_control_trial` |
+| Trial-Image (`build_r1_control_trial.py --clean`, Source-HEAD `307c38281447243a1abed5a226cfa337bff3e9a3`) | PASS; `esp32_fermentationsschrank.bin` 1 832 944 B, **SHA-256 `bbaaa7643fc60786eeeb9b44daa3ffddcae8643d6bf88b06dd5c844f86004cec`**; Partitionstabelle SHA-256 `d7f180e4…ccd9d`: `nvs 0x9000/24K`, `phy_init 0xf000/4K`, `factory 0x10000/3008K`, `state_store 0x300000/1M`; Kopie `../hw-evidence-pr221/trial-image/esp32_fermentationsschrank.r221-4-final.bin`; **nicht geflasht** |
+
+**Dieses Image (`bbaaa764…`) ersetzt `fdd0bf30…`, `1b0be67f…` und `86bf7eba…`; nur sein Hash gilt als Review-Vorlage fuer das Flash-Gate.**
