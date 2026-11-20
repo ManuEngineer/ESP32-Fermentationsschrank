@@ -1,5 +1,7 @@
 #include "fermentation_application.hpp"
 
+#include <cmath>
+
 #include "configuration_text.hpp"
 
 #include <algorithm>
@@ -1567,6 +1569,12 @@ void FermentationApplication::publishOwningRuntimeEvidence(
     ++runtimeEvidencePublications_;
 }
 
+void FermentationApplication::publishRawTemperatureSamples(
+    const RawTemperatureSamples& samples) {
+    const auto guard = applicationCallSerializer_.enter();
+    rawTemperatureSamples_ = samples;
+}
+
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     FermentationUiSnapshot snapshot;
     refreshUiSnapshot(snapshot);
@@ -1613,16 +1621,57 @@ void FermentationApplication::refreshUiSnapshot(
         return value.rawCelsius;
     };
     const auto evidence = resolveRuntimeEvidence();
+    // One monotonic reading under the serializer guard also decides the age of
+    // the raw display values; without a time source no raw value is shown.
+    const std::optional<std::uint64_t> displayNowMs =
+        timeSource_ != nullptr
+            ? std::optional<std::uint64_t>{timeSource_->monotonicMillis()}
+            : std::nullopt;
     input.temperatures.clear();
-    input.temperatures.push_back({FermentationTemperatureRole::CabinetAir,
-                                  valueOf(evidence.plausibility.air),
-                                  evidence.plausibility.air});
-    input.temperatures.push_back({FermentationTemperatureRole::Product,
-                                  valueOf(evidence.plausibility.product),
-                                  evidence.plausibility.product});
-    input.temperatures.push_back({FermentationTemperatureRole::Cooling,
-                                  valueOf(evidence.plausibility.cooling),
-                                  evidence.plausibility.cooling});
+    const auto addTemperature =
+        [&input, &valueOf, &displayNowMs](
+            FermentationTemperatureRole role,
+            const device_platform::SensorQualitySnapshot& qualified,
+            const std::optional<device_platform::TemperatureReading>& raw) {
+            const auto qualifiedValue = valueOf(qualified);
+            if (qualifiedValue.has_value() || !raw.has_value() ||
+                !displayNowMs.has_value()) {
+                input.temperatures.push_back(
+                    {role, qualifiedValue, qualified,
+                     TemperatureValueBasis::Qualified});
+                return;
+            }
+            // Fresh, successful technical reading without a quality judgement:
+            // shown as raw/unqualified; the quality stays Stale (never Valid).
+            const auto timestamp = raw->monotonicTimestampMs();
+            const bool fresh =
+                raw->status() == device_platform::TemperatureSampleStatus::Ok &&
+                raw->celsius().has_value() && std::isfinite(*raw->celsius()) &&
+                timestamp <= *displayNowMs &&
+                *displayNowMs - timestamp <= kRawDisplayMaxAgeMs;
+            if (!fresh) {
+                input.temperatures.push_back(
+                    {role, std::nullopt, qualified,
+                     TemperatureValueBasis::Qualified});
+                return;
+            }
+            device_platform::SensorQualitySnapshot snapshot;
+            snapshot.identity = raw->identity();
+            snapshot.quality = device_platform::SensorQuality::Stale;
+            snapshot.rawCelsius = raw->celsius();
+            snapshot.lastAcceptedSampleAgeMs = *displayNowMs - timestamp;
+            input.temperatures.push_back(
+                {role, raw->celsius(), snapshot,
+                 TemperatureValueBasis::RawUnqualified});
+        };
+    addTemperature(FermentationTemperatureRole::CabinetAir,
+                   evidence.plausibility.air, rawTemperatureSamples_.air);
+    addTemperature(FermentationTemperatureRole::Product,
+                   evidence.plausibility.product,
+                   rawTemperatureSamples_.product);
+    addTemperature(FermentationTemperatureRole::Cooling,
+                   evidence.plausibility.cooling,
+                   rawTemperatureSamples_.cooling);
     input.recoveryDisposition = recoveryDisposition_;
     input.persistenceLoadStatus = persistenceLoadStatus_;
     input.coordinatorState.reset();

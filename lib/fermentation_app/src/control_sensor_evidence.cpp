@@ -38,4 +38,12 @@ ControlSensorEvidenceProducer::sample(ProcessState phase) {
     return context;
 }
 
+RawTemperatureSamples ControlSensorEvidenceProducer::readRawSamples() const {
+    RawTemperatureSamples samples;
+    samples.air = airSource_.read();
+    samples.product = productSource_.read();
+    samples.cooling = coolingSource_.read();
+    return samples;
+}
+
 }  // namespace fermentation

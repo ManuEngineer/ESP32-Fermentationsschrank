@@ -9,6 +9,7 @@
 
 #include "boot_classification.hpp"
 #include "process_state_machine.hpp"
+#include "raw_temperature_samples.hpp"
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
 #include "factory_reset_flow.hpp"
@@ -377,6 +378,12 @@ class FermentationApplication {
     // and web adapters never provide runtime evidence.
     void publishOwningRuntimeEvidence(
         const CrossRolePlausibilityContext& evidence);
+    // Technical raw readings of the three roles, published once per main-loop
+    // iteration. Read by the local UI projection (unqualified display, never
+    // `Valid`) and by the firmware temperature safety supervisor; it is never
+    // runtime evidence for start admission, control, persistence or the
+    // interlock's sensor judgement.
+    void publishRawTemperatureSamples(const RawTemperatureSamples& samples);
     // Optional R1 control chain (#218). Must be called before begin(); only
     // abstract ports and the single regulator parameter injection point are
     // accepted. Returns false after begin() or for incomplete ports. Without
@@ -720,6 +727,7 @@ class FermentationApplication {
     std::unique_ptr<RunCommandState> pendingRecoverySource_;
     std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
     CrossRolePlausibilityContext owningRuntimeEvidence_{};
+    RawTemperatureSamples rawTemperatureSamples_{};
     mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
     mutable FermentationUiProjectionInput uiProjectionInput_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;

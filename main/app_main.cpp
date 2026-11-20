@@ -595,6 +595,9 @@ void attachControlChain(fermentation::FermentationApplication& application,
 void publishControlSensorEvidence(
     fermentation::FermentationApplication& application,
     fermentation::ControlSensorEvidenceProducer& producer) {
+    // Raw readings first (unqualified local display, firmware temperature
+    // safety); they are never runtime evidence.
+    application.publishRawTemperatureSamples(producer.readRawSamples());
     if (const auto evidence =
             producer.sample(application.publishedProcessState()
                                 .value_or(fermentation::ProcessRuntimeState{})

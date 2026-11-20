@@ -137,6 +137,7 @@ bool equalFermentationUiSemanticSnapshot(
         if (left.temperatures[i].role != right.temperatures[i].role ||
             left.temperatures[i].valueCelsius !=
                 right.temperatures[i].valueCelsius ||
+            left.temperatures[i].basis != right.temperatures[i].basis ||
             !equalQuality(left.temperatures[i].quality,
                           right.temperatures[i].quality)) {
             return false;

@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "process_state_machine.hpp"
+#include "raw_temperature_samples.hpp"
 #include "sensor_quality_config.hpp"
 #include "sensor_quality_pipeline.hpp"
 #include "sensor_selection.hpp"
@@ -32,6 +33,11 @@ class ControlSensorEvidenceProducer {
     // nullopt when unconfigured.
     [[nodiscard]] std::optional<CrossRolePlausibilityContext> sample(
         ProcessState phase);
+
+    // Current technical raw readings of the same three sources (no quality
+    // judgement; used for the unqualified local display and for the firmware
+    // temperature safety supervisor). Works without a quality configuration.
+    [[nodiscard]] RawTemperatureSamples readRawSamples() const;
 
    private:
     const device_platform::ITemperatureSource& airSource_;

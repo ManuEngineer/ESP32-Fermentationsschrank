@@ -397,7 +397,7 @@ void addDiagnosticsRow(
     const auto tone =
         valid ? ThemeToken::TextPrimary : ThemeToken::StatusWarning;
     const auto qualityKey = view != nullptr
-                                ? sensorQualityTextKey(view->quality.quality)
+                                ? temperatureQualityTextKey(*view)
                                 : fermentationTextKey("unavailable");
     if (sensorRow % 2U == 0U) {
         addText(commands, packs, locale, temperatureRoleTextKey(role),
@@ -1420,7 +1420,7 @@ RepresentativeScreen makeRepresentativeScreen(
                      temperatureText(temperature),
                      {}});
                 addText(commands, textPacks, locale,
-                        sensorQualityTextKey(temperature.quality.quality),
+                        temperatureQualityTextKey(temperature),
                         {204U, textTop, 104U,
                          RepresentativeScreen::kTextLineHeight},
                         temperature.quality.quality ==
