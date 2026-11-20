@@ -17,8 +17,18 @@ namespace fermentation {
 // no filter, plausibility or state logic of its own. Without a quality
 // configuration (the product until #35 releases real values) it produces no
 // evidence at all, so no sensor can ever become Valid.
+// Quality configuration per role (R1 trial plan S3): the cooling body needs a
+// wider plausible range than the cabinet air. A role without a configuration
+// never produces evidence (stays not `Valid`).
+struct ControlSensorQualityConfigs {
+    std::optional<device_platform::SensorQualityConfig> air;
+    std::optional<device_platform::SensorQualityConfig> cooling;
+    std::optional<device_platform::SensorQualityConfig> product;
+};
+
 class ControlSensorEvidenceProducer {
    public:
+    // One configuration for all three roles (kept for existing compositions).
     ControlSensorEvidenceProducer(
         const device_platform::ITemperatureSource& air,
         const device_platform::ITemperatureSource& cooling,
@@ -26,7 +36,19 @@ class ControlSensorEvidenceProducer {
         const device_platform::ITimeSource& time,
         const std::optional<device_platform::SensorQualityConfig>& config);
 
-    [[nodiscard]] bool configured() const noexcept { return air_.has_value(); }
+    // Per-role configurations. Air and cooling are mandatory for any evidence
+    // (both are required for every Peltier permission); the product role is
+    // optional and simply stays without evidence when it has no configuration.
+    ControlSensorEvidenceProducer(
+        const device_platform::ITemperatureSource& air,
+        const device_platform::ITemperatureSource& cooling,
+        const device_platform::ITemperatureSource& product,
+        const device_platform::ITimeSource& time,
+        const ControlSensorQualityConfigs& configs);
+
+    [[nodiscard]] bool configured() const noexcept {
+        return air_.has_value() && cooling_.has_value();
+    }
 
     // Ingests the current reading of every role and returns the evidence to
     // hand to FermentationApplication::publishOwningRuntimeEvidence().

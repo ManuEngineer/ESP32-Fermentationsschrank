@@ -54,6 +54,11 @@
 #include "issue_31_touch_calibration_provision.hpp"
 #endif
 
+#ifdef APP_R1_CONTROL_TRIAL
+#include "r1_control_trial_harness.hpp"
+#include "r1_control_trial_profile.hpp"
+#endif
+
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
 #include "issue_29_bringup_probe.hpp"
 #endif
@@ -580,17 +585,44 @@ bool updateProductUi(
     return touchPoll.freshPressEdge;
 }
 
+// The product always passes the named unconfigured constant; only the
+// dedicated, supervised R1 control-trial bring-up build (never the release)
+// injects the TRIAL_NOT_COMMISSIONED profile through the same single point.
+[[maybe_unused]] fermentation::ControlChainParameters
+selectedControlChainParameters() {
+#ifdef APP_R1_CONTROL_TRIAL
+    return fermentation::r1_trial::trialControlChainParameters();
+#else
+    return fermentation::kControlChainParametersUnconfiguredUntilIssue35;
+#endif
+}
+
 #if !defined(APP_ISSUE_32_OUTPUT_PULSE) && \
     !defined(APP_ISSUE_33_BRIDGE_IDLE_TEST)
 void attachControlChain(fermentation::FermentationApplication& application,
                         const fermentation::ActuatorPlanSinkPorts& ports) {
-    if (!application.attachActuationPorts(
-            ports,
-            fermentation::kControlChainParametersUnconfiguredUntilIssue35)) {
+    if (!application.attachActuationPorts(ports,
+                                          selectedControlChainParameters())) {
         ESP_LOGE(kTag, "control chain: attachActuationPorts rejected");
     }
 }
 #endif
+
+// Per-role sensor quality configuration: unconfigured (nullopt = no evidence,
+// no sensor can become Valid) in every product image; the trial profile only in
+// the supervised R1 control-trial bring-up build.
+fermentation::ControlSensorQualityConfigs selectedSensorQualityConfigs() {
+#ifdef APP_R1_CONTROL_TRIAL
+    return fermentation::r1_trial::trialSensorQualityConfigs();
+#else
+    const std::optional<device_platform::SensorQualityConfig>
+        kSensorQualityConfigUnconfiguredUntilIssue35 = std::nullopt;
+    return fermentation::ControlSensorQualityConfigs{
+        kSensorQualityConfigUnconfiguredUntilIssue35,
+        kSensorQualityConfigUnconfiguredUntilIssue35,
+        kSensorQualityConfigUnconfiguredUntilIssue35};
+#endif
+}
 
 void publishControlSensorEvidence(
     fermentation::FermentationApplication& application,
@@ -879,17 +911,22 @@ extern "C" void app_main(void) {
     // Per-role sensor evidence for the control chain (Issue #218). The quality
     // configuration is TBD_COMMISSIONING (#35): without it no evidence is
     // produced and no sensor can become Valid (fail-closed).
-    const std::optional<device_platform::SensorQualityConfig>
-        kSensorQualityConfigUnconfiguredUntilIssue35 = std::nullopt;
     fermentation::ControlSensorEvidenceProducer controlSensorEvidence(
         ds18b20Sampler.source(fermentation::kChamberAirChannel),
         ds18b20Sampler.source(fermentation::kHeatsinkChannel),
         ds18b20Sampler.source(fermentation::kProductChannel), timeSource,
-        kSensorQualityConfigUnconfiguredUntilIssue35);
+        selectedSensorQualityConfigs());
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
     fermentation::issue_30_commissioning::Harness issue30Harness(
         application, ds18b20Sampler, timeSource);
     issue30Harness.start();
+#endif
+#ifdef APP_R1_CONTROL_TRIAL
+    // Supervised R1 control trial (TRIAL_NOT_COMMISSIONED): console for the
+    // planner parameters and the firmware temperature safety limits.
+    fermentation::r1_trial::Harness r1TrialHarness(
+        application, controlSensorEvidence, timeSource);
+    r1TrialHarness.start();
 #endif
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
     // Manual bring-up-only HIGH=ON test of single outputs (OUT1 inner fan,
@@ -937,6 +974,9 @@ extern "C" void app_main(void) {
 #endif
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
         issue30Harness.update();
+#endif
+#ifdef APP_R1_CONTROL_TRIAL
+        r1TrialHarness.update();
 #endif
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
         issue32Harness.update();

@@ -1696,6 +1696,16 @@ ThermalSafetyEvaluation FermentationApplication::thermalSafetyEvaluation()
     return thermalSafety_.last();
 }
 
+void FermentationApplication::clearThermalSafetyConfiguration() {
+    const auto guard = applicationCallSerializer_.enter();
+    thermalSafety_.clearConfiguration();
+}
+
+ThermalSafetyLimits FermentationApplication::thermalSafetyLimits() const {
+    const auto guard = applicationCallSerializer_.enter();
+    return thermalSafety_.limits();
+}
+
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     FermentationUiSnapshot snapshot;
     refreshUiSnapshot(snapshot);

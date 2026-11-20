@@ -130,15 +130,13 @@ void test_invalid_and_unconfigured_parameters_are_refused_without_a_slot() {
     zeroPostRun.outerFanPostRunMillis = 0U;  // Invalid (post-run is mandatory)
     auto badThreshold = validParameters();
     badThreshold.counterDirectionConfirmationQuoteThreshold = 1.5;
-    for (const auto& invalid :
-         {unconfigured, zeroPostRun, badThreshold}) {
+    for (const auto& invalid : {unconfigured, zeroPostRun, badThreshold}) {
         const auto result = fixture.apply(invalid);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(ConfigurationPreviewStatus::InvalidCandidate),
             static_cast<int>(result.preview));
-        TEST_ASSERT_FALSE(
-            fixture.application.actuatorPlannerParameters()->parameters
-                .has_value());
+        TEST_ASSERT_FALSE(fixture.application.actuatorPlannerParameters()
+                              ->parameters.has_value());
         TEST_ASSERT_TRUE(fixture.revision() == before);
     }
     // No preview slot stayed occupied.
@@ -153,9 +151,8 @@ void test_missing_and_stale_revisions_are_rejected() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ConfigurationPreviewStatus::StateChanged),
         static_cast<int>(missing.preview));
-    assertActivated(
-        fixture.application.applyActuatorPlannerParameters(validParameters(),
-                                                           first));
+    assertActivated(fixture.application.applyActuatorPlannerParameters(
+        validParameters(), first));
     const auto stale = fixture.application.applyActuatorPlannerParameters(
         validParameters(4'000U), first);
     TEST_ASSERT_EQUAL_INT(
@@ -240,8 +237,10 @@ void test_parameters_persist_across_a_restart_and_clear_persists_too() {
     FermentationApplication again;
     TEST_ASSERT_TRUE(platform.begin({true}));
     timeSource.setUnixTimeSeconds(1'700'000'000LL);
-    TEST_ASSERT_TRUE(again.begin(platform, store, timeZoneResolver, timeSource));
-    TEST_ASSERT_FALSE(again.actuatorPlannerParameters()->parameters.has_value());
+    TEST_ASSERT_TRUE(
+        again.begin(platform, store, timeZoneResolver, timeSource));
+    TEST_ASSERT_FALSE(
+        again.actuatorPlannerParameters()->parameters.has_value());
 }
 
 // The existing factory reset removes the slot with the rest of the service
@@ -275,7 +274,8 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_default_is_absent);
     RUN_TEST(test_valid_parameters_are_stored_and_read_back);
-    RUN_TEST(test_invalid_and_unconfigured_parameters_are_refused_without_a_slot);
+    RUN_TEST(
+        test_invalid_and_unconfigured_parameters_are_refused_without_a_slot);
     RUN_TEST(test_missing_and_stale_revisions_are_rejected);
     RUN_TEST(test_clear_returns_to_absent_with_an_advanced_revision);
     RUN_TEST(test_changes_are_refused_while_a_run_is_active);

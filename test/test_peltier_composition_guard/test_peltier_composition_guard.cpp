@@ -1,7 +1,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include <unity.h>
 
@@ -147,6 +149,99 @@ void test_bridge_idle_harness_is_built_and_included_only_with_its_flag() {
 
 }  // namespace
 
+// R1 trial guard (R1 trial plan S5): the control trial (TRIAL_NOT_COMMISSIONED
+// profile, planner/thermal console) exists only in the dedicated bring-up
+// build. The harness is fully wrapped in its flag, has no actuator, driver,
+// interlock or regulator of its own, nothing outside main/ includes the
+// trial profile, and app_main reaches it only inside its flag.
+void test_r1_control_trial_is_bringup_only_and_actuator_free() {
+    for (const char* path : {"main/r1_control_trial_harness.hpp",
+                             "main/r1_control_trial_harness.cpp"}) {
+        const auto text = readSource(path);
+        TEST_ASSERT_TRUE(contains(text, "#if defined(APP_R1_CONTROL_TRIAL)"));
+        TEST_ASSERT_FALSE(contains(text, "ActuatorPlanSinkDriver"));
+        TEST_ASSERT_FALSE(contains(text, "ActuationInterlock"));
+        TEST_ASSERT_FALSE(contains(text, "TemperatureController"));
+        TEST_ASSERT_FALSE(contains(text, "gpio_set_level"));
+        TEST_ASSERT_FALSE(contains(text, "gpio_config"));
+        TEST_ASSERT_FALSE(contains(text, "setForward"));
+        TEST_ASSERT_FALSE(contains(text, "setReverse"));
+        TEST_ASSERT_FALSE(contains(text, "setEnabled"));
+        const auto end = text.rfind("#endif");
+        TEST_ASSERT_TRUE(end != std::string::npos);
+        TEST_ASSERT_TRUE(text.find_first_not_of(" \t\r\n", end + 6U) ==
+                         std::string::npos);
+    }
+    // No library file knows the trial profile (the release libraries never
+    // contain a trial value).
+    for (const auto& entry :
+         std::filesystem::recursive_directory_iterator("lib")) {
+        if (!entry.is_regular_file()) continue;
+        const auto extension = entry.path().extension().string();
+        if (extension != ".cpp" && extension != ".hpp") continue;
+        TEST_ASSERT_FALSE(contains(readSource(entry.path().string()),
+                                   "r1_control_trial_profile"));
+    }
+}
+
+void test_r1_control_trial_is_built_only_in_its_cmake_block() {
+    const auto cmake = readSource("main/CMakeLists.txt");
+    const auto block = cmake.find("if(APP_R1_CONTROL_TRIAL)");
+    const auto source = cmake.find("r1_control_trial_harness.cpp");
+    TEST_ASSERT_TRUE(block != std::string::npos);
+    TEST_ASSERT_TRUE(source != std::string::npos);
+    TEST_ASSERT_TRUE(source > block);
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<unsigned>(cmake.find("r1_control_trial_harness.cpp",
+                                             source + 1U) == std::string::npos
+                                      ? 1U
+                                      : 0U));
+    const auto blockEnd = cmake.find("endif()", source);
+    TEST_ASSERT_TRUE(blockEnd != std::string::npos);
+    const auto inside = cmake.substr(block, blockEnd - block);
+    TEST_ASSERT_TRUE(contains(inside, "NOT CONFIG_APP_PROFILE_ESP32_BRINGUP"));
+    TEST_ASSERT_TRUE(contains(inside, "APP_ISSUE_30_SENSOR_COMMISSIONING"));
+    TEST_ASSERT_TRUE(contains(inside, "APP_ISSUE_32_OUTPUT_PULSE"));
+    TEST_ASSERT_TRUE(contains(inside, "APP_ISSUE_33_BRIDGE_IDLE_TEST"));
+    TEST_ASSERT_TRUE(contains(inside, "APP_ISSUE_90_SLICE7_HARNESS"));
+}
+
+// Every app_main reference to the trial sits inside the positive branch of
+// `#ifdef APP_R1_CONTROL_TRIAL`.
+void test_app_main_reaches_the_trial_only_inside_its_flag() {
+    std::istringstream stream(readSource("main/app_main.cpp"));
+    std::string line;
+    // Stack of "is this level the positive branch of the trial flag".
+    std::vector<bool> trialBranch;
+    std::size_t references = 0U;
+    while (std::getline(stream, line)) {
+        const auto first = line.find_first_not_of(" \t");
+        const std::string trimmed =
+            first == std::string::npos ? std::string() : line.substr(first);
+        if (trimmed.rfind("#if", 0) == 0) {
+            trialBranch.push_back(
+                trimmed.rfind("#ifdef APP_R1_CONTROL_TRIAL", 0) == 0);
+            continue;
+        }
+        if (trimmed.rfind("#else", 0) == 0 || trimmed.rfind("#elif", 0) == 0) {
+            if (!trialBranch.empty()) trialBranch.back() = false;
+            continue;
+        }
+        if (trimmed.rfind("#endif", 0) == 0) {
+            if (!trialBranch.empty()) trialBranch.pop_back();
+            continue;
+        }
+        if (line.find("r1_trial::") != std::string::npos ||
+            line.find("r1_control_trial_") != std::string::npos) {
+            ++references;
+            bool inside = false;
+            for (const bool level : trialBranch) inside = inside || level;
+            TEST_ASSERT_TRUE_MESSAGE(inside, line.c_str());
+        }
+    }
+    TEST_ASSERT_TRUE(references >= 4U);
+}
+
 int main(int argc, char** argv) {
     static_cast<void>(argc);
     static_cast<void>(argv);
@@ -156,5 +251,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_control_chain_is_attached_only_via_application_ports);
     RUN_TEST(test_bridge_idle_harness_is_bringup_only_and_planner_free);
     RUN_TEST(test_bridge_idle_harness_is_built_and_included_only_with_its_flag);
+    RUN_TEST(test_r1_control_trial_is_bringup_only_and_actuator_free);
+    RUN_TEST(test_r1_control_trial_is_built_only_in_its_cmake_block);
+    RUN_TEST(test_app_main_reaches_the_trial_only_inside_its_flag);
     return UNITY_END();
 }

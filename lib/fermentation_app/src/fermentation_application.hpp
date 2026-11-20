@@ -411,6 +411,9 @@ class FermentationApplication {
     [[nodiscard]] ThermalSafetyConfigureResult configureThermalSafety(
         const ThermalSafetyLimits& limits);
     [[nodiscard]] ThermalSafetyEvaluation thermalSafetyEvaluation() const;
+    // Removes the (volatile) limits again; never clears a latched trip.
+    void clearThermalSafetyConfiguration();
+    [[nodiscard]] ThermalSafetyLimits thermalSafetyLimits() const;
     // Optional R1 control chain (#218). Must be called before begin(); only
     // abstract ports and the single regulator parameter injection point are
     // accepted. Returns false after begin() or for incomplete ports. Without
