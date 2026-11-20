@@ -414,7 +414,7 @@ erforderlich) und sind kein Teil von `scripts/run_pre_ready_gates.sh`.
 | HW-32-05 | `PASS` (2026-11-19, Bring-up-Image PR-HEAD `234ce8c096914c5b0c5f74d1726fc9650d307c5d`, SHA-256 `5cf00469645570afa0f29980a5ab81ab02f92466f197ce30a1f6f49a53c83913`, Evidence `docs/audits/ISSUE32_BOOT_DIAGNOSIS_EVIDENCE.md` Abschnitt PR #216, Plan-SHA `f93afa4bd01f7856a0e654a5e3d766cfdeb07c5a`): realer Aussenluefter OUT2/GPIO17, ein manueller Bring-up-only-Puls `pulse out2` (UART), Log `ISSUE32_PULSE channel=out2 state=ON` → `state=OFF result=PASS reason=TIMEOUT_OFF` (~3,0 s); **Owner-beobachtet:** AUS → EIN (~3 s) → AUS, richtiger Verbraucher, Innenluefter (OUT1) blieb AUS; nach dem Boot beide Luefter AUS. G2 App-only-Flash (Hash/`verify-flash` PASS, kein Erase/NVS/State-Store, kein Backup). Nicht Teil des PASS: Boot/EN-Reset als eigener Nachweis (`HW-32-02`), Dauerlauf/Nachlauf (`HW-32-03`, erst nach #35/#90), Summer OUT3, Stromaufnahme. OUT1-Nachweis `HW-32-04` gilt laut Ownerangabe fuer den realen Innenluefter; der OUT4-Test belegt OUT2 nicht. |
 | HW-32-01 | `NOT_RUN` (Hardware-Folgescope): Polaritaetsbestimmung je Kanal mit sicherer Einzel-/Ersatzlast; SSOT-Aenderung nur ueber eigenen Plan-/Owner-Gate-Scope. |
 | HW-32-02 | `NOT_RUN`: Boot-/Reset-/Brownout-Verhalten vor und nach `app_main` mit sicherem Einzelverbraucher (haengt an `external_bias`, `TBD_BOARD_CIRCUIT`). |
-| HW-32-03 | `NOT_RUN`: Kanal-/Verbraucherzuordnung Innenluefter, Aussenluefter, Summer; Aussenluefter-Nachlauf bei Sicherheitsabschaltung; Summertyp (aktiv/passiv), nichtblockierende Summermuster (offen, Ownerentscheid O3 = B). |
+| HW-32-03 | `NOT_RUN`: Kanal-/Verbraucherzuordnung Innenluefter, Aussenluefter, Summer; Aussenluefter-Nachlauf bei Sicherheitsabschaltung; Summertyp (aktiv/passiv), nichtblockierende Summermuster (offen, Ownerentscheid O3 = B). **Nachtrag 2026-11-20 (Ownerentscheid D7):** der Summerumfang (Typ, Muster, OUT3-Pulse, akustische Abnahme) ist `NOT_REQUIRED_R1 (Owner-Scopeentscheid)`, nicht `PASS`; Kanal-/Verbraucherzuordnung der Luefter und der Aussenluefter-Nachlauf bleiben offen und werden im integrierten Regelversuch nachgewiesen. |
 
 ### Issue #33 – BTS7960-H-Bruecke (Software, hardwarefrei)
 
@@ -595,7 +595,7 @@ GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
 
 Die Felder werden nur für den jeweiligen Scope geführt. Der #32-Scope führt
 kein separates `ADAPTER_SAFETY_VERIFICATION`; der produktionsnahe
-MOSFET-/Lüfter-/Summer-Adapterpfad gehört vollständig in
+MOSFET-/Lüfter-/Summer-Adapterpfad (Summer: R1 entfällt, Ownerentscheid 2026-11-20 D7) gehört vollständig in
 `FUNCTIONAL_HARDWARE_VERIFICATION`. Das separate Adapter-Safety-Feld ist dem
 #33-H-Brückenvertrag vorbehalten. `THERMAL_COMMISSIONING` bleibt ein späteres
 Commissioning-Gate und ist kein Ersatz für die funktionale Hardwareprüfung.
@@ -612,7 +612,7 @@ Commissioning-Gate und ist kein Ersatz für die funktionale Hardwareprüfung.
 - Raw-Touch-Kalibrierungsrecovery im 10-Sekunden-Fenster getrennt von
   PIN-unabhaengigem Vollreset; keine physische Bedienannahme
 - Innen- und Aussenluefter
-- Summer
+- Summer (R1: entfaellt, `NOT_REQUIRED_R1` – Ownerentscheid 2026-11-20 D7)
 - R_IS/L_IS sind für R1 nicht angeschlossen, nicht gemessen und nicht
   implementiert; sie sind kein Akzeptanzkriterium, kein Required Test und kein
   DoD-Gate. Eine spätere Verwendung erfordert ein eigenes Issue, einen
@@ -888,7 +888,7 @@ Jeder relevante Hardwarestand dokumentiert mindestens:
 5. BTS7960-Pulldowns/fail-low, Enable, Richtungen, Adapterinterlock und
    Abschaltung
 6. Innen- und Aussenluefter inklusive Nachlauf
-7. Summer
+7. Summer (R1: entfaellt, `NOT_REQUIRED_R1` – Ownerentscheid 2026-11-20 D7)
 8. drei DS18B20 mit Rolle und ROM-Adresse
 9. Bustopologie und Produkt-Hot-Plug
 10. Display, Touch und Kalibrierung

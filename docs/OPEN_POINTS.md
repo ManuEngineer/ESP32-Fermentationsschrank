@@ -103,7 +103,7 @@ Nachverfolgung: #31
       Mittel vorhanden sind
 - [ ] Kanal-/Verbraucherfunktion kontrolliert einzeln pruefen
 - [ ] Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional beobachten
-- [ ] Summerfunktion, Kanal und Lautstaerke festlegen
+- [x] Summerfunktion, Kanal und Lautstaerke: **entfaellt in R1** (Ownerentscheid 2026-11-20 D7; OUT3 bleibt AUS/unbenutzt, spaeterer Summer nur als neuer beauftragter Scope)
 - [ ] Nachlaufverhalten auf realer Hardware pruefen
 
 Nachverfolgung: #32

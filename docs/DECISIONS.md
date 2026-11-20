@@ -110,7 +110,9 @@
 - **Alternativen:** Produkt immer vor dem ersten Start einsetzen; automatischer
   Timerstart direkt nach Vorheizen.
 - **Folgen:** Die Zustandsmaschine besitzt `WAITING_FOR_PRODUCT` und eine lokale
-  akustische Meldung.
+  akustische Meldung. *Nachtrag 2026-11-20 (Ownerscope D7):* In R1 entfaellt der
+  Summer; die Meldung erfolgt ausschliesslich sichtbar. Die Entscheidung selbst
+  (kein automatisches Produkt-eingesetzt) bleibt unveraendert.
 
 ## ADR-007: Warnung statt sofortigem Abbruch bei langer Zielerreichung
 

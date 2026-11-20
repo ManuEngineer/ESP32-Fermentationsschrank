@@ -99,6 +99,12 @@ Regeln:
 
 ## Akustische Signale nach Meldungsklasse
 
+> **R1-Scopeentscheid (Owner 2026-11-20, D7): Der Summer entfaellt aus Release 1.**
+> In R1 gibt es keine akustische Ausgabe; Meldungen, Prioritaeten,
+> Quittieren und die automatische Sicherheitsabschaltung gelten unveraendert
+> sichtbar. Die folgenden akustischen Regeln sind historischer Spezifikationsstand
+> fuer einen spaeter ausdruecklich beauftragten Summer.
+
 Akustische Signale sind von der Wichtigkeit abhaengig.
 
 ### Information
@@ -177,7 +183,7 @@ Verhalten:
 - konkrete Nachlaufzeit des Aussenluefters
 - zustandsabhaengige Lauf- und Nachlaufzeiten des Innenluefters
 - Erkennung und Reaktion bei Luefterausfall
-- konkrete Summermuster und Wiederholungsintervalle
+- konkrete Summermuster und Wiederholungsintervalle (R1: entfaellt, Ownerentscheid 2026-11-20 D7)
 - technische Moeglichkeit einer Lautstaerkeregelung
 - UI-Meldungstexte und Prioritaetsdarstellung; die stabilen #24-FaultCodes
   kommen aus dem `ActuationInterlock`-Vertrag

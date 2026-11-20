@@ -98,8 +98,10 @@ als Einzelmess-PASS. `safe_boot_level` und `external_bias` bleiben unbestaetigt.
 Die Rollenzuordnung ist unveraendert: OUT1/16 Innenluefter, OUT2/17
 Aussenluefter, OUT3/26 Summer, OUT4/27 Reserve (im Endaufbau unbelegt). Luefter
 an OUT1 (Innenluefter) und OUT2 (Aussenluefter) sind laut Ownerangabe die realen Endgeraete (zuvor am Testaufbau an OUT1/OUT4 betrieben; das Geraet von OUT4 wurde nach OUT2 umgesteckt, OUT4 bleibt unbelegt); `HW-32-04` (OUT1) und `HW-32-05` (OUT2) sind je ein Owner-beobachteter AUS→EIN→AUS-Puls.
-Die Firmware initialisiert alle vier Kanaele beim Start auf AUS; die Ausgaenge
-sind noch nicht mit Planner/Driver verbunden (keine geregelte Luefterfunktion).
+Die Firmware initialisiert alle vier Kanaele beim Start auf AUS; die Lueftersinks
+(OUT1/OUT2) sind seit PR #219 im Code mit Planner/Driver verbunden; geregelter
+Betrieb bleibt bis zu den Commissioning-Parametern (#35) fail-closed. OUT3
+(Summer) und OUT4 bleiben unbenutzt (Summer: R1 entfaellt, Ownerentscheid 2026-11-20 D7).
 
 ## Peltier und Leistungspfad
 
@@ -254,6 +256,11 @@ Ob ein Tachosignal spaeter ergaenzt wird, bleibt `FUTURE_RELEASE`.
 
 ## Summer
 
+> **R1-Scopeentscheid (Owner 2026-11-20, D7): Der Summer entfaellt aus Release 1.**
+> OUT3/GPIO26 bleibt softwareseitig AUS/unbenutzt; Boardprofil und generischer
+> Ausgangsadapter bleiben unveraendert. Die folgende Beschreibung ist
+> historische Planung fuer einen spaeter ausdruecklich beauftragten Summer.
+
 Geplant ist ein aktiver Summer über den im Boardprofil festgelegten
 PCB-festen Buzzer-/MOSFET-Kanal. Die R1-Designzuordnung ist damit im
 Boardprofil festgelegt.
@@ -298,7 +305,7 @@ Hardwareverifikation.
 ## Lokale Bedien- und Anzeigeelemente
 
 Release 1 besitzt das Touchdisplay als einzigen lokalen Eingabekanal und den
-Pieper als zusaetzlichen Ausgabekanal. Es gibt keine physischen Taster, keinen
+Pieper als zusaetzlichen Ausgabekanal (R1: entfaellt, Ownerentscheid 2026-11-20 D7). Es gibt keine physischen Taster, keinen
 Encoder, keinen Programmwahlschalter und keine Status-LEDs. Daher darf weder
 normaler Betrieb noch Service, Recovery oder Touchkalibrierung ein solches
 Element voraussetzen. Raw-Touch-Recovery bleibt bis zum Hardwarebeweis
@@ -419,7 +426,7 @@ entsteht.
 3. GPIO-/Adapter-/Boot-Fail-Closed-Verifikation ohne vorgeschriebene
    Spannungsmessung
 4. Sensoren, Display und Touch
-5. Luefter und Summer einzeln
+5. Luefter und Summer einzeln (R1: ohne Summer, Ownerentscheid 2026-11-20 D7)
 6. BTS7960 ohne Peltier
 7. begrenzte Peltier-Heiz- und Kuehlpulse
 8. thermische Grundvermessung

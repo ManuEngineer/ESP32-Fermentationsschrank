@@ -1,357 +1,373 @@
-# R1 – Temperaturanzeige und erster integrierter Regelversuch (Plan, Revision 1)
+# R1 – Temperaturanzeige, Firmware-Temperaturschutz und erster integrierter Regelversuch (Plan, Revision 2)
 
-Status: **Entwurf zur Ownerfreigabe (D1 offen).** Bis zur Freigabe der exakten
-Plan-Commit-SHA: keine Implementierung, keine Builds, kein Flash, keine
-Hardwareaktion. `IMPLEMENTATION=NOT_STARTED`, `FLASH=NO`, `ACTUATOR_RELEASE=NO`,
-`REAL_PELTIER_TEST=NOT_RUN`.
+Status: **Revision 2 (Ownerentscheidungen D2/D3/D4/D5/D7 und Review-Korrekturen eingearbeitet) zur Ownerfreigabe
+der exakten Plan-SHA (D1 offen).** Rev. 1 (`710f918`) ist **nicht** freigegeben und
+ersetzt; diese Fassung ist eigenstaendig ausfuehrbar. Bis zur Freigabe: keine
+Implementierung, keine Builds, kein Flash, keine Hardwareaktion.
+`IMPLEMENTATION=NOT_STARTED`, `FLASH=NO`, `ACTUATOR_RELEASE=NO`,
+`REAL_PELTIER_TEST=NOT_RUN`, `C2_PHYSICAL_PRECONDITIONS=NOT_VERIFIED`.
 
 Basis: `origin/main` `124418acfbe61b364c416261d476e3b80b5f4840` (Merge PR #220;
 Issue #190 `CLOSED`). Betroffene bestehende Issues: #32, #33, #34, #35; spaetere
-Abnahme #36, Dauerlauf #37. Es werden **keine** neuen Issues angelegt.
+Abnahme #36, Dauerlauf #37. Keine neuen Issues, kein zweiter PR.
+
+## 0. Ownerentscheide und Review-Korrekturen (verbindlich eingearbeitet)
+
+Quellen: Ownerentscheidungen 2026-11-20 (PR-Kommentar `7040200219`), Independent Plan
+Review `5993022626`.
+
+| Entscheid | Wirkung in diesem Plan |
+|---|---|
+| **D7 – Summer entfaellt aus R1** | Kein Summer-Treiber, keine Muster, keine OUT3-Pulse, keine akustische Abnahme; OUT3 bleibt softwareseitig AUS/unbenutzt. Sichtbare Meldungen und automatische Sicherheitsabschaltung bleiben Pflicht. Normative Dokumente gezielt synchronisiert (siehe §10). |
+| **D5 – Temperaturschutz** | Beim ersten beaufsichtigten Trial: separates, unabhaengig ablesbares Messgeraet **und** sofort stromlos schaltbarer Leistungspfad durch den Owner = **manuelle Ueberwachung**, kein Thermoschutzsystem. Der dritte DS18B20 (Kuehlkoerper) uebernimmt die automatische Ueberwachung **im bestehenden Produkt-Safety-Pfad** (rohwertbasiert, fail-closed, verriegelnd) – eigener Schnitt S6. Die unabhaengige Absicherung aus `HARDWARE.md` bleibt eigene Pflicht. Unklarer/fehlender vorgeschriebener Schutz ⇒ **C2 `BLOCKED`**, kein stiller Waiver. |
+| **D2** | Service-Writer fuer Planner-Parameter **mit validiertem Clear**. |
+| **D3** | Frische Rohwerte ≤ 5 s nur lokal; qualifizierter Web-Vertrag unveraendert. |
+| **D4** | Erstes Trial ueber ein Benutzerprogramm (kein manueller Halt-Lauf). |
+| **D6** | Numerische Trialparameter und C2-Thermik-/Sicherheitsgrenzen werden **nicht erfunden und nicht jetzt freigegeben**, sondern an getrennten Gates anhand tatsaechlicher Parameter/Aufbau (§7). |
+| P-1 (Review) | `Ki = 0` verworfen: `validDirectionParameters` fordert `Ki > 0` fuer alle vier PI-Saetze. |
+| P-2 (Review) | `S-A ODER S-B` entfernt: C2 braucht **beide** Ebenen (Firmware-Cutoff **und** unabhaengige Schutzebene), nicht gegeneinander aufgerechnet. |
+| P-3 (Review) | Trial-Plannerwerte: Geltung, semantischer Cleanup, Provenance-Kanon, G4 auch bei Confirm/Revalidate, C1 ohne Summer. |
 
 ## 1. Ziel und Nicht-Ziele
 
-Ziel: die vorhandene Software produktnah vervollstaendigen, sodass
-
-1. alle drei DS18B20 ihre echten Temperaturen auf dem lokalen Display zeigen
-   (ohne `SensorQuality::Valid` zu behaupten),
-2. echte Messwerte kontrolliert in Qualitaets-, Regelungs- und Sicherheitskette
-   gelangen koennen,
-3. die tatsaechlich fehlenden Parameter-, Verbindungs- und Startbedingungen
-   identifiziert und gezielt geschlossen sind,
-4. danach ein erster **beaufsichtigter** Heiz-/Kuehl-Regelversuch ueber den
-   vorhandenen Produktpfad moeglich ist, dessen Ergebnisse zugleich Nachweise
-   fuer #32/#33/#34/#35 liefern.
+Ziel: (1) echte DS18B20-Temperaturen auf dem lokalen Display ohne
+`SensorQuality::Valid` zu behaupten, (2) echte Messwerte kontrolliert in
+Qualitaets-, Regelungs- und Sicherheitskette, (3) Schliessen der tatsaechlich
+fehlenden Parameter-, Verbindungs-, Start- und Safety-Bausteine, (4) ein
+beaufsichtigter integrierter Regelversuch ueber den Produktpfad, dessen
+Ergebnisse #32/#33/#34/#35 zugeordnet werden.
 
 Nicht-Ziele: keine Wiederholung von Luefterpuls-, unbelastetem H-Bruecken-,
-Sensor-Grund- oder reinen Stabilitaetstests; kein paralleler Testcontroller,
-keine zweite Aktorsteuerung, keine zweite DS18B20-Pipeline, kein direkter
-Sensorzugriff im Renderer; keine Aenderung an `ActuationInterlock`, PI- und
-DS18B20-Algorithmen, ausser wo unten ausdruecklich begruendet; keine
-Peltierfreigabe, keine Freigabe von `ACTUATOR_RELEASE`; Release-Image bleibt
-unveraendert fail-closed. Vollstaendige Fehlerinjektionen gehoeren zu #36, der
-Langzeittest zu #37, Offsets/Thermik zu #34, finale Parameter zu #35.
+Sensor-Grund- oder Stabilitaetstests; kein paralleler Testcontroller, keine zweite
+Aktorsteuerung, keine zweite DS18B20-Pipeline, kein Sensorzugriff im Renderer; keine
+Peltierfreigabe/`ACTUATOR_RELEASE`; Release-Image bleibt fail-closed;
+keine finalen #35-Sicherheitsgrenzen erfinden; kein Summer; Offsets/Thermik #34,
+finale Parameter #35, Fehlerinjektionen #36, Langzeittest #37.
 
 ## 2. Verifizierte Ausgangslage (Code `main` `124418a`)
 
-- `main/app_main.cpp`: `Ds18b20Sampler` laeuft (Produktbudget 4096/2/1). Die drei
-  Quellen speisen `ControlSensorEvidenceProducer`; die Qualitaetskonfiguration ist
-  `kSensorQualityConfigUnconfiguredUntilIssue35 = std::nullopt`, daher liefert
-  `sample()` **keine Evidenz** (`control_sensor_evidence.cpp`).
-- `FermentationApplication::refreshUiSnapshot()` bezieht die drei Temperaturen
+- `app_main.cpp`: Sampler laeuft (Budget 4096/2/1); Quellen speisen
+  `ControlSensorEvidenceProducer`; Qualitaetskonfiguration
+  `kSensorQualityConfigUnconfiguredUntilIssue35 = std::nullopt` ⇒ `sample()` liefert
+  keine Evidenz (`control_sensor_evidence.cpp`).
+- `FermentationApplication::refreshUiSnapshot()` baut die Temperaturen
   ausschliesslich aus `resolveRuntimeEvidence().plausibility` (gespeist von
-  `publishOwningRuntimeEvidence`). Ohne Evidenz bleibt jede Rolle ein leerer
-  `SensorQualitySnapshot` (Qualitaet `Stale`, kein Wert) → Display zeigt nichts.
-- Renderer (`main/fermentation_ui_renderer.cpp`) zeigt je Rolle Wert
-  (`temperatureText`), Qualitaetstext (`sensorQualityTextKey`) und auf der
-  Diagnoseseite Roh-/korrigiert-/gefiltert-Wert und Messalter. Die
-  Anzeige-Infrastruktur existiert; es fehlt nur ein Wert.
-- `ControlChainParameters`/`kControlChainParametersUnconfiguredUntilIssue35`
-  (alles `0`): `classifyTemperatureControlParameters` → `Unconfigured`; der Regler
-  liefert `Unavailable/NoCommissioning`, nie eine `ControlRequest`.
-- `ActuatorPlannerParameters` kommen **ausschliesslich** aus
-  `ServiceConfiguration.actuatorPlannerParameters` (persistiert, Codec V2 vorhanden),
-  werden beim Fresh-Start per `FreshStartSnapshotProvenance::fromRuntimeLease`
-  als Per-Run-Snapshot uebernommen und beim Run per `planner_->beginRun` gesetzt. Es gibt
-  **keinen Produktions-Writer** (nur ein Test-Fixture setzt sie). Der Kommentar in
-  `run_persistence_coordinator.cpp` stellt klar: Provenance-API ist actor-frei und
-  injiziert nie Planner-Parameter.
-- `kManualRunLimitsOwnerAvailable = false` (`fermentation_application.cpp:167`)
-  sperrt **nur** `prepareStartManualHolding`, `prepareStartManualTimed`,
-  `prepareStop(AbortAndCool)` und `prepareCompletion(startCooling)` mit
-  `Unavailable`. `prepareStartProgram` ist **nicht** so gesperrt.
-- Der positive Gesamtpfad ist digital bewiesen: `SIM-218-01` treibt eine reale
-  `ControlRequest` durch Regler → Planner → Interlock → Driver bis zu den Aktoren,
-  mit Test-Fixtures `testChainParameters()`, `testPlannerParameters()`,
-  `testQualityConfig()` (`test_r1_control_chain_integration.cpp`). Der Produktpfad
-  scheitert also an **Quellen von Werten**, nicht an fehlender Logik.
+  `publishOwningRuntimeEvidence`); ohne Evidenz leere Snapshots ⇒ Display leer.
+  `valueOf()` faellt auf `rawCelsius` zurueck, auch bei `Stale`/`Failed`.
+- Renderer (`main/fermentation_ui_renderer.cpp`) zeigt Wert, Qualitaetstext und auf
+  der Diagnoseseite Roh-/korrigiert-/gefiltert-Wert und Alter; Web-Codec
+  (`web_json_codec.cpp`) emittiert `valueCelsius` (null wenn fehlend) und
+  `quality`-Name.
+- `ControlChainParameters` = Unconfigured-Konstante (`0`) ⇒ Regler
+  `Unavailable/NoCommissioning`. `validDirectionParameters` fordert
+  `Kp>0`, **`Ki>0`**, Neutralband>0, `0<maxQuote≤1` fuer alle **vier** Saetze,
+  dazu `maximumIntegrationStepMillis>0` und geordnete Luftlimits
+  (`temperature_control.cpp:14-43`).
+- `ActuatorPlannerParameters` ausschliesslich aus persistiertem
+  `ServiceConfiguration.actuatorPlannerParameters` (Codec V2), Fresh-Start-Snapshot
+  via `FreshStartSnapshotProvenance::fromRuntimeLease`, `planner_->beginRun`;
+  **kein Produktions-Writer**. Provenance bleibt actor-frei
+  (`run_persistence_coordinator.cpp`).
+- `kManualRunLimitsOwnerAvailable = false` sperrt nur manuelle Laeufe/Kuehlplaene,
+  nicht `prepareStartProgram`. `prepareStartProgram` und
+  `revalidatePreparedRequest` (Confirm) pruefen **keine** Regelbereitschaft.
+- `ActuationInterlock` (#24): Evidenzfelder ohne Temperaturschwellen; Faults
+  (`FaultCode`, `kFaultCount = 8`): Konfiguration, Persistenz, Sensor, Watchdog.
+  Er haelt keinen eigenen Latch. Im Code existiert **kein** Eingriffs-/
+  Notgrenzen-Mechanismus, kein Trend- und kein Kuehlkoerper-Uebertemperaturschutz;
+  `CommandKind` enthaelt keinen Fault-Eintritt; `FaultCode` wird nur ueber
+  `requireService(...)` (Lifecycle `ServiceRequired`, Wiederanlauf per Neustart)
+  sichtbar gemacht. Ein allgemeiner Fault-Reset-/Service-PIN-Pfad ist fuer
+  Temperaturfehler **nicht** vorhanden (nur `applyExternalWatchdogFaultReset`).
+- Positiver Gesamtpfad ist digital bewiesen (`SIM-218-01`) mit
+  `testChainParameters()`, `testPlannerParameters()`, `testQualityConfig()`;
+  das Produkt scheitert an Quellen von Werten/Writer/Admission/Safety, nicht an der
+  Kettenlogik.
+- Aussenluefter-Nachlauf: Planner-Semantik vorhanden (`SIM-218-05/-08`); Summer: nur
+  Ausgangs-Sink (`ready_inactive`), kein Treiber (jetzt D7: entfaellt).
 
-## 3. Befund: Spur der Aktorfreigabe-Evidenz
+## 3. Spur der Aktorfreigabe-Evidenz (alle Felder aus aktuellem Zustand, keines hart `false`)
 
-`FermentationApplication::tickControlChain()` baut `ActuationEvidence` je Tick aus
-aktuellem Zustand; **kein Feld ist hart `false`**. Sie sind im Produkt aber
-unerfuellbar, solange die Quellen fehlen:
-
-| Feld (`ActuationEvidence`) | Produzent | Produkt heute |
+| Feld (`ActuationEvidence`) | Produzent (`tickControlChain`) | Produkt heute |
 |---|---|---|
 | `bootValidationComplete` | `lifecycleState_ == Ready` | erfuellbar |
-| `configurationValidated`, `configurationServiceMode` | Runtime-Lease + Epoche | erfuellbar |
-| `persistenceValidated`/`persistenceLoadStatus` | Coordinator + `applicationReadiness()` | erfuellbar |
-| `explicitActivationRequested`, `activationKind`, `processActivationApplied` | `freshStartActivation_` (nur expliziter Programm-/Hold-Start) | erfuellbar durch Start |
-| `plannerEvidenceValidated` | `classifyActuatorPlannerParameters(planner.parameters())==Valid` | **nie** (kein Snapshot, G3) |
-| `sensorEvidenceValidated` | `freshPublication` (Producer-Publikation) | **nie** (kein Producer-Output, G1) |
+| `configurationValidated`, `-ServiceMode` | Runtime-Lease + Epoche | erfuellbar |
+| `persistenceValidated`/`-LoadStatus` | Coordinator + `applicationReadiness()` | erfuellbar |
+| `explicitActivationRequested`, `activationKind`, `processActivationApplied` | `freshStartActivation_` (nur expliziter Start) | erfuellbar |
+| `plannerEvidenceValidated` | `classifyActuatorPlannerParameters(planner.parameters())==Valid` | **nie** (G3) |
+| `sensorEvidenceValidated` | `freshPublication` | **nie** (G1) |
 | `peltierSensor` (Kuehlkoerper) | `owningRuntimeEvidence_.cooling` | **nie `Valid`** (G1) |
 | `sensorSelectionRuntime`, `actuatorPlanner` | Run-Zustand/Planner | erfuellbar |
 
-Start-Admission (`makePreparedRequest`) verlangt `safetyAllowsStart && airSensorValid
-&& coolingSensorValid` (aus `validSensor(plausibility.*)`); ohne Producer-Evidenz ist
-jeder Start `Unavailable`. Die Gruende der drei Zustaende:
+Start-Admission (`makePreparedRequest`/`revalidatePreparedRequest`) verlangt
+`safetyAllowsStart && airSensorValid && coolingSensorValid`; ohne Evidenz ist jeder
+Start `Unavailable`. Begriffe: **`Unavailable`** = manuelle Laeufe (O5) oder fehlende
+Sensorevidenz; **`Unconfigured`** = PI/Planner-Parameter alle `0` (`NoCommissioning`);
+**`NotAllowed`** = Interlock ≠ `Allowed`.
 
-- **`Unavailable` (Request):** manuelle Laeufe/Kuehlplaene (`kManualRunLimitsOwnerAvailable`),
-  sonst fehlende Sensorevidenz (Start-Admission verweigert).
-- **`Unconfigured`:** PI-Parameter bzw. Planner-Parameter alle `0` (`NoCommissioning`).
-- **`NotAllowed`:** `ActuationInterlock` ≠ `Allowed` (Planner/Sensor/Aktivierung nicht erfuellt).
+## 4. Lueckenliste (V vorhanden/nur konfig, X fehlende Verbindung/Quelle, S echte Safety-Voraussetzung)
 
-## 4. Lueckenliste (Antwort auf die vier Pruefragen je Luecke)
-
-Legende: V = Funktion vorhanden, nur nicht konfiguriert; X = fehlende produktive
-Verbindung/Quelle; S = echte Safety-Voraussetzung; I = Zuordnung Issue.
-
-| Nr. | Luecke | V/X/S | I |
+| Nr. | Luecke | V/X/S | Issue / Schnitt |
 |---|---|---|---|
-| G0 | Keine Anzeige von Messwerten ohne Producer-Evidenz | X (Anzeigepfad) | dieser Plan (A) |
-| G1 | `SensorQualityConfig` ohne Werte (ein Config fuer alle drei Rollen; Kuehlkoerper-Bereich weicht von Luft ab) | V + Werte fehlen | #35 (Filter, Rueckkehrstabilitaet), vorlaeufig Trial |
-| G2 | PI-/`IntegratorTransitionPolicy`-/Luftbegrenzungswerte (`ControlChainParameters`) | V + Werte fehlen | #35 |
-| G3 | `ActuatorPlannerParameters`: persistierter Slot vorhanden, **kein Writer** | X (Writer) + Werte | #35 (Werte), #106 (Bindung) |
-| G4 | **Start ohne Regelbereitschaft:** `prepareStartProgram` prueft nicht, ob Kette, gueltige PI- und Planner-Parameter vorliegen. Sobald G1 gesetzt ist (Sensoren `Valid`), koennte ein Programm als aktiv laufen, **ohne dass geregelt wird** (`NoCommissioning` wird nirgends der Bedienung gemeldet) – dieselbe Klasse wie der Rebuild-Fehler aus #219 („Ready ohne Kette“) | X (Admission) | dieser Plan (B) |
-| G5 | Technische Lauflimits fuer manuelle Laeufe (O5) | S/Owner | #34/#35; Entscheidung D4 |
-| G6 | **Software-Sicherheitsbereich** (Sicherheits-Eingriffsgrenze, harte Notgrenze, Kuehlkoerper-Uebertemperatur) laut `docs/SAFETY_COMPONENT_FAULTS.md` §Temperaturueberwachung: im Code nicht vorhanden (nur PI-Luftbegrenzung, ausdruecklich keine Safety-Grenze; Interlock prueft nur Sensorqualitaet/Watchdog/Persistenz/Aktivierung) | **S – Voraussetzung nicht erfuellt** | #35 (festlegen), #36 (validieren); Entscheidung D5 |
-| G7 | Einmalige Temperatursicherung (Hardware) nicht ausgewaehlt/montiert | S (Hardware) | #35 |
-| G8 | Summer (OUT3): im Produkt nur der Ausgangs-Sink (`ready_inactive`); **kein** Treiber fuer Muster/Typ | offen | #32 (O3=B) |
-| G9 | Kein Luefter-Tacho: Luefterausfall nur indirekt erkennbar | S | #35/#36 |
-| G10 | `CrossRolePlausibilityContext.thermalCompatibility` bleibt `Unavailable` (kein Produzent); Auswirkung auf den Produkt-Sensormodus ist in S3 zu pruefen (Luftmodus nicht betroffen, `SIM-218-01` positiv) | V/X (pruefen) | #34/#35 |
+| G0 | Keine Messwertanzeige ohne Producer-Evidenz | X | S1 |
+| G1 | `SensorQualityConfig` ohne Werte; ein Config fuer alle Rollen (Kuehlkoerper-Bereich abweichend) | V + Werte | #35 / S3 (Rolle), Werte §7 |
+| G2 | PI-/Policy-/Luftbegrenzungswerte | V + Werte | #35 / §7 |
+| G3 | Planner-Parameter ohne Writer | X + Werte | S4 |
+| G4 | Start ohne Regelbereitschaft (stiller Lauf ohne Regelung sobald Sensoren `Valid`; gilt auch beim Confirm) – Klasse „Ready ohne Kette“ aus #219 | X | S2 |
+| G5 | Manuelle Lauflimits (O5) | Owner | D4: nicht noetig fuer Programmstart |
+| G6 | **Firmware-Temperaturschutz** (Kuehlkoerper/Luft Grenzen, Trend, fehlende/alte/fehlerhafte Werte → Peltier AUS, Latch/Rearm, Nachlauf) | **S – nicht erfuellt** | S6 (Pflicht vor C2) |
+| G7 | Einmalige Temperatursicherung/Ueberstromsicherung am Bench-Aufbau | S (Hardware) | G-C2 Vorbedingung; #35 |
+| G8 | Summer | entfaellt (D7) | – |
+| G9 | Kein Luefter-Tacho | S | #35/#36 |
+| G10 | `thermalCompatibility` bleibt `Unavailable` (kein Produzent); Wirkung auf Produkt-Sensormodus pruefen | V/X | S3 |
 
-Verifiziert **nicht** vorhanden (Code gelesen, `actuation_interlock.cpp` enthaelt keine
-Temperaturschwellen) und damit nicht als „nur Konfiguration“ zu behandeln: G4, G6,
-G3-Writer.
+## 5. Teil A – Echte Temperaturen auf dem Display (S1)
 
-## 5. Teil A – Echte Temperaturen auf dem Display
+Entwurf (kleinster Pfad, keine zweite Pipeline, keine Veraenderung der Evidenz):
 
-### 5.1 Entwurf (kleinster Pfad, keine zweite Pipeline)
+- **Quelle:** dieselben drei `ITemperatureSource`-Referenzen des vorhandenen
+  `ControlSensorEvidenceProducer` (`read()` je Kanal). Die in `app_main` bereits
+  gelesenen Rohproben werden **einmal je Schleife** als schmaler, rein anzeigender
+  `RawTemperatureSample`-Satz (je Rolle: Status, Celsius, Messzeitstempel, Identitaet)
+  an die Application gegeben: `publishRawTemperatureSamples(...)`, gespeichert unter
+  dem vorhandenen Application-Lock in einem eigenen Member.
+- **Isolation:** `owningRuntimeEvidence_`/`publishOwningRuntimeEvidence`,
+  `resolveRuntimeEvidence`, `validSensor`, Start-Admission, Interlock, Planner und
+  Persistenz bleiben **unveraendert** und lesen die Anzeige-Eingabe nicht. (Der
+  Firmware-Temperaturschutz S6 liest dieselben Rohproben ueber eine **eigene**,
+  getrennte Leseseite; die Anzeige beeinflusst ihn nie.)
+- **Frische zur Anzeigezeit:** `refreshUiSnapshot()` bewertet mit **einer**
+  monotonen Zeitablesung (`timeSource_`) das Alter = jetzt − Messzeitstempel;
+  angezeigt wird nur bei `status==Ok` **und** Alter ≤ `kRawDisplayMaxAgeMs`
+  (**5000 ms**, Ownerentscheid D3). Ohne neue Proben verschwindet der Wert dadurch
+  von selbst (digital mit virtueller Zeit testbar).
+- **Vorrang:** liefert die qualifizierte Evidenz fuer eine Rolle einen Wert, gilt die
+  bestehende Projektion unveraendert; Rohbasis nur bei leerer qualifizierter Rolle.
+- **Projektion:** `TemperatureView` erhaelt `TemperatureValueBasis
+  {Qualified, RawUnqualified}` (Standard `Qualified`); bei Rohbasis bleibt
+  `SensorQualitySnapshot.quality = Stale` (nie `Valid`), `rawCelsius`,
+  `lastAcceptedSampleAgeMs`, `identity` werden gesetzt. **Kein** neuer
+  `SensorQuality`-Wert (Enum haengt in Persistenz-/Web-Codec und Renderer).
+- **Renderer/Text:** Rohbasis zeigt den neuen Textschluessel `quality-unqualified`
+  (Warnton) statt `quality-stale`; eine gemeinsame Hilfsfunktion in
+  `fermentation_ui_text` ersetzt die zwei Direktaufrufe in Status- und
+  Diagnoseseite. Stale/Failed-Werte *qualifizierter* Evidenz behalten ihre
+  bestehende, spezifizierte Darstellung (Wert nur zusammen mit sichtbarem
+  Warn-Label, Diagnoseseite mit Alter); ein alter Wert erscheint nie ohne
+  Warnung/Alter als „live“.
+- **Web:** unveraendert (Ownerentscheid D3): bei Rohbasis liefert `web_json_codec`
+  `valueCelsius = null`, `quality = "stale"`; Test sichert die Wire-Gleichheit zum
+  heutigen Stand.
+- **`app_main`:** nur die Hilfsfunktion `publishControlSensorEvidence` erweitern
+  (Komplexitaetsgrenze 25 beachten, Pre-Ready-esp-clang).
 
-- **Quelle:** dieselben drei `ITemperatureSource`-Referenzen, die
-  `ControlSensorEvidenceProducer` bereits haelt (`read()` je Kanal). Es entsteht keine
-  zweite Messpipeline und kein zweiter Sensorzugriff im Renderer.
-- **Rein anzeigende Eingabe, getrennt von Evidenz:** neue schmale
-  Application-Eingabe `publishRawDisplayTemperatures(...)` (je Rolle: Wert, Alter,
-  Identitaet, `fresh`), gespeichert unter dem bestehenden Application-Lock in einem
-  eigenen Member. Sie wird **nie** von `resolveRuntimeEvidence()`,
-  `validSensor()`, Start-Admission, `tickControlChain()`, Interlock, Planner oder
-  Persistenz gelesen. `owningRuntimeEvidence_` und `publishOwningRuntimeEvidence`
-  bleiben unveraendert (dort steht weiterhin nur qualifizierte Evidenz).
-- **Frische-Regel:** angezeigt wird nur `status == Ok` **und** Alter ≤
-  `kRawDisplayMaxAgeMs` (benannte firmwarefeste Konstante, Vorschlag 5000 ms
-  ≈ 2,5 Zyklen; gemessen: Zyklus 1800–2160 ms, `age_ms` 889–1368 ms). Fehlend,
-  fehlerhaft oder zu alt → kein Wert (`--`).
-- **Vorrang:** liefert die qualifizierte Evidenz fuer eine Rolle einen Wert (spaeter,
-  sobald G1 gesetzt ist), gilt die bestehende Projektion unveraendert; die
-  Rohanzeige springt nur ein, wenn die qualifizierte Evidenz fuer diese Rolle leer ist.
-- **Projektion:** `TemperatureView` erhaelt ein zusaetzliches Feld
-  `TemperatureValueBasis {Qualified, RawUnqualified}` (Standard `Qualified`).
-  `SensorQualitySnapshot.quality` bleibt bei Rohwerten `Stale` (nie `Valid`);
-  `rawCelsius`, `lastAcceptedSampleAgeMs`, `identity` werden gefuellt. **Kein**
-  neuer `SensorQuality`-Wert (der Enum ist in Persistenzcodec, Web-Codec und
-  Renderer verdrahtet).
-- **Renderer:** Statt `quality-stale` zeigt eine Rohbasis den neuen Textschluessel
-  `quality-unqualified` (Warnton). Eine gemeinsame Hilfsfunktion in
-  `fermentation_ui_text` ersetzt die zwei Direktaufrufe
-  (`main/fermentation_ui_renderer.cpp` Status-/Diagnosezeile).
-- **Web-JSON:** Aenderung am Wire-Vertrag wird vermieden: bei `RawUnqualified`
-  liefert `web_json_codec` weiterhin `quality=stale` und `valueCelsius = null`
-  (Rohwerte erscheinen nur lokal); Test sichert das. Falls der Owner Web-Anzeige
-  wuenscht, ist das eine separate additive Erweiterung (D3).
-- **app_main:** die vorhandene Hilfsfunktion `publishControlSensorEvidence` ruft
-  zusaetzlich die Rohanzeige-Eingabe; keine neue Schleife, keine Zusatzlast ausser
-  drei `read()`-Aufrufen je Durchlauf (Komplexitaetsgrenze beachten).
-- **Bestandsregel (Nachfrage D3):** ein *qualifizierter* Snapshot mit `Stale`/`Failed`
-  zeigt heute den letzten Wert mit Qualitaetslabel (`valueOf()` faellt auf `rawCelsius`
-  zurueck). Das entspricht `SENSOR_TUNING_COMMISSIONING.md` (`STALE` = sichtbar
-  veraltet). Vorschlag: unveraendert lassen; fuer `Failed` den Wert ausblenden nur
-  auf Ownerwunsch.
+Tests (digital): frischer Rohwert → Anzeige `RawUnqualified`, Qualitaet nie
+`Valid`; `MissingSample`/`CrcFault`/`BusFault`/zu alt → kein Wert; Ablauf ohne neue
+Proben (virtuelle Zeit 5 s); Rolle folgt der gespeicherten ROM-Bindung (Quelle
+liefert die Rolle); Vorrang qualifizierter Evidenz; **Isolation:**
+`resolveRuntimeEvidence`/`validSensor`/Start-Admission/Interlock/Persistenz bleiben
+bitgleich ohne/mit Rohanzeige; Renderer-Text (Status/Diagnose); Web-JSON unveraendert.
 
-### 5.2 Tests (digital)
+## 6. Teil B – Regelbereitschaft, Parameterquellen, Planner-Writer
 
-Hosttests: Rohwert gueltig/frisch → Anzeige mit Basis `RawUnqualified`, Qualitaet
-nie `Valid`; `MissingSample`/`CrcFault`/zu alt → kein Wert; Rollen entsprechen der
-gespeicherten ROM-Bindung (Quelle liefert Rolle); Vorrang qualifizierter Evidenz;
-**Isolation:** Rohanzeige beeinflusst weder `airSensorValid` noch Start-Admission noch
-Interlock noch Persistenz (Assertion auf `resolveRuntimeEvidence`/`validSensor`);
-Renderer-Text fuer Status- und Diagnoseseite; Web-JSON unveraendert (`null`).
+### 6.1 Start-Admission „Regelbereitschaft“ (G4, S2)
 
-## 6. Teil B – Regelbereitschaft und Parameterquellen
+`prepareStartProgram` verweigert mit dem bestehenden `Unavailable`, wenn nicht
+gilt: Kette vorhanden **und** `classifyTemperatureControlParameters(PI)==Valid`
+**und** `classifyActuatorPlannerParameters(Lease-Parameter)==Valid` **und** der
+Firmware-Temperaturschutz (S6) konfiguriert und nicht verriegelt. Die Pruefung liegt
+**vor** jeder identitaets-/persistenzwirksamen Nebenwirkung (vor
+`runIdentity_->allocateForApplication()`), wird in
+`revalidatePreparedRequest` (Confirm/Revalidate) wiederholt und gilt nach
+Rebuild/Recovery. Das schliesst den Fall „Sensoren zunaechst qualifiziert, aber
+PI-/Planner-Snapshot fehlt“. Keine Parallelsafety, nur eine zusaetzliche
+Bedingung in der bestehenden Admission.
 
-### 6.1 Start-Admission „Regelbereitschaft“ (G4, noetig vor jeder Sensor-Qualifizierung)
+### 6.2 Parameterquellen und Trial-Profil (S3–S5)
 
-`prepareStartProgram` (und die manuellen Pfade, sobald freigegeben) verweigern mit
-dem bestehenden `Unavailable`, wenn nicht gilt: Kette vorhanden **und**
-`classifyTemperatureControlParameters(PI) == Valid` **und**
-`classifyActuatorPlannerParameters(Lease-Parameter) == Valid`. Damit wird weder ein
-Lauf ohne Regelung als „aktiv“ gestartet noch das Produktverhalten veraendert
-(heute ist Start ohnehin wegen G1 verweigert). Test: Produktstandard (alles
-unkonfiguriert) → Start `Unavailable`; Trial-Parameter + qualifizierte Sensoren →
-Start moeglich.
-
-### 6.2 Parameterquellen (nur explizit begrenzte, freigabepflichtige Testwerte)
-
-Es gibt **kein** stilles Hardcoding im Release. Struktur:
-
-- **Release/Produkt:** unveraendert die benannten Unconfigured-Konstanten
-  (`kControlChainParametersUnconfiguredUntilIssue35`,
-  `kSensorQualityConfigUnconfiguredUntilIssue35`); `peltier_composition_guard` und
-  `SIM-218-00` bleiben gruen.
-- **Trial-Profil (nur Bring-up):** neuer Build mit `APP_R1_CONTROL_TRIAL`
+- **Release/Produkt:** unveraendert die benannten Unconfigured-Konstanten;
+  `peltier_composition_guard`/`SIM-218-00` bleiben gruen; Release enthaelt keine
+  Trial-Symbole (`strings`-/Guard-Test).
+- **Trial-Image:** eigener Bring-up-Build mit `APP_R1_CONTROL_TRIAL`
   (`esp32_bringup`, wechselseitig ausgeschlossen mit den #30/#32/#33/#90-Harnesses,
-  nie im Release; eigenes Buildskript analog `build_issue30_sensor_commissioning.py`
-  mit Release-Verbot). Das Profil liefert **explizit benannte** Testkonstanten
-  (`TRIAL_NOT_COMMISSIONED`), beim Boot als Warnung geloggt:
-  1. `SensorQualityConfig` **je Rolle** (Kuehlkoerper-Plausibilitaetsbereich
-     getrennt; heute ein Config fuer alle drei → kleine, begruendete Erweiterung am
-     Producer-Konstruktor),
-  2. `ControlChainParameters` (PI je Richtung/Rolle, Luftbegrenzung, Policy),
-  3. `ActuatorPlannerParameters`.
-  Jeder Wert traegt Herkunft/Begruendung und Hardgrenzen (siehe Anhang A, Werte
-  `PROPOSAL_NOT_APPROVED`, einzeln freizugeben).
-- **Planner-Parameter (G3):** kanonischer Ort bleibt der persistierte
-  `ServiceConfiguration.actuatorPlannerParameters` (kein Provenance-Bypass). Ein
-  **schmaler Writer** `applyActuatorPlannerParameters(...)` nach dem Muster
-  `applySensorCommissioning` (validiert per
-  `classifyActuatorPlannerParameters`, Revisions-/Lock-Vertrag der vorhandenen
-  Service-Commit-Mechanik), nur ueber UART-Kommandos des Trial-Harness
-  (`planner set <Werte>`, `planner clear`) erreichbar; nie aus UI/Web. Das aendert
-  `state_store` → eigenes Owner-Gate (G3) und expliziter **Clear-/Revert-Weg**;
-  persistierte Trial-Werte werden nach dem Versuch per `planner clear` entfernt
-  (Nachweis per `state_store`-Hash). Alternative (nicht empfohlen): nicht
-  persistierter Provenance-Bypass – widerspricht dem Vertrag in
-  `run_persistence_coordinator.cpp`.
-- **Geltung/Ablösung:** Trial-Werte gelten nur im Trial-Image; Ablösung durch #34/#35
-  erfolgt ueber dieselben Injektionspunkte (kein Umbau noetig); ein Digitaltest sperrt
-  das Trial-Profil aus dem Release (`strings`-/Guard-Test, `esp32_release` ohne
-  `TRIAL`-Symbole).
+  nie Release; eigenes Buildskript mit Release-Verbot; Boot-Warnung
+  `TRIAL_NOT_COMMISSIONED`). Compile-time: `SensorQualityConfig` je Rolle
+  (Kuehlkoerper getrennt, kleine Producer-Erweiterung S3), `ControlChainParameters`.
+  **Ein** geprueftes Image/ein Flash fuer C0→C1→C2 mit phasenweisen Gates; ein neuer
+  Build nur, wenn sich compile-time Werte (PI/Qualitaet) fuer C2 aendern muessen
+  (dann neues Flash-Gate).
+- **Planner-Writer (D2, G3):** `applyActuatorPlannerParameters(...)` nach dem Muster
+  `applySensorCommissioning`: validiert per `classifyActuatorPlannerParameters`
+  (nur `Valid` oder explizites `nullopt` zum Clear), Revisions-/Lock-Vertrag der
+  Service-Commit-Mechanik, nur ueber Trial-UART-Kommandos
+  (`planner set|show|clear`), nie aus UI/Web. Provenance bleibt der kanonische Weg:
+  der Fresh-Start-Snapshot liest weiter ausschliesslich
+  `ServiceConfiguration.actuatorPlannerParameters`; keine Umgehung.
+- **Geltung/Cleanup (P-3):** Persistierte Trial-Plannerwerte allein erzeugen **nie**
+  eine `ControlRequest`, weil Release-/Nicht-Trial-Images PI-Parameter
+  `Unconfigured` haben (G4 verweigert den Start; Interlock/Planner bleiben aus). Sie
+  sind dort inert, werden aber nie still akzeptiert: Beim Boot meldet **jedes** Image
+  mit Writer-Unterstuetzung einen Status `planner_params=present|absent` und im
+  Trial-Image zusaetzlich `matches_trial_profile=0|1`. Cleanup (Ende, Abbruch,
+  Reset, vor Reflash eines Nicht-Trial-Images): `planner clear` und anschliessende
+  **semantische Verifikation** ueber `planner show` (`absent`) plus erhoehte
+  Konfigurationsrevision; **keine** Behauptung identischer Partitionshashes
+  (Journal-/Revisionsfortschritt). Der Werksreset entfernt den Slot
+  (bestehender Resetpfad; Nachweis per Test in S4). Bei ungeplantem Abbruch ohne Cleanup: der naechste
+  Trial-Boot meldet `present`; Cleanup bleibt Pflicht vor Abschluss.
+- **C1-/C2-Werte:** siehe §7 und Anhang A.
 
-### 6.3 Manuelle Laeufe (G5)
+### 6.3 Programmstart statt manueller Laeufe (D4, G5)
 
-Der erste Versuch nutzt den **vorhandenen Programmstart** mit einem kurzen
-Benutzerprogramm aus dem vorhandenen Editor (`installed=true`, eigene Stufe/Ziel);
-dafuer ist `kManualRunLimitsOwnerAvailable` nicht noetig, und O5 bleibt unberuehrt.
-Manueller Halt-Lauf nur auf Ownerwunsch (D4): dann braeuchte es einen
-Lauflimits-Owner (Trial: Band/Dauer/max. Erreichungszeit als Testwerte) –
-Designaenderung an O5, deshalb nicht Teil des Grundumfangs.
+Das erste Trial laeuft ueber ein kurzes Benutzerprogramm aus dem vorhandenen Editor.
+`kManualRunLimitsOwnerAvailable` und O5 bleiben unberuehrt; kein Manual-Hold-Scope.
 
-### 6.4 Software-Sicherheitsbereich (G6) – Voraussetzung fuer Peltierleistung
+## 7. Firmware-Temperaturschutz (G6, S6) – Voraussetzung fuer jedes C2
 
-Der laut Vertrag geforderte Eingriffs-/Notgrenzen-Mechanismus fehlt im Code und
-**kann nicht durch Trial-Parameter ersetzt werden**. Peltierleistung wird deshalb an
-**eine** der folgenden Bedingungen gebunden (Owner-Entscheidung D5):
+Der bestehende Produkt-Safety-Pfad ist `ActuationInterlock` (#24); der Schutz wird
+**dort** eingehaengt, nicht parallel. Er ersetzt weder die unabhaengige
+Hardware-Absicherung noch ist er hardwareunabhaengig (er faellt bei MCU-Haenger,
+Treiberdefekt oder ausbleibender Sensorabfrage aus).
 
-- **S-A (empfohlen fuer den Versuch):** unabhaengiges Hardware-Abschaltsystem, das der
-  Owner am Geraet bestaetigt (unabhaengige Strombegrenzung/Absicherung, mechanisch
-  oder elektrisch wirksame Abschaltung, einmalige Temperatursicherung gemaess #35
-  montiert, Wiederbeschaltung nur von Hand), plus beaufsichtigter Lauf mit
-  Abbruchgrenzen; die Software-Luftbegrenzung bleibt aktiv, gilt aber **nicht** als
-  Safety-Nachweis. Kein Produkt-/Dauerbetrieb.
-- **S-B:** minimaler Firmware-Hard-Cutoff (Kuehlkoerper/Luft ueber/unter harter Grenze →
-  beide Richtungen gesperrt, Luefter sicher, verriegelt) in diesem PR als eigener
-  Schnitt vor Peltierstufe C2 (neuer Safetycode → zusaetzlicher Plan-/Review-Aufwand,
-  Werte der Grenzen weiterhin Ownerfreigabe).
+- **Eingaenge:** die Rohproben (Status, Celsius, Zeitstempel, Identitaet) von
+  **Kuehlkoerper und Schrankluft** aus denselben Quellen, **unabhaengig** von
+  `SensorQualityConfig`/Median/Tiefpass (rohwertbasiert, daher auch ohne G1 wirksam).
+  Eigene Leseseite, getrennt von der Anzeige-Eingabe (§5).
+- **`ThermalSafetySupervisor`** (`fermentation_app`, abstrakt, keine Hardware):
+  Zustaende `Unconfigured | Ok | Blocked | Tripped(Latch, Grund)`.
+  - **Grenzen:** obere/untere Eingriffsgrenze und weiter entfernte harte Notgrenze je
+    Sensor (Kuehlkoerper, Luft) sowie **Trend** (Anstieg des Kuehlkoerpers je Zeit
+    ueber Fenster); Grenzwerte nur innerhalb **firmwarefester** Aussengrenzen
+    parametrierbar, geordnet und endlich.
+  - **Ungueltige Daten:** fehlend/alt/CRC-/Busfehler/nicht-finit/ausserhalb absolutem
+    Messbereich ⇒ sofort `Blocked` (Peltier AUS) und nach firmwarefester Dauer
+    `Tripped` (Latch) – fail-closed, nicht durch Trial-PI-/Luftlimits umgehbar.
+  - **Eingriffsgrenze/Notgrenze:** `Tripped` verriegelt, beide Richtungen gesperrt, kein
+    automatischer Gegenrichtungsversuch im Trial (Versuchszahl `0`).
+  - **Nicht konfiguriert:** `Unconfigured` zaehlt wie `Blocked` (Peltier AUS); im
+    Release dauerhaft so.
+- **Verdrahtung:** neues Feld `thermalSafety` in `ActuationEvidence`, neuer stabiler
+  `FaultCode::TemperatureSafetyLimit`, `kFaultCount` 8→9, in `kFaultPriority`; jeder
+  Zustand ≠ `Ok` ⇒ Interlock ≠ `Allowed`. Der Latch liegt im Supervisor (Interlock
+  bleibt zustandslos). Bei `Tripped` ruft die Application `requireService(
+  TemperatureSafetyLimit)` (sichtbarer Sicherheitsfehler im vorhandenen
+  Fault-Anzeigepfad; Lifecycle `ServiceRequired`).
+- **Lueftersemantik:** Peltier AUS; Aussenluefter-Nachlauf und Innenluefter gemaess
+  vorhandener Planner-Semantik (nicht abgeschaltet); Nachweis per Test
+  (analog `SIM-218-05/-08`).
+- **Rearm (eindeutig, Trial):** Latch ist fluechtig (`SPECIFICATION_REVIEW`: Neustart
+  erzwingt vollstaendige Neubewertung); Rearm = Neustart **und** erneutes Setzen der
+  RAM-Grenzwerte ueber das geschuetzte Trial-UART-Kommando (`thermal limits set`);
+  Parameter stehen **nie** persistent. Ein produktiver Service-PIN-Reset mit
+  Stabilitaetspruefung gemaess `SAFETY_COMPONENT_FAULTS.md` existiert nicht und ist
+  **kein** Teil dieses PR (→ #35/#36); das wird nicht als erfuellt behauptet.
+- **Grenzwerte/Totzeiten/Trend:** keine Zahl in diesem Plan. Firmwarefeste
+  Aussengrenzen und Trial-Grenzen werden mit dem tatsaechlichen Aufbau (Peltier-
+  Datenblatt, Kuehlkoerper, Bench) am Gate G-C2 vom Owner genannt.
 
-Ohne eine davon: **kein Peltierbetrieb**; Stufe C1 (BTS7960 ohne Leistungsstufe)
-bleibt davon unberuehrt.
+Tests (digital): jeder Grund → `Blocked`/`Tripped`, Latch haelt bis Neustart,
+Peltier nie bei `Unconfigured`/`Blocked`/`Tripped`, Aussenluefter-Nachlauf im Trip,
+Start-Admission verweigert bei `Unconfigured`/`Tripped`, Fault sichtbar, keine
+Beeinflussung durch Anzeige-Eingabe, Release-Default fail-closed.
 
-## 7. Teil C – Integrierter, gestufter Regelversuch (Hardware nur nach Owner-Gate)
+## 8. Teil C – Gestufter integrierter Regelversuch (Hardware nur nach Owner-Gate)
 
 Alle Stufen laufen ueber den Produktpfad (Programmstart → Regler → Planner →
-Interlock → Treiber), nicht ueber UART-Aktorbefehle. Jede Stufe hat ein **eigenes**
-Owner-Gate (G3 `NOT_GRANTED`; bereits verbrauchte Gates aus #190 gelten nicht):
+Interlock → Treiber), nicht ueber UART-Aktorbefehle; kein Summer. **Ein** geprueftes
+Image, ein App-only-Flash (separates Gate **G-T**, Hash-Bindung; das verbrauchte
+#190-G2 gilt nicht); phasenweise **physische** GOs statt Pflicht-Refash. Ein blosser
+Boot mit Trialwerten aktiviert nichts: Regelung braucht expliziten Programmstart,
+gueltige PI-/Planner-/Schutzparameter und G4.
 
-| Stufe | Inhalt | Gate | Verwertbare Nachweise |
-|---|---|---|---|
-| C0 | Boot des Trial-/Anzeige-Images, Temperaturen auf Display (nur Anzeige aktiv, Aktoren sicher) | G-C0 | Messwerte erreichen Display (A); Rollen; Frische |
-| C1 | Programmstart, BTS7960-Logik angeschlossen, **Leistungsstufe/Peltier physisch nicht versorgt**; Luefter und Summer angeschlossen | G-C1 | echte `ControlRequest`, Planner→Driver, Innen-/Aussenluefterzustaende, **Aussenluefter-Nachlauf bei Stop**, Stop/Fail-closed bei ungueltigem Sensor (Sensor abziehen), ohne Peltierrisiko → #32 |
-| C2 | wie C1 mit Peltierleistung an strombegrenzter Quelle, Wärmeabfuhr, beaufsichtigt, unabhaengige Abschaltung, nur nach D5 | G-C2 | Heiz-/Kuehlanforderung, Sollwert erreichen/halten, Richtungswechsel/Totzeit, Sicherheitsabschaltung → #33/#34/#35 |
+| Stufe | Inhalt | Gate | Peltier-Leistung | Nachweise |
+|---|---|---|---|---|
+| C0 | Boot, nur Anzeige (§5) | G-T + G-C0 | **stromlos** | Messwerte auf Display, Rollen, Frische |
+| C1 | Programmstart mit bewusst gesetzten **C1-Parametern**; BTS7960-Logik angeschlossen, **Leistungspfad physisch nachweislich stromlos**; Luefter an OUT1/OUT2 | G-P1 (Parameter) + G-C1 | **stromlos** | echte `ControlRequest`, Planner→Driver-Signale, Innen-/Aussenluefterzustaende, **Aussenluefter-Nachlauf bei Stop**, Fail-closed bei Sensorverlust/Trip (Schutz S6 digital+Bench), Admission G4 → #32 |
+| C2 | Peltierleistung, beaufsichtigt, unabhaengige Schutzebene (a) **und** Firmware-Cutoff (b) | G-P2 (C2-Parameter + Thermikgrenzen) + G-C2 + physische Vorbedingungen | **bestromt** | Heiz-/Kuehlanforderung, Sollwert erreichen/halten, Richtungswechsel/Totzeit, Sicherheitsabschaltung → #33/#34/#35 |
 
-Beobachtungskriterien (je Stufe, Logs + Messmittel): echte Werte → Software/Display;
-Anforderung Heizen/Kuehlen korrekt; Planner steuert BTS7960 (Richtung/Enable); Innen-
-und Aussenluefter in den vorgesehenen Zustaenden; Sollwert erreicht/gehalten (C2);
-Stop, Sicherheitsabschaltung, Aussenluefternachlauf; ungueltige Sensoren/fehlende
-Voraussetzungen fail-closed. Abbruch ohne Wiederherstellungspflicht (DEV, wie
-Ownerentscheid D3 aus #190): Test beenden, Leistungspfad stromlos, dokumentieren.
-Ergebnisse werden den Issues #32/#33/#34/#35 zugeordnet; verbleibende
-Fehlerinjektionen → #36, Dauerlauf → #37. Kein unbeaufsichtigter Betrieb.
+**C2-Vorbedingungen (alle am Geraet vom Owner zu bestaetigen, sonst `C2=BLOCKED`):**
+(a) **Unabhaengige Schutzebene**, nachpruefbar: 7,5-A-Ueberstromsicherung im
+Peltier-Leistungspfad montiert; strombegrenzte/abgesicherte Versorgung; einmalige
+Temperatursicherung montiert und auf Durchgang geprueft, Montageort dokumentiert
+(`DIAGNOSTICS_AND_MAINTENANCE.md`, `HARDWARE.md`); Kuehlkoerper und Luefter
+montiert, thermisch begrenzbar; Leistungspfad vom Owner sofort stromlos schaltbar.
+(b) **Firmware-Cutoff S6** digital geprueft und mit freigegebenen Grenzen aktiv.
+(c) **Manuelle Ueberwachung:** unabhaengiges, ablesbares Messgeraet; ueberwachte
+Messstelle und physische Trennmoeglichkeit **konkret festgehalten**. Manuelle
+Ueberwachung und Strombegrenzung gelten **nicht** als montierte Temperatursicherung
+und nicht als Safety-PASS. (d) Aussenluefter zuvor funktionsgeprueft (`HW-32-05`),
+BTS7960-Adapterinterlock auf Command-/GPIO-Ebene bestanden. Fehlt etwas oder ist es
+unklar ⇒ `C2=BLOCKED`, Owner-Entscheid zum pruefbaren Aufbau anfordern.
 
-## 8. Teil D – Vorlaeufige Abschlussbewertung #32 / #33 (nicht entschieden)
+Beobachtungskriterien je Stufe: echte Werte erreichen Software/Display; Heiz-/
+Kuehlanforderung korrekt; Planner steuert BTS7960; Innen-/Aussenluefter in den
+vorgesehenen Zustaenden; Sollwert erreicht/gehalten (C2); Stop, Sicherheits-
+abschaltung, Aussenluefter-Nachlauf; ungueltige Sensoren/fehlende Voraussetzungen
+fail-closed. Abbruch ohne Wiederherstellungspflicht (DEV): Test beenden, Leistungspfad
+stromlos, dokumentieren, Planner-Cleanup (§6.2). Kein unbeaufsichtigter Betrieb.
+Ergebnisse → #32/#33/#34/#35; vollstaendige Fehlerinjektionen → #36, Dauerlauf → #37.
 
-Nur Vorschlag; den Abschluss entscheidet der Owner.
+## 9. Teil D – Vorlaeufige Bewertung #32 / #33 (Vorschlag, Owner entscheidet)
 
-**#32 (Luefter/Summer/Ausgaenge):** `HW-32-04`/`-05` werden uebernommen, nicht
-wiederholt. Produktive Luefteransteuerung und Aussenluefternachlauf werden in C1
-nachgewiesen (keine eigene Kampagne). **Noch offen und entscheidend:** Summer
-(`HW-32-03`: Typ aktiv/passiv, nichtblockierende Muster, Ownerentscheid O3=B) – es
-existiert kein Produktpfad, der den Summer treibt, C1 beruehrt ihn nicht. #32 ist
-nur abschliessbar, wenn der Owner den Summerumfang ausdruecklich auf einen anderen
-Scope verschiebt oder streicht, oder er separat umgesetzt wird. Zusaetzlich
-`HW-32-02`/Reset-Verhalten (Owner hat das Restrisiko fuer R1 akzeptiert).
+**#32:** `HW-32-04/-05` uebernommen, nicht wiederholt. Summer: `NOT_REQUIRED_R1
+(Owner-Scopeentscheid D7)`, nicht `PASS`. #32 ist nach **nachgewiesener produktiver
+Luefterfunktion und Aussenluefter-Nachlauf (C1)** fachlich abschliessbar
+(Kanal-/Verbraucherzuordnung der Luefter, Nachlauf aus `HW-32-03`); bis dahin offen.
+**#33:** `HW-33-06=PASS` bleibt. Nicht durch C0–C2 abgedeckt und Safety-relevant:
+`HW-33-01` (Variante, 3,3-V-Logik, Enable, reale Polaritaet – indirekt in C2),
+`HW-33-02` (Boot/Reset/Brownout mit Richtungen/Enable aus), `HW-33-03`
+(Sicherung/Temperatursicherung/Kuehlkoerper/Pflichtsensoren – C2-Vorbedingung).
+`HW-33-04/-05` werden von C1/C2 weitgehend abgedeckt. #33 bleibt offen, bis das reale
+sichere C2-End-to-End-Mindestpaket belegt oder die uebergreifende #36-Restmatrix
+legitim zugeordnet ist; keine Umetikettierung elektrischer Fehler-/Boot-Reset-Belege.
 
-**#33 (BTS7960/Peltier):** unbelasteter Richtungstest `HW-33-06=PASS` bleibt. Nicht
-durch C0–C2 abgedeckt und **Safety-relevant**: `HW-33-01` (Variante, 3,3-V-
-Logikvertraeglichkeit, Enable-Funktion, reale Polaritaet – Polaritaet wird in C2
-indirekt sichtbar), `HW-33-02` (Boot/Reset/Brownout mit Richtungen und Enable aus),
-`HW-33-03` (Sicherung, Temperatursicherung, Kuehlkoerper, Pflichtsensoren) – das sind
-Voraussetzungen *vor* Peltierleistung. `HW-33-04` (Servicepulse, Totzeit,
-Sensorentfernung) und `HW-33-05` (Gesamtkette) werden von C1/C2 weitgehend
-abgedeckt und koennen dort nachgewiesen statt separat getestet werden. **Vorlaeufig:
-#33 nicht abschliessbar**, bis `HW-33-01/-02/-03` belegt oder vom Owner
-ausdruecklich eingeordnet sind.
+## 10. Umsetzungsschnitte (nach Planfreigabe, jeweils digital getestet)
 
-## 9. Umsetzungsschnitte (nach Planfreigabe, jeweils digital getestet)
+- **S1 Anzeige** (§5). **S2 Regelbereitschaft** (§6.1, inkl. Confirm). **S3 Producer
+  je Rolle + `thermalCompatibility`-Pruefung.** **S4 Planner-Writer + Clear + Status.**
+  **S5 Trial-Image/Profil/Buildskript/Release-Guard** (Werte nur gemaess §7 Gates).
+  **S6 Firmware-Temperaturschutz** (§7, eigener Review-Schwerpunkt; kein Peltier-C2
+  ohne S6). **S7 Dokumentation:** `ROADMAP`, `ACCEPTANCE_TESTS` (Nachweiszeilen
+  C0–C2 als `NOT_RUN` bis Ausfuehrung), `SENSOR_TUNING_COMMISSIONING`, Evidence.
+- **Spezifikationssynchronisierung D7 (in diesem PR bereits erledigt, nur Doku):**
+  `SPECIFICATION_REVIEW` (R1-Scopeentscheid), `PROGRAMS`, `RUNTIME_BEHAVIOR`,
+  `STATE_MACHINE`, `STANDARD_PROGRAMS`, `LOCAL_RUNTIME_UI`,
+  `SAFETY_COMPONENT_FAULTS`, `RECOVERY_AND_INTERRUPTION`, `HARDWARE` (inkl.
+  korrigierter Luefter-/Planner-Aussage seit #219), `OPEN_POINTS`,
+  `ACCEPTANCE_TESTS` (`NOT_REQUIRED_R1`), `DECISIONS` (ADR-Nachtrag). `REQUIREMENTS`
+  enthaelt keine betroffene Aussage. Historische Aussagen bleiben als Nachweis
+  erhalten, mit R1-Vorbehalt markiert; Meldungen bleiben sichtbar, Sicherheits-
+  abschaltung bleibt Pflicht. Der vorhandene lokale „Stummschalten“-Code bleibt
+  unveraendert (kein Produktcodeumbau fuer D7).
+- Nach S1–S6: Builder-Self-Check, Independent Review, dann (getrennt) Gates G-T,
+  G-C0, G-P1, G-C1 sowie G-P2, G-C2. Voller Pre-Ready erst auf Owneranweisung.
 
-- **S1 – Anzeige (A):** Rohanzeige-Eingabe, `TemperatureValueBasis`, Renderer-/
-  Textschluessel, Web-`null`, `app_main`-Aufruf. Tests §5.2, Renderer/Projection,
-  Web-Codec, `peltier_composition_guard`/`check_architecture_boundaries`.
-- **S2 – Regelbereitschaft (G4):** Start-Admission gemaess §6.1 + Tests (auch
-  Regression `test_r1_control_chain_integration`, Start-Matrix).
-- **S3 – Producer je Rolle konfigurierbar:** kleine Erweiterung (Kuehlkoerper-
-  Bereich getrennt); Tests `test_r1_control_chain_integration`.
-- **S4 – Planner-Writer (G3):** `applyActuatorPlannerParameters` + Clear +
-  Trial-UART-Kommandos; Tests Service-Commit/Persistenz/Revision.
-- **S5 – Trial-Profil/Build:** Profil-Header, Buildskript mit Release-Verbot, Boot-Warnung,
-  Release-Guard-Test, beide ESP-IDF-Profile. Nur Werte aus Anhang A, einzeln
-  freigegeben.
-- **S6 (nur bei D5=S-B):** minimaler Hard-Cutoff mit eigener Plan-Ergaenzung.
-- **S7 – Doku:** `docs/ROADMAP.md`, `docs/ACCEPTANCE_TESTS.md` (Nachweiszeilen fuer
-  Stufen C0–C2, nicht als `PASS` vorab), `docs/SENSOR_TUNING_COMMISSIONING.md`
-  (Rohanzeige/Trial), Evidence-Datei fuer den Versuch.
+## 11. Entscheidungen und Gates
 
-Nach S1–S5: Builder-Self-Check, Independent Review, danach (separat) Owner-Gates
-G-C0/G-C1 (und G-C2 nach D5). Voller Pre-Ready-Lauf erst auf Owneranweisung.
+Entschieden: D2, D3, D4, D5 (Prinzip), D7. **Offen:** **D1** Freigabe der exakten
+Plan-SHA; **D6 getrennt:** G-P1 (C1-Parameter) und G-P2 (C2-Parameter, Thermik-/
+Sicherheitsgrenzen anhand tatsaechlicher Parameter/Aufbau); **G-T** (App-only-Flash,
+Image-Hash); **G-C0, G-C1, G-C2** (physische Freigaben). Alle `NOT_GRANTED`.
+Risiken: Trial-Werte thermisch ungeeignet (beaufsichtigt, strombegrenzt, kurz);
+persistierte Plannerwerte verbleiben (inert + semantischer Cleanup);
+`app_main` nahe der Komplexitaetsgrenze; S6 ist neuer Safetycode (Review-/Testaufwand);
+fehlender produktiver Fault-Reset bleibt ausdruecklich offen (#35/#36).
 
-## 10. Dokumentationswirkung
+## Anhang A – Ableitung gueltiger Trial-Werte (keine Zahlen, keine Freigabe)
 
-Dieser PR aktualisiert `docs/ROADMAP.md` (u. a. #190 `CLOSED`, Verweis auf diesen
-Plan unter #32/#33/#35). Keine Statusduplikate in Issue-Bodies ausser knappen
-Verweisen nach Planfreigabe. Nicht ausgefuehrte Nachweise bleiben `NOT_RUN`.
-
-## 11. Risiken und offene Entscheidungen
-
-- **D1:** Freigabe der exakten Plan-SHA.
-- **D2:** Quelle der Planner-Parameter: Writer in Service-Konfiguration (empfohlen,
-  vertragskonform, mit Clear) oder verwerfen (nicht empfohlen: Bypass).
-- **D3:** Anzeigeumfang: Rohwerte nur lokal (empfohlen) oder auch Web; `Failed`-Wert
-  weiter mit Label anzeigen (empfohlen) oder ausblenden; `kRawDisplayMaxAgeMs`.
-- **D4:** nur Programmstart (empfohlen) oder zusaetzlich manueller Halt-Lauf mit
-  Trial-Lauflimits.
-- **D5:** Sicherheitsbereich vor Peltierleistung: S-A (unabhaengige
-  Hardware-Abschaltung, beaufsichtigt, empfohlen fuer den Versuch) oder S-B
-  (Firmware-Hard-Cutoff im PR).
-- **D6:** Trial-Werte (Anhang A) einzeln freigeben; Geltung = Trial-Image/Versuch.
-- **D7:** Summerumfang #32 (verschieben, streichen oder umsetzen).
-- Risiken: Trial-Werte koennen thermisch ungeeignet sein (daher kurz, beaufsichtigt,
-  strombegrenzt); persistierte Planner-Parameter koennen versehentlich bleiben
-  (Clear + Hash-Nachweis); Kuehlkoerper-Uebertemperatur ohne G6 (D5); `app_main`
-  nahe der Komplexitaetsgrenze (Helferfunktionen).
-
-## Anhang A – Trial-Wertekandidaten (`PROPOSAL_NOT_APPROVED`, keine Freigabe)
-
-Keine Zahl ist freigegeben. Ableitungsregeln; Zahlen setzt der Owner:
-
-| Parameter | Regel/Quelle | Vorschlag |
-|---|---|---|
-| Planner: Schaltfenster, Mindest-Ein | `docs/ACTUATOR_TIMING.md` Beispiel | 30 s / 3 s (Beispiel der Spezifikation) |
-| Planner: Mindest-Aus, Polaritaetstotzeit, Nachlauf aussen/innen | Owner/Waermeabfuhr | Ownerwert erforderlich |
-| PI Luft Heizen/Kuehlen | keine Messbasis | nur P, kleine Verstaerkung, `Ki=0`, `maximumQuote` konservativ klein |
-| Luftbegrenzung (block/reduce) | Programmziel + Bauteilgrenzen | eng um den Versuchsbereich, Ownerwert |
-| Sensorqualitaet je Rolle | `sensor_limits.hpp` (firmwarefeste Obergrenzen) | Luft/Produkt: aus M2 (Zyklus ~2 s) ableiten; Kuehlkoerper: weiterer Bereich |
-| `kRawDisplayMaxAgeMs` | Zyklus 1800–2160 ms | 5000 ms |
-| Versuchsprogramm | vorhandener Editor | kurze Stufe, Ziel nahe Ist, Abbruch von Hand |
-
-Jeder uebernommene Wert wird im Trial-Header mit Quelle, Gueltigkeit und
-Ablösebedingung dokumentiert.
+- **PI (je Richtung/Rolle):** alle vier Saetze muessen `classifyTemperatureControl
+  Parameters==Valid` erfuellen: `Kp>0`, **`Ki>0`** (strikt positiv, kleiner Wert aus
+  `Ki = Kp/Ti` mit `Ti` deutlich groesser als das Schaltfenster), Neutralband>0,
+  `0<maxQuote≤1` (klein fuer C1/C2), `maximumIntegrationStepMillis>0`, geordnete
+  Luftlimits. Nachweis vor Vorlage: digitaler Validierungstest plus Simulation, dass
+  der Integralanteil innerhalb `maxQuote` bleibt. **Keine** „P-only“-Vorgabe.
+- **Planner:** nur `Valid` nach `classifyActuatorPlannerParameters`; Schaltfenster/
+  Mindest-Ein aus `docs/ACTUATOR_TIMING.md` (Beispiel 30 s/3 s) als Ausgangspunkt,
+  Mindest-Aus/Totzeit/Nachlauf als Ownerwerte.
+- **Sensorqualitaet je Rolle:** innerhalb `sensor_limits.hpp`-Obergrenzen; Kuehlkoerper
+  mit weiterem Plausibilitaetsbereich als Luft.
+- **Schutz S6:** Grenzen/Trend/Totzeiten ausschliesslich aus Aufbau und Owner (G-P2).
+- Jeder uebernommene Wert wird im Trial-Header mit Quelle, Gueltigkeit (nur
+  Trial-Image/Versuch), Schutzgrenzen und Abloesebedingung durch #34/#35 dokumentiert;
+  die konkreten Zahlen erscheinen erstmals im S5-/S6-Commit nach den digitalen
+  Validierungstests und werden am jeweiligen Gate vom Owner freigegeben.
