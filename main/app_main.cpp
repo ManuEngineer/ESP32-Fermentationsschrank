@@ -580,6 +580,29 @@ bool updateProductUi(
     return touchPoll.freshPressEdge;
 }
 
+#if !defined(APP_ISSUE_32_OUTPUT_PULSE) && \
+    !defined(APP_ISSUE_33_BRIDGE_IDLE_TEST)
+void attachControlChain(fermentation::FermentationApplication& application,
+                        const fermentation::ActuatorPlanSinkPorts& ports) {
+    if (!application.attachActuationPorts(
+            ports,
+            fermentation::kControlChainParametersUnconfiguredUntilIssue35)) {
+        ESP_LOGE(kTag, "control chain: attachActuationPorts rejected");
+    }
+}
+#endif
+
+void publishControlSensorEvidence(
+    fermentation::FermentationApplication& application,
+    fermentation::ControlSensorEvidenceProducer& producer) {
+    if (const auto evidence =
+            producer.sample(application.publishedProcessState()
+                                .value_or(fermentation::ProcessRuntimeState{})
+                                .state)) {
+        application.publishOwningRuntimeEvidence(*evidence);
+    }
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -705,12 +728,9 @@ extern "C" void app_main(void) {
     // the named unconfigured constant until #35, so no ControlRequest and no
     // actuator release can result. The manual output harnesses (#32/#33) drive
     // the same sinks directly and therefore never get the chain attached.
-    if (!application.attachActuationPorts(
-            fermentation::ActuatorPlanSinkPorts{&peltierBridge, &outerFanOutput,
-                                                &innerFanOutput},
-            fermentation::kControlChainParametersUnconfiguredUntilIssue35)) {
-        ESP_LOGE(kTag, "control chain: attachActuationPorts rejected");
-    }
+    attachControlChain(application,
+                       fermentation::ActuatorPlanSinkPorts{
+                           &peltierBridge, &outerFanOutput, &innerFanOutput});
 #endif
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
     device_platform_esp_idf::EspIdfSecureRandomSource randomSource;
@@ -891,12 +911,7 @@ extern "C" void app_main(void) {
     for (;;) {
         platform.update();
         sntp.poll();
-        if (const auto sensorEvidence = controlSensorEvidence.sample(
-                application.publishedProcessState()
-                    .value_or(fermentation::ProcessRuntimeState{})
-                    .state)) {
-            application.publishOwningRuntimeEvidence(*sensorEvidence);
-        }
+        publishControlSensorEvidence(application, controlSensorEvidence);
         application.update();
         const bool touchPressObserved =
             updateProductUi(application, displayRenderer.get(), uiWorkspace,
