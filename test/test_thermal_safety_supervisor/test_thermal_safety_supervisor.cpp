@@ -449,6 +449,25 @@ void test_two_readings_further_apart_than_the_window_never_yield_an_ok() {
     TEST_ASSERT_TRUE(ok);
 }
 
+// R221-4 exact case: window 10 s, maximum sample age 60 s, invalid latch 60 s;
+// readings 20 degrees C at 1 s and 30 degrees C at 56 s. The older reading is
+// not a baseline within the window: Blocked/TrendObservationPending, never Ok.
+void test_r221_4_exact_case_sparse_readings_stay_pending() {
+    ThermalSafetyLimits limits = testLimits();
+    limits.trendWindowMillis = 10'000U;
+    limits.maxSampleAgeMillis = 60'000U;
+    limits.invalidLatchMillis = 60'000U;
+    ThermalSafetySupervisor supervisor;
+    TEST_ASSERT_TRUE(supervisor.configure(limits) ==
+                     ThermalSafetyConfigureResult::Accepted);
+    auto result = supervisor.evaluate(samples(1'000U, 25.0, 20.0), 1'000U);
+    TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+    result = supervisor.evaluate(samples(56'000U, 25.0, 30.0), 56'000U);
+    TEST_ASSERT_TRUE(result.status == ThermalSafetyStatus::Blocked);
+    TEST_ASSERT_TRUE(result.reason ==
+                     ThermalSafetyReason::TrendObservationPending);
+}
+
 // Backwards or out-of-order measurement timestamps are fail-closed: the
 // observation restarts and no `Ok` is given until it is rebuilt.
 void test_backwards_or_unordered_timestamps_are_fail_closed() {
@@ -594,6 +613,7 @@ int main(int, char**) {
     RUN_TEST(test_irregular_sample_intervals_still_trip_on_a_dangerous_rise);
     RUN_TEST(test_a_late_fast_rise_is_caught_against_a_recent_baseline);
     RUN_TEST(test_two_readings_further_apart_than_the_window_never_yield_an_ok);
+    RUN_TEST(test_r221_4_exact_case_sparse_readings_stay_pending);
     RUN_TEST(test_backwards_or_unordered_timestamps_are_fail_closed);
     RUN_TEST(test_the_supervisor_keeps_a_small_fixed_history);
     RUN_TEST(test_evaluation_is_idempotent_for_identical_input);
