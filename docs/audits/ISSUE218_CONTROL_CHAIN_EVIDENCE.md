@@ -65,3 +65,17 @@ Code-Stand: `e54796c`. Nur digitale Nachweise; kein Flash, keine Hardware, keine
 8. **Risiko R1 (Plan):** `loadDisposition` fuer den Interlock wird aus dem Latch (`FreshStart` -> `Standby`) abgeleitet; die
    Interlock-Tests und der Integrationstest tragen das (Neustart/Stop im selben Boot getestet). Interlock unveraendert.
 9. Bring-up-Harness-Builds (#32/#33) haengen die Kette nicht an, damit der Tick die manuell gesteuerten Sinks nicht ueberschreibt.
+
+## Korrektur nach Independent Review (Fix `9f979be`)
+
+- **B1:** `publishedProcessState()` liest `runtimeRunState_` unter der vorhandenen `applicationCallSerializer_` und gibt den
+  Prozesszustand als Wert zurueck (keine neue Mutex-Instanz, keine neue API).
+- **B2:** `replaceRunPersistenceCoordinator()` liefert `bool`; scheitert der ControlChain-Neuaufbau, steigt
+  `beginAuthorizedFactoryReset()` mit `RunPersistenceHandoffUnavailable` vor Boot-Classification/`Ready` aus.
+  `ServiceRequired`/Allokationsfehler bleibt, Ausgaenge AUS (Chain abgebaut), keine Freigabe fuer neue Starts.
+- Regression (native, PASS): `test_r1_control_chain_integration`, `test_factory_reset_flow`, `test_smoke`,
+  `test_run_persistence_coordinator`, `test_web_application_routes`, `test_issue144_run_identity`,
+  `test_issue90_product_recovery_oracle` (379 Faelle).
+- **Grenze:** Der Allokationsfehlerpfad (B2) ist ohne Fault-Injection nicht testbar (laut Auftrag ausgeschlossen); belegt nur durch
+  Code-Review. ESP-IDF-Builds wurden fuer die Korrektur nicht neu gebaut (Auftrag: vorhandene Evidence wiederverwenden); Buildgroessen oben gelten fuer `4614583`.
+
