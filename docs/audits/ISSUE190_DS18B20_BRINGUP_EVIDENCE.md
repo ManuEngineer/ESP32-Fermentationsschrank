@@ -227,3 +227,54 @@ alle Ausgaenge inaktiv).
 
 **Endzustand Board:** laeuft das Release-Image `cad364c0…d6db` (Source `c782156`),
 Partitionen unveraendert, persistierte Bindung unveraendert, alle Sensoren angeschlossen.
+
+## C1 – DEV-Harness mit Produktbudget 4096/2/1 (Plan Rev. 3 `10cc3f7`, PR #220; digital, `FLASH=NO`)
+
+Scope: Im Bring-up-Harness (`APP_ISSUE_30_SENSOR_COMMISSIONING`) wird statt des
+Probe-Budgets 6144/2/1 das freigegebene `kApprovedDs18b20TaskBudget` (4096/2/1)
+verwendet (Ownerentscheid D2=B); Log `ds18b20 budget: approved product budget
+(bring-up harness)`. Release-Pfad unveraendert. **Keine Hardwaremessung; alle
+Hardware-Restnachweise (Bindung, frische Werte, Stack-HWM unter 4096) bleiben
+`NOT_RUN`/`NOT_PROVEN` bis zum separaten Gate G2.**
+
+| Pruefung (Code-HEAD `0370b32`, Arbeitsbaum sauber) | Ergebnis |
+|---|---|
+| `test_ds18b20_sampling`, `test_r1_control_chain_integration`, `test_temperature_source` | PASS (39 Faelle) |
+| `scripts/check_architecture_boundaries.py` | PASS |
+| `run_pre_ready_gates.sh self-check` | `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` (clang-format PASS, clang-tidy `NOT_REQUIRED`) |
+| Harness-Build `build_issue30_sensor_commissioning.py --clean` | PASS; 1 828 432 B, SHA-256 `ce388bc2a1d91dcbd85ed62fed44fae474b06217e1c482a035ca91f3a2c5eca1`; enthaelt `approved product budget (bring-up harness)`, kein `PROBE budget` |
+| Release-Build `build_esp_idf_profiles.py release --require-clean-source-tree` | PASS; 1 805 040 B (identisch zur Groesse des Release-Builds vor der Aenderung), 0 Treffer fuer `ISSUE30`/`PROBE`/`ISSUE190`/`bring-up harness`; nur CMake-Komponentenvalidierungs-Hinweise, keine Compilerwarnung |
+
+Grenzen: Der Release-Hash (`470904b1…`) ist nicht bitgleich zum frueheren Build
+(keine Reproduzierbarkeitsbehauptung); die Aussage "Release unveraendert" stuetzt
+sich auf identische Groesse, Quelltextdiff (nur `#ifdef`-Block und Hilfsfunktion)
+und die fehlenden Harness-Strings. Der Harness-Hash ist ein Clean-Tree-Build; ein
+G2-Flash nutzt den dann freigegebenen Hash. Kein ESP-IDF-esp-clang-Gesamtlauf,
+kein Pre-Ready-Lauf.
+
+## C2 – DEV-Bench-Test auf dem integrierten #219-Stand mit Produktbudget 4096/2/1 (2026-11-20, G2 erteilt)
+
+Scope: Plan Rev. 3 (`10cc3f7`), Gate G2 vom Owner erteilt (Review ok, Flash freigegeben;
+Owner am Geraet bestaetigt: Temperaturfuehler unveraendert verbunden, Luefter an OUT1/OUT2,
+Summer an OUT3, BTS7960 verbunden **ohne Leistungsstufe/Peltier**). Kein Backup/Restore
+(D3). `ACTUATOR_RELEASE=NO`, kein Peltier, keine Last, keine Sensoreingriffe, M1–M6
+nicht wiederholt, keine erzwungenen CRC-/Busfehler (D4).
+
+| Feld | Wert |
+|---|---|
+| Source-HEAD des Images | `63cddd32bd8f6b3ff131e2fcd6cae2018ed899cf` (sauber, Firmware-Code = C1 `0370b32`) |
+| Image | `esp32_bringup` + `APP_ISSUE_30_SENSOR_COMMISSIONING`, 1 828 432 B, SHA-256 `93c750db95f649cbae35afd5a16613328c6b69b7b9c8b343acbd912ac9a9496b` |
+| Partitionstabelle | installiert (read-only, `0x8000`) **byteidentisch** zur Build-Tabelle (SHA-256 `d7f180e4…`) |
+| Flash | einmalig App-only `0x10000` (`default-reset`, FT232 `/dev/ttyUSB0`): `Wrote 1828432 bytes`, `Hash of data verified.`; `verify-flash`: `Verification successful (digest matched).` Kein `erase_flash`, kein Bootloader-/Partitionstabellen-/NVS-/`state_store`-Schreiben, kein Backup |
+| NVS/`state_store` (nur Hash) | vorher = nachher: `nvs` `24354ddf…`, `state_store` `8c89180d…` (identisch zu den Hashes der Release-Evidence); Bindung unveraendert |
+
+**Beobachtung (ein Reset per RTS/EN, 240 s Mitschnitt, ein einziges `ds18b20 report` bei ca. 60 s; Rohlog nicht veroeffentlicht, enthaelt Netzwerkdaten):**
+
+- Boot: `onboard outputs: … ready_inactive`, `ds18b20 budget: approved product budget (bring-up harness): stack=4096 priority=2 core=1`, `ds18b20 sampler: started`, `ISSUE30_READY … real_actuators_enabled=NO`. Kein Panic/WDT/Abort/Backtrace, keine `E`-Zeilen; nur die vorbestehenden Warnungen (WiFi-Authmode, LCD-Callback).
+- `ds18b20 report`: `ISSUE30_SAMPLER running=1`, **`ISSUE30_BINDING engine_binding_valid=1 record_present=1`**, GPIO32 (expected_rom_bus) `count=2` `A60000006C724828`/`F90000006C4C6228`, GPIO33 `count=1` `CF0000006C415328`, `overflow=0`, `binding_conflict=0`, `record_air=A60000006C724828`, `record_heatsink=F90000006C4C6228`.
+- Frische Werte: je Kanal 118 `Ok`-Messungen (nach den drei Start-`MissingSample` vor dem ersten Sample), ROM je Kanal konstant und rollenrichtig; alle Zeitstempel verschieden; Zykluszeit 1800/2000/2160 ms (Min/Median/Max); `age_ms` 889–1368 ms. Temperaturen: air 44,75–45,38 °C, heatsink 21,19–21,44 °C, product 21,31–21,56 °C (Owner-Aufbau mit erwaermtem Luftfuehler wie bei M1).
+- Ressourcen (24 Stichproben, 10-s-Takt) **unter dem Produktbudget 4096 B**: Task-Stack-HWM 2728–2792 B frei, d. h. hoechster Bedarf ca. 1368 B (Reserve ca. 2728 B); kleinster Heap 31 608 B, kleinster groesster Block 29 696 B. Heartbeat-Abstand der Hauptschleife max. 1108 ms.
+
+**Bewertung:** Geladene feste ROM-Bindung, Rollenzuordnung, frische Messwerte mit Zeit-/Alterswerten und Stack-HWM unter dem exakten Produktbudget sind auf dem integrierten #219-Stand (DEV-Harness-Image) **beobachtet (`PASS` fuer diese Beobachtung)**. **Nicht belegt bleiben:** Release-Sensorevidenz (Release hat keine Ausgabe, D3 aus PR #215), `Valid`-Zustand der Kette (Sensorqualitaetskonfiguration bis #35 unkonfiguriert), reale `CrcFault`/`BusFault`-Pfade (`NOT_RUN`, D4), Schrank-Thermik, Peltier. Der Stackbedarf der Fehlerpfade ist weiterhin nicht gemessen.
+
+**Endzustand Board:** laeuft das DEV-Harness-Image `93c750db…` (Source `63cddd3`, Bring-up, nicht Release), Partitionen und persistierte Daten unveraendert, Sensoren angeschlossen, Leistungsstufe/Peltier nicht vorhanden. Eine Rueckkehr auf ein Release-Image ist nicht Teil dieses Tests (kein Restore, D3).
