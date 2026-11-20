@@ -51,6 +51,15 @@ Diagnose zeigt getrennt:
 - Trend
 - Sensorrolle und Verwendung
 
+## Rohwertanzeige ohne Qualitätsfreigabe (R1)
+
+Solange keine Sensorqualitaetskonfiguration freigegeben ist, zeigt das lokale Display den
+aktuellen technischen Rohwert je Rolle **unqualifiziert** (Label `roh`/`raw`/`crudo`): nur bei
+erfolgreicher Probe und einem Alter von hoechstens 5 s, nie als `VALID`, nie als Regel-, Start-
+oder Sicherheitsevidenz. Fehlende, fehlerhafte oder zu alte Werte werden nicht angezeigt. Der
+Web-Vertrag bleibt unveraendert. Quelle: R1-Trial-Plan S1
+(`docs/tasks/r1-sensor-display-and-control-trial-plan.md`).
+
 ## Qualitätszustände
 
 ### `VALID`
