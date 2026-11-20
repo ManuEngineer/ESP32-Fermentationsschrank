@@ -1,15 +1,27 @@
-# Issue #190 – Restnachweise am Testaufbau auf dem integrierten #219-Stand (Plan, Revision 2)
+# Issue #190 – Restnachweise am Testaufbau auf dem integrierten #219-Stand (Plan, Revision 3)
 
-Status: **Revision 2 nach Independent Review zur Fix Verification und
-Ownerfreigabe (D1 offen).** Bis zur Freigabe der exakten Plan-Commit-SHA: keine
-Implementierung, keine Builds, kein Flash, keine Hardwareaktion.
+Status: **Revision 3 (Ownerentscheid DEV ohne Restore) zur abschliessenden Fix
+Verification und Freigabe der exakten Plan-SHA (D1 offen).** Bis zur Freigabe:
+keine Implementierung, keine Builds, kein Flash, keine Hardwareaktion.
 `IMPLEMENTATION=NOT_STARTED`, `FLASH=NO`, `ACTUATOR_RELEASE=NO`,
 `REAL_PELTIER_TEST=NOT_RUN`.
 
-Rev. 2 behebt genau die drei Review-Blocker (B1 Bindungsnachweis per
-read-only-Befehl, B2 echter Rueckfallweg, B3 Roadmap-Konsistenz) und die
-Klarstellungen zu Logtext, Planungsbuild und `age_ms`; Rev. 1 (`de4c145`) ist
-ersetzt.
+**Ownerentscheid (verbindlich, auf Rev. 2 `b3c52c8`):** Das Geraet ist ein noch
+nicht produktiv eingesetztes DEV-System mit den definitiven Komponenten in einem
+provisorischen Testaufbau.
+- **D2 = B:** Das bereits freigegebene DS18B20-Produktbudget `4096/2/1` wird im
+  bestehenden DEV-Harness verwendet (§4).
+- **D3:** **Kein** Backup der bisherigen Firmware, **kein** verpflichtender
+  Restore-/Rueckfallkandidat; das Wiederherstellungsrisiko wird fuer diesen DEV-Test
+  akzeptiert.
+- **D4:** keine erzwungenen CRC-/Busfehler an der realen Hardware; nicht
+  nachgewiesene Faelle bleiben `NOT_RUN` bzw. `PARTIAL`.
+
+Rev. 3 entfernt dadurch alle Backup-/Restore-Pflichten und die daraus folgenden
+`G2=BLOCKED`-Bedingungen aus Rev. 2 (B2). Unveraendert bleiben: B1
+(read-only-Befehl `ds18b20 report`), B3 (Roadmap), die elektrische Aktorsperre, die
+Flash-Identitaetspruefung, die Partitionierungsgrenzen und das **separate
+Owner-Gate G2**. Rev. 2 (`b3c52c8`) ist ersetzt.
 
 **Hinweis Planungsbuild:** In Rev. 1 wurde ein Probe-Image gebaut
 (`build_issue30_sensor_commissioning.py`), obwohl `docs/CI_AND_QUALITY_GATES.md`
@@ -47,7 +59,7 @@ Bus-Stoerungen.
 | Hot-Plug fest/Produkt, koordinierter Neustart | `PASS` (Probe-Image) | M3–M5 |
 | Stack-HWM 4768 B frei von 6144 B (Bedarf ca. 1376 B), Heap, Heartbeat | gemessen unter **Probe-Budget 6144/2/1**; `PARTIAL` | M6, `HW-30-03/-06` |
 | Release `cad364c0…` (Source `c782156`, Produktbudget 4096/2/1): Boot, `sampler: started`, 150 s stabil, NVS/`state_store` byteidentisch | `PASS` fuer Boot/Stabilitaet | Evidence Release-Test |
-| Geladene Bindung und frische Werte **im Release**; Stack-HWM im Release | `NOT_PROVEN` (bewusst: keine Release-Ausgabe, Ownerentscheid D3) | Evidence Release-Test |
+| Geladene Bindung und frische Werte **im Release**; Stack-HWM im Release | `NOT_PROVEN` (bewusst: keine Release-Ausgabe, Ownerentscheid D3 des Plans Rev. 3 aus PR #215) | Evidence Release-Test |
 | Frische Werte/Bindung/HWM auf dem **integrierten #219-Stand** | **nicht gemessen** (neu, dieser Plan) | – |
 | `CrcFault`/`BusFault` an realer Hardware | `NOT_RUN`; bewusst ausgeschlossen (keine Kurzschluesse/Stoerungen); Logik per Hosttests (`test_ds18b20_sampling`) | `HW-30-03/-05/-06` |
 | #219-Kette auf einem daraus gebauten Image auf Hardware | `NOT_RUN` | Issue #33 Statusblock |
@@ -92,14 +104,14 @@ Grenzen dieser Beobachtung (ehrlich):
 3. Eine erfolgreiche Kettenanbindung loggt das Image nicht (nur der Fehlerfall
    `attachActuationPorts rejected`); sie wird per Abwesenheit dieser Zeile und
    den Host-/Integrationstests aus #219 belegt, nicht per Hardware.
-4. Es ist ein DEV-Image, kein Release (Release hat gemaess D3 keine Ausgabe).
+4. Es ist ein DEV-Image, kein Release (Release hat gemaess D3 des Plans Rev. 3 aus PR #215 keine Ausgabe).
 
-## 4. Optionen und Empfehlung (Entscheidung D2)
+## 4. Optionen und Ownerentscheid D2 = B
 
-- **A – nur vorhandenes Harness-Image, kein Codediff.** Beantwortet Bindung, Rollen,
+- **A – nur vorhandenes Harness-Image, kein Codediff (nicht gewaehlt).** Beantwortet Bindung, Rollen,
   frische Werte mit Alter und HWM unter Probe-Budget auf dem integrierten Stand.
   Stack-Reserve unter 4096 nur abgeleitet.
-- **B – A plus kleinste DEV-Option (empfohlen):** Im bereits bestehenden
+- **B – A plus kleinste DEV-Option (vom Owner gewaehlt, D2):** Im bereits bestehenden
   `#ifdef APP_ISSUE_30_SENSOR_COMMISSIONING`-Block von `app_main.cpp` (Probe-Budget)
   wird stattdessen `kApprovedDs18b20TaskBudget` (4096/2/1) uebergeben; Log
   `ds18b20 budget: approved product budget (bring-up harness)`. Nur dieser Block, rein
@@ -108,16 +120,20 @@ Grenzen dieser Beobachtung (ehrlich):
   Produktbudget** gemessen; ein zu kleiner Stack wuerde sichtbar (Canary/Panic) statt
   abgeleitet. Diff ca. 10 Zeilen, ersetzt eine Ownerentscheidung (D2 aus Rev. 3
   gilt weiter fuer Probe-Messungen) nicht – er verwendet den freigegebenen Wert.
-- **C – neue Release-Telemetrie/Diagnoseausgabe:** verworfen (Ownerentscheid D3).
+  Stack-HWM wird direkt unter dem Produktbudget gemessen; Probe-Stack-Naeherungen
+  (6144) werden nicht als Produktnachweis ausgegeben. Ein DEV-Test des
+  Sensorlesepfads beweist keine Release-Sensorevidenz.
+- **C – neue Release-Telemetrie/Diagnoseausgabe:** verworfen (Ownerentscheid D3 des Plans Rev. 3 aus PR #215).
 
 `CrcFault`/`BusFault`: Es ist kein geeigneter, nicht destruktiver Hardwareweg
 identifiziert (Ownerentscheid: keine Kurzschluesse/Stoerungen). Bleiben `NOT_RUN`
 fuer Hardware, `PARTIAL` fuer HW-30-03/-05/-06; Logik ist per Hosttests abgedeckt.
-Nur wenn der Owner einen konkreten sicheren Weg benennt, gesondert planen.
+Ownerentscheid D4: keine erzwungenen Fehler; nicht nachgewiesene Faelle bleiben
+`NOT_RUN`/`PARTIAL`, #190 wird damit nicht vollumfaenglich als erledigt deklariert.
 
 ## 5. Umsetzungsschnitte (nach Freigabe)
 
-- **C1 (nur bei D2=B):** Budget-Auswahl im Harness-Block wie in §4; gezielte Tests:
+- **C1 (D2=B, erst nach Planfreigabe):** Budget-Auswahl im Harness-Block wie in §4; gezielte Tests:
   `test_ds18b20_sampling`, `test_r1_control_chain_integration`,
   `check_architecture_boundaries.py`, Builds `esp32_release` (Strings-/Groessenvergleich
   zum Stand `main`: unveraendert) und Harness-Build; Self-Check. Kein Flash.
@@ -144,29 +160,15 @@ Nur wenn der Owner einen konkreten sicheren Weg benennt, gesondert planen.
   `docs/audits/ISSUE190_DS18B20_BRINGUP_EVIDENCE.md` bzw. eigene Datei;
   `docs/ACCEPTANCE_TESTS.md` `HW-30-03/-06` nur auf belegte Ergebnisse
   synchronisieren, Rest bleibt `PARTIAL`/`NOT_RUN`; `docs/ROADMAP.md` (§6).
-- **Restore (Rueckfall nach C2 oder bei Abbruch):** Rueckfall bedeutet Rueckkehr auf
-  das **vor dem Test tatsaechlich lauffaehige App-Image**, nicht ein neuer Build.
-  Ein Build aus `main` ist ggf. ein neues *Ziel*-Image, kein Rueckfall-Image.
-  Pruefbefund (read-only, Dateisuche im Projekt-/Evidenzbereich): Das zuletzt
-  geflashte Release `cad364c0…` (Source `c782156`, 1 779 216 B) ist **lokal nicht
-  archiviert** gefunden worden; `build/esp32_release` enthaelt einen anderen Stand.
-  Vorgehen, in Reihenfolge:
-  1. bevorzugt das archivierte, exakt identische `.bin` (SHA-256 gegen
-     `cad364c0a9e58024d71ace26f2d71a582e456a59c863d97d7159d7fdf6e1d6db`) lokal
-     bereitlegen;
-  2. andernfalls **vor** dem G2-Flash ein read-only App-Readback der Partition
-     `factory` (`0x10000`, 3008 KiB; nur Lesen) mit ueberpruefter Imageidentitaet:
-     Image-Header/Pruefsumme und angehaengte SHA-256 (`esptool image-info`),
-     Vergleich der App-Descriptor-/ELF-SHA mit der Boot-Log-Angabe `ba0da9081…`,
-     SHA-256 der Readback-Datei und des auf Imagelaenge gekuerzten Images,
-     beides im Evidence festgehalten;
-  3. Wiederherstellungsverfahren technisch vorbereitet und trocken geprueft
-     (fester App-only-Befehl bei `0x10000`, `default-reset`, Hash-Verifikation und
-     `verify-flash`; ohne Schreiben pruefbar: Dateipfad, Hash, Imagelaenge <
-     Partitionsgroesse).
-  **Fehlt eine verifizierte lokale Kopie oder ist das Verfahren nicht vorbereitet,
-  gilt `G2=BLOCKED`.** Kein `erase_flash`, kein Eingriff in Bootloader,
-  Partitionstabelle, NVS oder `state_store`.
+- **Abbruch ohne Restore (Ownerentscheid D3):** Es gibt weder Backup noch
+  verpflichtenden Rueckfallkandidaten und keine Backup-Readbacks. Bei Abbruchkriterium
+  (§7 Nr. 5) oder Fehler: (1) Test sicher beenden (keine Sensor-/Aktoreingriffe,
+  Leistungspfad bleibt elektrisch gesperrt, Strom/EN trennen), (2) Fehler mit
+  Log-Auszug, Image-Hash und Zeitpunkt im Evidence dokumentieren, (3) gegebenenfalls
+  **nach neuer ausdruecklicher Freigabe** korrigierte DEV-Firmware flashen
+  (App-only, gleiche Identitaetspruefung wie §7 Nr. 6). Das Wiederherstellungsrisiko
+  des bisherigen App-Images ist fuer diesen DEV-Test akzeptiert; ein
+  Release-Image `cad364c0…` oder `main`-Build ist kein Pflichtziel.
 
 ## 6. Dokumentationsabgleich (Roadmap, kein Statusduplikat)
 
@@ -209,15 +211,18 @@ Nichts davon wird vermutet; jede Zeile bestaetigt der Owner **am Geraet**:
    den dokumentierten vorbestehenden Warnungen, `ISSUE190_RESOURCES task=absent`,
    `ds18b20 sampler` ungleich `started`, jeder Kanal dauerhaft nicht `Ok` ohne
    Sensoreingriff, Heartbeat-Luecke > 3000 ms (Vorwert max. 1343 ms), unerwartete
-   Ausgangsaktivitaet; bei Abbruch Strom/EN trennen und Restore.
-6. **Flash:** einmalig App-only bei `0x10000` (`default-reset`, FT232 `/dev/ttyUSB0`),
-   Hash-Verifikation plus `verify-flash`; **kein** `erase_flash`, kein Bootloader-/
-   Partitionstabellen-/NVS-/`state_store`-Schreiben; Readback von NVS/`state_store`
-   vorher/nachher byteidentisch (Bindung bleibt erhalten); Port waehrend der Sitzung
-   offen halten. Nur nach separater ausdruecklicher Flash-/Hardwarefreigabe.
-7. **Rueckfall:** verifizierte lokale Kopie des vor dem Test lauffaehigen
-   App-Images (Hash geprueft) und vorbereiteter App-only-Restore gemaess §5;
-   sonst `G2=BLOCKED`.
+   Ausgangsaktivitaet; Vorgehen bei Abbruch siehe §5 (Abbruch ohne Restore).
+6. **Flash (Identitaets- und Grenzpruefung unveraendert):** einmalig App-only bei
+   `0x10000` (`default-reset`, FT232 `/dev/ttyUSB0`), Hash-Verifikation plus
+   `verify-flash`; installierte Partitionstabelle read-only gegen die Build-Tabelle
+   identisch (siehe Nr. 1); **kein** `erase_flash`, kein Bootloader-/
+   Partitionstabellen-/NVS-/`state_store`-Schreiben; NVS/`state_store` vorher/nachher
+   nur per Hash als Integritaetspruefung (Bindung bleibt erhalten; **keine**
+   gespeicherte Sicherungskopie); Port waehrend der Sitzung offen halten. Nur nach
+   separater ausdruecklicher Flash-/Hardwarefreigabe.
+7. **Kein Rueckfallkandidat erforderlich (Ownerentscheid D3):** weder Backup noch
+   App-Readback zum Zweck der Wiederherstellung; kein `G2=BLOCKED` wegen fehlender
+   Restore-Kopie.
 
 ## 8. Kleinste Voraussetzungen fuer den spaeteren #33-Owner-Gate-Test mit Peltier
 (nicht Teil dieses Plans, nicht implementiert, nicht ausgefuehrt)
@@ -235,30 +240,25 @@ Nichts davon wird vermutet; jede Zeile bestaetigt der Owner **am Geraet**:
 
 ## 9. Tests und Nachweise (lokal, ohne Hardware)
 
-Gezielt: bei D2=B die in §5 C1 genannten; bei D2=A keine Codeaenderung, daher nur
-Dokumentationspruefung (Links/Format). Volles Pre-Ready erst nach Independent
+Gezielt: die in §5 C1 genannten (D2=B). Volles Pre-Ready erst nach Independent
 Review auf Owneranweisung. Nicht Ausgefuehrtes bleibt `NOT_RUN`.
 
-## 10. Owner-Entscheidungen / Gates (Empfehlungen, **keine** Ownerfreigaben)
+## 10. Owner-Entscheidungen / Gates
 
-- **D1:** Freigabe der exakten Plan-SHA erst nach Rev. 2 und erneuter kurzer
-  Fix Verification.
-- **D2 (bevorzugt B):** vorhandenes DEV-Harness mit `kApprovedDs18b20TaskBudget` =
-  `{4096, 2, 1}` (§4), nur nach expliziter Planfreigabe; Release-Pfad unveraendert.
-  Stack-HWM direkt unter dem Produktbudget messen; die Probe-Stack-Naeherung
-  (6144) wird nicht als Produktnachweis ausgegeben. Bei A bleibt die Reserve unter
-  4096 ausdruecklich nur abgeleitet.
-- **D3:** Restore auf das bekannte bisherige App-Image (§5), nicht auf einen
-  beliebigen `main`-Rebuild. Liegt das Image nicht vor, Readback mit verifizierter
-  Identitaet planen; bis zum Nachweis kein G2.
-- **D4:** keine kuenstlichen Bus-/CRC-Fehler per Hardware. Bestehende Hosttests
-  (`test_ds18b20_sampling`) werden referenziert; nicht ausgefuehrte reale Faelle
-  bleiben `NOT_RUN`/`PARTIAL`; #190 wird damit nicht vollumfaenglich als erledigt
-  deklariert.
-- **G2 (spaeter, getrennt):** Owner-Entscheidung mit exaktem Image-Hash, am Geraet
-  belegter Bench-Verdrahtung/Versorgung, physisch gesperrtem Peltier-Leistungspfad,
-  verifiziertem Restore (§5) und Abbruchkriterien (§7). Ein DEV-Test des
-  Sensorlesepfads beweist weder Release-Sensorevidenz noch eine Peltier-Freigabe;
-  der Aufbau besteht aus den definitiven Komponenten im provisorischen Testaufbau
-  ausserhalb des Schranks, ein Schrank-Thermiknachweis folgt daraus nicht.
-  Ohne G2: `FLASH=NO`.
+- **D1 (offen):** Freigabe der exakten Plan-SHA von Rev. 3 nach abschliessender Fix
+  Verification.
+- **D2 = B (entschieden):** DEV-Harness mit `kApprovedDs18b20TaskBudget` =
+  `{4096, 2, 1}` (§4); Umsetzung nur nach Freigabe der Plan-SHA; Release-Pfad
+  unveraendert.
+- **D3 (entschieden):** kein Backup, kein verpflichtender Restore-/Rueckfall-
+  kandidat, Risiko fuer den DEV-Test akzeptiert; Abbruch ohne Restore (§5).
+- **D4 (entschieden):** keine erzwungenen CRC-/Busfehler an der Hardware; Hosttests
+  (`test_ds18b20_sampling`) werden referenziert; Rest `NOT_RUN`/`PARTIAL`.
+- **G2 (offen, getrennt, unveraendert):** eigene ausdrueckliche Owner-Entscheidung
+  fuer Flash und Hardwareaktion mit exaktem Image-Hash, am Geraet belegter
+  Bench-Verdrahtung/Versorgung, **physisch gesperrtem Peltier-Leistungspfad**,
+  Flash-Identitaets- und Partitionspruefung (§7 Nr. 1, 6) und Abbruchkriterien
+  (§7 Nr. 5). Ein DEV-Test des Sensorlesepfads beweist weder Release-
+  Sensorevidenz noch eine Peltier-Freigabe; der Aufbau besteht aus den
+  definitiven Komponenten im provisorischen Testaufbau ausserhalb des Schranks,
+  ein Schrank-Thermiknachweis folgt daraus nicht. Ohne G2: `FLASH=NO`.
