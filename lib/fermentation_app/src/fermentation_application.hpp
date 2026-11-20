@@ -759,6 +759,8 @@ class FermentationApplication {
     // is destroyed (see ControlChain::shutdownOutputs).
     [[nodiscard]] bool replaceRunPersistenceCoordinator(
         std::unique_ptr<RunPersistenceCoordinator> coordinator);
+    [[nodiscard]] bool reloadRunStateAfterFactoryReset(
+        device_platform::StorageEpoch currentEpoch);
     void teardownControlChain() noexcept;
     void handoffControlChain(const TemperatureControlLifecycleSnapshot& before,
                              RunPersistenceResult& persisted,

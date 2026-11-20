@@ -2940,12 +2940,21 @@ FermentationApplication::beginAuthorizedFactoryReset() {
                 reset.diagnostics};
     }
 
+    if (!reloadRunStateAfterFactoryReset(currentEpoch)) {
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+    lifecycleState_ = ApplicationLifecycleState::Ready;
+    return reset;
+}
+
+bool FermentationApplication::reloadRunStateAfterFactoryReset(
+    device_platform::StorageEpoch currentEpoch) {
     auto loadResult = std::unique_ptr<RunPersistenceLoadResult>{
         new (std::nothrow) RunPersistenceLoadResult{}};
     if (loadResult == nullptr) {
         requireService(FaultCode::None, true);
-        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
-                reset.diagnostics};
+        return false;
     }
     runPersistenceCoordinator_->loadAndInitializeInto(*loadResult);
     persistenceLoadStatus_ = loadResult->status;
@@ -2954,17 +2963,13 @@ FermentationApplication::beginAuthorizedFactoryReset() {
         auto identity = ApplicationRunIdentity::create(currentEpoch, highWater);
         if (!identity.has_value()) {
             requireService(FaultCode::RunPersistenceUntrusted);
-            return {
-                ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
-                reset.diagnostics};
+            return false;
         }
         runIdentity_ = std::unique_ptr<ApplicationRunIdentity>{
             new (std::nothrow) ApplicationRunIdentity(std::move(*identity))};
         if (runIdentity_ == nullptr) {
             requireService(FaultCode::None, true);
-            return {
-                ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
-                reset.diagnostics};
+            return false;
         }
     }
     const RunPersistenceSnapshot* snapshot =
@@ -2977,11 +2982,9 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     if (!processBootClassification(classification, snapshot,
                                    currentCheckpointTime())) {
         requireService(FaultCode::RunPersistenceUntrusted);
-        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
-                reset.diagnostics};
+        return false;
     }
-    lifecycleState_ = ApplicationLifecycleState::Ready;
-    return reset;
+    return true;
 }
 
 RunCheckpointTime FermentationApplication::currentCheckpointTime()
