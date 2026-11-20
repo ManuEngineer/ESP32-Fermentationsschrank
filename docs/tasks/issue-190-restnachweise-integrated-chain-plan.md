@@ -1,8 +1,21 @@
-# Issue #190 – Restnachweise am Testaufbau auf dem integrierten #219-Stand (Plan, Revision 1)
+# Issue #190 – Restnachweise am Testaufbau auf dem integrierten #219-Stand (Plan, Revision 2)
 
-Status: **Entwurf zur Ownerfreigabe (D1 offen).** Bis zur Freigabe der exakten
-Plan-Commit-SHA: keine Implementierung, kein Flash, keine Hardwareaktion.
-`FLASH=NO`, `ACTUATOR_RELEASE=NO`, `REAL_PELTIER_TEST=NOT_RUN`.
+Status: **Revision 2 nach Independent Review zur Fix Verification und
+Ownerfreigabe (D1 offen).** Bis zur Freigabe der exakten Plan-Commit-SHA: keine
+Implementierung, keine Builds, kein Flash, keine Hardwareaktion.
+`IMPLEMENTATION=NOT_STARTED`, `FLASH=NO`, `ACTUATOR_RELEASE=NO`,
+`REAL_PELTIER_TEST=NOT_RUN`.
+
+Rev. 2 behebt genau die drei Review-Blocker (B1 Bindungsnachweis per
+read-only-Befehl, B2 echter Rueckfallweg, B3 Roadmap-Konsistenz) und die
+Klarstellungen zu Logtext, Planungsbuild und `age_ms`; Rev. 1 (`de4c145`) ist
+ersetzt.
+
+**Hinweis Planungsbuild:** In Rev. 1 wurde ein Probe-Image gebaut
+(`build_issue30_sensor_commissioning.py`), obwohl `docs/CI_AND_QUALITY_GATES.md`
+fuer die Planung keine Builds vorsieht. Dieser Build wird weder rueckwirkend
+freigegeben noch wiederholt; seine Werte sind **kein** Nachweis und keine
+Plangrundlage. Massgeblich ist ein spaeterer Clean-Tree-Build nach Freigabe.
 
 Basis: `origin/main` `4b496b4274b33539f23b079e4035f79c55f0b785` (Merge PR #219,
 R1-Regelungs-/Aktorkette integriert; Issue #218 abgeschlossen; PR #213 ohne
@@ -47,24 +60,26 @@ als neue, SHA-gebundene Evidence ergaenzt.
 Auf `main` `4b496b4` existiert sie bereits, **ohne Produktcodeaenderung**:
 
 - `scripts/build_issue30_sensor_commissioning.py` baut `esp32_bringup` +
-  `APP_ISSUE_30_SENSOR_COMMISSIONING`. Gepruefter Probebau (nur Build, kein Flash):
-  Source-HEAD `4b496b4` sauber (`SOURCE_TREE_CLEAN=YES`), `ISSUE30_COMMISSIONING=
-  INCLUDED_IN_BRINGUP_ONLY`, Datei `build/esp32_bringup_issue30/
-  esp32_fermentationsschrank.bin` 1 828 336 B, SHA-256
-  `14e155c2eb032c685b698800e758bc6ae207814ff7e92b50bd59533e72d3a8f6`
-  (Arbeitsbaum-Build; verbindlich ist der spaetere Clean-Tree-Build nach Freigabe).
+  `APP_ISSUE_30_SENSOR_COMMISSIONING` (Harness nur Bring-up, nie Release). Die
+  Existenz des Pfades ist aus dem Quelltext belegt; ein Build gehoert nicht in
+  diese Planungsphase (siehe Hinweis oben).
 - Dieses Image enthaelt den **integrierten Produktpfad**: Die #219-Kettenanbindung
   (`attachControlChain`, nur fuer #32/#33-Harnesses ausgeschlossen), der
   `ControlSensorEvidenceProducer` und der Sampler sind in `app_main.cpp`
   unbedingt komponiert; das Harness haengt zusaetzlich nur lesend an
   `ds18b20Sampler.source(channel)` – derselben Quelle, die der Evidenzproduzent
   verwendet. Kein zweiter Messpfad.
-- Das Harness gibt bereits aus: `ISSUE30_BINDING engine_binding_valid=…
-  record_present=…` und `record_air/heatsink/product`-ROMs (Bindung geladen),
-  `ISSUE190_READING channel=… status=… celsius=… rom=… timestamp_ms=… age_ms=…`
-  alle ca. 2 s je Kanal (Frischeevidenz gegen `monotonicMillis`) und
-  `ISSUE190_RESOURCES task_stack_hwm_bytes=… free_heap=… largest_free_block=…`
-  alle ca. 10 s. Alle Zeilen laufen ohne UART-Eingabe.
+- Das Harness gibt aus:
+  - **ohne UART-Eingabe, periodisch:** `ISSUE190_READING channel=… status=…
+    celsius=… rom=… timestamp_ms=… age_ms=…` alle ca. 2 s je Kanal
+    (Frischeevidenz gegen `monotonicMillis`) und `ISSUE190_RESOURCES
+    task_stack_hwm_bytes=… free_heap=… largest_free_block=…` alle ca. 10 s
+    (`Harness::update()` vor der UART-Schleife);
+  - **nur nach dem read-only-UART-Befehl `ds18b20 report`** (`Harness::
+    processLine()` -> `Harness::report()`): `ISSUE30_SAMPLER running=…`,
+    `ISSUE30_BINDING engine_binding_valid=… record_present=…`, die Bus-/ROM-
+    Zeilen und `record_air/heatsink/product`. Die geladene Bindung wird also
+    **nicht passiv** ausgegeben, sondern erst durch diesen einen Befehl sichtbar.
 
 Grenzen dieser Beobachtung (ehrlich):
 1. Das Harness-Image nutzt das **Probe-Budget 6144/2/1**, nicht das Produktbudget
@@ -107,20 +122,51 @@ Nur wenn der Owner einen konkreten sicheren Weg benennt, gesondert planen.
   `check_architecture_boundaries.py`, Builds `esp32_release` (Strings-/Groessenvergleich
   zum Stand `main`: unveraendert) und Harness-Build; Self-Check. Kein Flash.
 - **C2 – Hardwarenachweis (nur nach G2):** je ein Boot des sauber gebauten Harness-
-  Images (Source-HEAD, SHA-256, Partitionen dokumentiert), ca. 150–300 s passiv:
-  (1) `ISSUE30_BINDING engine_binding_valid=1` mit den drei erwarteten ROMs,
-  (2) je Kanal `Ok` mit korrekter Rolle/ROM, `age_ms` begrenzt (erwartet < 2,5 s wie
-  in M2), Zeitstempel fortschreitend,
-  (3) HWM-Zeilen, (4) Heartbeat-Luecken, kein Panic/WDT.
-  Kein `bind`/`offset`/`clear`, keine Sensoreingriffe, kein M1–M6-Wiederholen.
+  Images (Source-HEAD, SHA-256, Partitionen dokumentiert), ca. 150–300 s:
+  1. Passiv beobachten (ohne UART-Eingabe): `ISSUE190_READING` und
+     `ISSUE190_RESOURCES`.
+  2. **Genau einmal** nach dem Boot der read-only-Befehl `ds18b20 report`
+     (liefert `ISSUE30_BINDING`, Bus-/ROM-Zeilen und die `record_*`-ROMs). Kein
+     anderer Befehl: `bind`, `offset`, `clear` und jedes weitere Schreibkommando
+     sind verboten; kein zusaetzlicher Daten- oder Telemetriepfad.
+  3. Auswertung: `engine_binding_valid=1` mit den drei erwarteten ROMs/Rollen;
+     je Kanal `Ok` mit richtiger Rolle/ROM; fortschreitende Zeitstempel; Zykluszeit
+     und `age_ms` im Rahmen der Referenz aus M2 (Richtwert: `age_ms` typisch unter
+     ca. 2,5 s, Zeitstempel ca. 2-s-Takt; Abweichungen werden mit Zeitstempeln,
+     Zykluszeit und Scheduling gewuerdigt und nicht allein am Schwellwert
+     entschieden); HWM-Zeilen; Heartbeat-Luecken; kein Panic/WDT.
+  4. **PASS-Regel:** `engine_binding_valid=1`, ROM-Zuordnung und Messfrische
+     werden erst dann als `PASS` gewertet, wenn diese Werte tatsaechlich auf der
+     geprueften Firmware (Image-Hash) beobachtet und protokolliert wurden;
+     bis dahin `NOT_RUN`/`NOT_PROVEN`.
+  Keine Sensoreingriffe, kein M1–M6-Wiederholen.
 - **C3 – Evidence/Doku (Docs-Commit):** neue SHA-gebundene Evidence-Sektion in
   `docs/audits/ISSUE190_DS18B20_BRINGUP_EVIDENCE.md` bzw. eigene Datei;
   `docs/ACCEPTANCE_TESTS.md` `HW-30-03/-06` nur auf belegte Ergebnisse
   synchronisieren, Rest bleibt `PARTIAL`/`NOT_RUN`; `docs/ROADMAP.md` (§6).
-- **Restore (nach C2):** Rueckkehr auf ein Release-Image, **gebaut aus dem dann
-  aktuellen `main`** (App-only-Flash, gleiche Verifikation). Das aktuell laufende
-  Release `cad364c0…` (Source `c782156`, vor #219) ist nicht bitgleich
-  wiederherstellbar, sofern der Build nicht aufbewahrt ist (Owner prueft, D3).
+- **Restore (Rueckfall nach C2 oder bei Abbruch):** Rueckfall bedeutet Rueckkehr auf
+  das **vor dem Test tatsaechlich lauffaehige App-Image**, nicht ein neuer Build.
+  Ein Build aus `main` ist ggf. ein neues *Ziel*-Image, kein Rueckfall-Image.
+  Pruefbefund (read-only, Dateisuche im Projekt-/Evidenzbereich): Das zuletzt
+  geflashte Release `cad364c0…` (Source `c782156`, 1 779 216 B) ist **lokal nicht
+  archiviert** gefunden worden; `build/esp32_release` enthaelt einen anderen Stand.
+  Vorgehen, in Reihenfolge:
+  1. bevorzugt das archivierte, exakt identische `.bin` (SHA-256 gegen
+     `cad364c0a9e58024d71ace26f2d71a582e456a59c863d97d7159d7fdf6e1d6db`) lokal
+     bereitlegen;
+  2. andernfalls **vor** dem G2-Flash ein read-only App-Readback der Partition
+     `factory` (`0x10000`, 3008 KiB; nur Lesen) mit ueberpruefter Imageidentitaet:
+     Image-Header/Pruefsumme und angehaengte SHA-256 (`esptool image-info`),
+     Vergleich der App-Descriptor-/ELF-SHA mit der Boot-Log-Angabe `ba0da9081…`,
+     SHA-256 der Readback-Datei und des auf Imagelaenge gekuerzten Images,
+     beides im Evidence festgehalten;
+  3. Wiederherstellungsverfahren technisch vorbereitet und trocken geprueft
+     (fester App-only-Befehl bei `0x10000`, `default-reset`, Hash-Verifikation und
+     `verify-flash`; ohne Schreiben pruefbar: Dateipfad, Hash, Imagelaenge <
+     Partitionsgroesse).
+  **Fehlt eine verifizierte lokale Kopie oder ist das Verfahren nicht vorbereitet,
+  gilt `G2=BLOCKED`.** Kein `erase_flash`, kein Eingriff in Bootloader,
+  Partitionstabelle, NVS oder `state_store`.
 
 ## 6. Dokumentationsabgleich (Roadmap, kein Statusduplikat)
 
@@ -145,12 +191,20 @@ Nichts davon wird vermutet; jede Zeile bestaetigt der Owner **am Geraet**:
    getrennt oder stromlos (nicht nur Software); Lueftersummen und
    Summer-Bestueckung bestaetigt; Software-LOW ist kein Sperrnachweis.
 4. **Erwarteter fail-closed-Zustand im Log:** `onboard outputs: … ready_inactive`,
-   `ISSUE30_READY … real_actuators_enabled=NO`, Peltier-Bruecke `ready_all_off`;
-   keine Ausgabezeile ausser inaktiv. Offen zu verifizieren: Der Logtext
-   `peltier bridge: ready_all_off_not_connected_to_planner` (`app_main.cpp:668`)
-   bleibt im Image textlich erhalten, obwohl der Planner seit #219 angebunden ist;
-   Bedeutung vor dem Boot gemeinsam klaeren (kein Aktorbefehl, `ActuationInterlock`
-   unveraendert; Parameter unkonfiguriert, daher keine `ControlRequest`).
+   `ISSUE30_READY … real_actuators_enabled=NO`; keine Ausgabezeile ausser inaktiv.
+   **Logtext `peltier bridge: ready_all_off_not_connected_to_planner`
+   (`app_main.cpp:668`) ist nach #219 veraltet.** Er kann hoechstens die
+   Initialisierungsausgabe der Bruecke ("bereit, alle Richtungen/Enable AUS")
+   bedeuten; er sagt **nichts** ueber fehlende Software-Anbindung (die Kette ist
+   seit #219 im Code angebunden), nichts ueber eine Produktfreigabe und nichts
+   ueber eine physische Aktortrennung. Er wird vor G2 im Owner-Check so erklaert
+   und **nicht** als Trennnachweis gewertet. Keine stille Produktcodeaenderung
+   fuer einen Log-Fix in diesem Plan. Parameter bleiben unkonfiguriert, daher keine
+   `ControlRequest`; `ActuationInterlock` unveraendert.
+   **Physische Sperre unabhaengig bestaetigen:** Der Owner bestaetigt am Geraet
+   die elektrisch wirksame Trennung/Stromlosigkeit des Peltier-/BTS7960-
+   Leistungspfads (z. B. abgezogene Leistungsversorgung/Klemmen). Software-LOW,
+   Log-Text, `EN` oder Reset gelten **nicht** als physische Leistungsabschaltung.
 5. **Abbruchkriterien (logbasiert):** Panic/WDT/Abort/Backtrace, `E`-Zeilen ausser
    den dokumentierten vorbestehenden Warnungen, `ISSUE190_RESOURCES task=absent`,
    `ds18b20 sampler` ungleich `started`, jeder Kanal dauerhaft nicht `Ok` ohne
@@ -161,8 +215,9 @@ Nichts davon wird vermutet; jede Zeile bestaetigt der Owner **am Geraet**:
    Partitionstabellen-/NVS-/`state_store`-Schreiben; Readback von NVS/`state_store`
    vorher/nachher byteidentisch (Bindung bleibt erhalten); Port waehrend der Sitzung
    offen halten. Nur nach separater ausdruecklicher Flash-/Hardwarefreigabe.
-7. **Rueckfall:** Restore-Weg gemaess §5 bereitgelegt und verifiziert gebaut,
-   **bevor** geflasht wird.
+7. **Rueckfall:** verifizierte lokale Kopie des vor dem Test lauffaehigen
+   App-Images (Hash geprueft) und vorbereiteter App-only-Restore gemaess §5;
+   sonst `G2=BLOCKED`.
 
 ## 8. Kleinste Voraussetzungen fuer den spaeteren #33-Owner-Gate-Test mit Peltier
 (nicht Teil dieses Plans, nicht implementiert, nicht ausgefuehrt)
@@ -184,13 +239,26 @@ Gezielt: bei D2=B die in §5 C1 genannten; bei D2=A keine Codeaenderung, daher n
 Dokumentationspruefung (Links/Format). Volles Pre-Ready erst nach Independent
 Review auf Owneranweisung. Nicht Ausgefuehrtes bleibt `NOT_RUN`.
 
-## 10. Owner-Entscheidungen / Gates
+## 10. Owner-Entscheidungen / Gates (Empfehlungen, **keine** Ownerfreigaben)
 
-- **D1:** Freigabe der exakten Plan-SHA dieses Dokuments.
-- **D2:** A (kein Codediff) oder B (DEV-Option §4, empfohlen).
-- **D3:** Restore-Image: Build aus aktuellem `main` akzeptiert, oder ist das
-  Image `cad364c0…` (Source `c782156`) bitgleich vorhanden und zu verwenden?
-- **D4:** `CrcFault`/`BusFault` bleiben an Hardware `NOT_RUN` (Empfehlung), oder
-  nennt der Owner einen konkreten sicheren Weg?
-- **G2 (spaeter, getrennt):** ausdrueckliche Flash-/Hardwarefreigabe nach dem
-  Owner-Check §7 mit konkretem Image-Hash. Ohne G2: `FLASH=NO`.
+- **D1:** Freigabe der exakten Plan-SHA erst nach Rev. 2 und erneuter kurzer
+  Fix Verification.
+- **D2 (bevorzugt B):** vorhandenes DEV-Harness mit `kApprovedDs18b20TaskBudget` =
+  `{4096, 2, 1}` (§4), nur nach expliziter Planfreigabe; Release-Pfad unveraendert.
+  Stack-HWM direkt unter dem Produktbudget messen; die Probe-Stack-Naeherung
+  (6144) wird nicht als Produktnachweis ausgegeben. Bei A bleibt die Reserve unter
+  4096 ausdruecklich nur abgeleitet.
+- **D3:** Restore auf das bekannte bisherige App-Image (§5), nicht auf einen
+  beliebigen `main`-Rebuild. Liegt das Image nicht vor, Readback mit verifizierter
+  Identitaet planen; bis zum Nachweis kein G2.
+- **D4:** keine kuenstlichen Bus-/CRC-Fehler per Hardware. Bestehende Hosttests
+  (`test_ds18b20_sampling`) werden referenziert; nicht ausgefuehrte reale Faelle
+  bleiben `NOT_RUN`/`PARTIAL`; #190 wird damit nicht vollumfaenglich als erledigt
+  deklariert.
+- **G2 (spaeter, getrennt):** Owner-Entscheidung mit exaktem Image-Hash, am Geraet
+  belegter Bench-Verdrahtung/Versorgung, physisch gesperrtem Peltier-Leistungspfad,
+  verifiziertem Restore (§5) und Abbruchkriterien (§7). Ein DEV-Test des
+  Sensorlesepfads beweist weder Release-Sensorevidenz noch eine Peltier-Freigabe;
+  der Aufbau besteht aus den definitiven Komponenten im provisorischen Testaufbau
+  ausserhalb des Schranks, ein Schrank-Thermiknachweis folgt daraus nicht.
+  Ohne G2: `FLASH=NO`.
