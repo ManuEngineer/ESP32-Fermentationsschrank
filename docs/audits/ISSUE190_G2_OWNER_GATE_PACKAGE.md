@@ -18,7 +18,7 @@ abgeschlossenen Independent Review voraus.
 | Inhalt | `approved product budget (bring-up harness)` vorhanden, `PROBE budget` nicht vorhanden; Harness nur Bring-up, nicht im Release |
 
 Der Hash weicht vom frueheren Harness-Build (`ce388bc2…`, Source `0370b32`) ab,
-weil die Source-HEAD-Identitaet in den Build eingeht; massgeblich ist ausschliesslich
+(Builds sind nicht bitgleich reproduzierbar; Ursache nicht untersucht); massgeblich ist ausschliesslich
 der Hash oben. Wird danach Code geaendert, ist dieses Paket ungueltig (Neubau).
 
 ## 2. Ablauf nach G2 (keine Aktion vor Freigabe)
