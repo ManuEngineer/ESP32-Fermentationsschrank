@@ -62,7 +62,7 @@ scheiterte nur an einem Compile-Fehler in `test_issue90_product_recovery_oracle`
 |---|---|
 | `scripts/run_pre_ready_gates.sh self-check` | `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` (clang-format, clang-tidy `PASS`) |
 | `build_esp_idf_profiles.py all --require-clean-source-tree` | PASS; Release 1 807 616 B, Bring-up 1 818 192 B; `strings` in **beiden**: 0 Treffer fuer `TRIAL_NOT_COMMISSIONED`, `R1_TRIAL`, `thermal set`, `planner set`, `r1_control_trial` |
-| `scripts/build_r1_control_trial.py --clean` (Code-HEAD `fe46a0c`, Source-Baum identisch zu den spaeter geaenderten Tests) | PASS; `build/esp32_bringup_r1_trial/esp32_fermentationsschrank.bin` 1 831 696 B; enthaelt `TRIAL_NOT_COMMISSIONED`, `R1_TRIAL_READY`, `thermal set`, `planner set`; **kein Flash** |
+| `scripts/build_r1_control_trial.py --clean` (Source-HEAD `67c7f0829f1bc408c615e300285580fad522a9f3`, sauber; `lib/`, `main/`, `scripts/` identisch zum Code-HEAD `3fd1fd3`) | PASS; `build/esp32_bringup_r1_trial/esp32_fermentationsschrank.bin` 1 831 696 B, **SHA-256 `86bf7eba8fc05d8286e61ce9de8898c9018f35464602a5eee62a738e10fbcdce`**; Partitionstabelle SHA-256 `d7f180e4…ccd9d` (`nvs 0x9000/24K`, `phy_init 0xf000/4K`, `factory 0x10000/3008K`, `state_store 0x300000/1M`); enthaelt `TRIAL_NOT_COMMISSIONED`, `R1_TRIAL_READY`, `thermal set`, `planner set`; Kopie `../hw-evidence-pr221/trial-image/` (Modus 700); **kein Flash** (Hash gilt nur fuer eine Review-Vorlage; jedes Gate bindet einen eigenen Hash) |
 
 **Nicht ausgefuehrt:** esp-clang-Static-Analysis der ESP-IDF-Profile und voller Pre-Ready-Lauf (nicht angeordnet);
 `pre-ready/local` nicht gesetzt (kein PASS behauptet). Das Trial-Image ist kein Hardwarenachweis; sein Hash gilt nicht fuer ein
