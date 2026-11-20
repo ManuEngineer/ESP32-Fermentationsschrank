@@ -291,7 +291,7 @@ bool FermentationApplication::buildControlChain() {
     return controlChain_ != nullptr;
 }
 
-void FermentationApplication::replaceRunPersistenceCoordinator(
+bool FermentationApplication::replaceRunPersistenceCoordinator(
     std::unique_ptr<RunPersistenceCoordinator> coordinator) {
     // The chain references the old coordinator: tear it down first (outputs
     // off), then rebind it to the coordinator of the new epoch. A failed
@@ -300,7 +300,9 @@ void FermentationApplication::replaceRunPersistenceCoordinator(
     runPersistenceCoordinator_ = std::move(coordinator);
     if (!buildControlChain()) {
         requireService(FaultCode::None, true);
+        return false;
     }
+    return true;
 }
 
 void FermentationApplication::teardownControlChain() noexcept {
@@ -2921,7 +2923,8 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     // authentication domain once more. The first resolution above deliberately
     // remained fail-closed while the reset handoff was still pending.
     initializeAuthentication(*stateStore_);
-    replaceRunPersistenceCoordinator(std::move(coordinator));
+    const bool controlChainRebuilt =
+        replaceRunPersistenceCoordinator(std::move(coordinator));
     storageEpoch_ = currentEpoch;
     runIdentity_.reset();
     pendingResume_.reset();
@@ -2930,6 +2933,12 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     owningRecoveryEvidence_.reset();
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
+    if (!controlChainRebuilt) {
+        // ServiceRequired/allocation fault from the rebuild stays; never
+        // overwritten by Ready below. Outputs remain off (chain torn down).
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
 
     auto loadResult = std::unique_ptr<RunPersistenceLoadResult>{
         new (std::nothrow) RunPersistenceLoadResult{}};
@@ -3033,6 +3042,9 @@ bool FermentationApplication::ready() const {
 
 std::optional<ProcessRuntimeState>
 FermentationApplication::publishedProcessState() const {
+    // Copy by value under the application gate: start/stop/recovery/factory
+    // reset mutate or replace runtimeRunState_ under the same lock.
+    const auto guard = applicationCallSerializer_.enter();
     if (runtimeRunState_ == nullptr) {
         return std::nullopt;
     }
