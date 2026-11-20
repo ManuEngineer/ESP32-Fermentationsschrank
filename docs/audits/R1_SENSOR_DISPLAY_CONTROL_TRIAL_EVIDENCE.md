@@ -2,7 +2,7 @@
 
 Plan: `docs/tasks/r1-sensor-display-and-control-trial-plan.md` Rev. 2, freigegeben auf Plan-SHA
 `ae68a14ef611cf69b3765a2438b90ab0840107c5` (D1, Owner), PR #221. Stand dieser Evidence:
-Code-HEAD `3fd1fd36b208f5d0c5cf3e8e4b671b99bd22cafc`.
+Code-HEAD (nach Review-Korrektur R221-1..3) `81c0afcb390b3ef1e01eb7e0224c9c4669d9924a`; der Reviewstand `0ccb3ac` ist durch den Abschnitt "Review-Korrektur" am Ende ersetzt.
 
 **Reine Software-/Buildevidence.** `FLASH=NO`, keine Hardwareaktion, `ACTUATOR_RELEASE=NO`,
 `REAL_PELTIER_TEST=NOT_RUN`. G-P1, G-P2, G-T, G-C0, G-C1, G-C2 sind `NOT_GRANTED`; kein
@@ -73,3 +73,47 @@ Gate (Neubau auf dem final freigegebenen Stand).
 C0/C1/C2-Hardwarenachweise sind `NOT_RUN` (gestufte Gates, siehe Plan §8). Ergebnisse spaeter: #32 (Luefter/Nachlauf C1),
 #33 (Peltier C2, `HW-33-01/-02/-03` weiter offen), #34/#35 (Parameter), #36 (Fehlerinjektion/Abnahme), #37 (Dauerlauf).
 Summer: entfaellt aus R1 (Ownerentscheid D7).
+
+## Review-Korrektur (Independent Code Review `5995028654`, reviewter HEAD `0ccb3ac`, Fix-Code-HEAD `81c0afcb390b3ef1e01eb7e0224c9c4669d9924a`)
+
+**R221-1 Trendueberwachung.** Der 64-Punkte-Ring (~126 s bei 2-s-Takt) machte zulaessige Fenster bis 600 s unauswertbar; der
+Anstiegsalarm konnte nie ausloesen. Neu: zeitgruppierte Historie (`ThermalSafetySupervisor`, 32 Slots × 24 B = 768 B, Bucketbreite
+`ceil(Fenster/30)`, je Bucket die erste Messung), Worst-Case-Anstieg ueber jede Baseline zwischen einem halben und einem ganzen
+Fenster. Variable Abtastintervalle sind unkritisch (zeitbasiert). **Kein `Ok` ohne Beobachtung:** bis mindestens die Haelfte des Fensters
+durchgehend beobachtet ist, liefert der Supervisor `Blocked` mit `TrendObservationPending`; eine Luecke groesser als das
+Sample-Alter-Limit verwirft die Historie und die Beobachtung beginnt neu. Folge: nach Boot, Konfiguration oder Datenluecke ist der
+Peltier fuer die Haelfte des Fensters gesperrt (kurzes Fenster = kurze Wartezeit; Fenster 10 s → 5 s, 600 s → 300 s).
+
+**R221-2 Konfigurationssperre.** `configureThermalSafety()` verweigert bei aktivem Programm-/manuellem Lauf oder unbekanntem
+Run-Zustand mit `RunActiveOrUnknown` (gleiches Praedikat wie der Planner-Writer) und veraendert dann weder Grenzen noch Zustand, Latch,
+Trendhistorie oder Invalid-Episode. `clearThermalSafetyConfiguration()` stoesst die Regelschleife sofort an: der Peltier ist ohne weitere
+Schleifeniteration gesperrt, der Aussenluefter-Nachlauf bleibt erhalten, ein stiller Wiederanlauf ist ausgeschlossen (Neukonfiguration
+waehrend des Laufs verweigert; nach dem Lauf braucht es Konfiguration und neuen Start).
+
+**R221-3 Aktorstatus im Bootlog.** `real actuators: disabled` und `ready_all_off_not_connected_to_planner` waren seit #219 falsch.
+Jetzt: `real actuators: initial_off; build policy flag only, not a physical inhibit; real GPIO/BTS7960 outputs are possible on an
+explicit run when permitted; disconnect the Peltier power path physically if it must stay dead` und `peltier bridge:
+ready_initial_all_off chain=attached_to_control_chain|not_attached_manual_harness`. Trial-Banner/Status: `control_chain_attached=YES
+initial_outputs=OFF real_gpio_bts7960_outputs_possible=YES (explicit run + permission only)` und `peltier_power_path_must_be_physically_
+disconnected_for_C0_C1=EXTERNAL_PRECONDITION`. Keine Sicherheitsfreigabe wurde veraendert. Das Legacy-#90-Runnerskript erkennt die neue
+Markierung zusaetzlich.
+
+| Neue/geaenderte Tests | Inhalt |
+|---|---|
+| `test_thermal_safety_supervisor` (21) | laengstes Fenster (600 s) bei 2-s-Samples: gefaehrlicher Anstieg loest aus; langsame Erwaermung (1200 s, +2 K/min) bleibt `Ok` ab halbem Fenster, davor `Blocked/Pending`; unregelmaessige Intervalle (1–4 s) loesen aus; spaeter schneller Anstieg gegen junge Baseline; Luecke → Pending; Idempotenz; Speichergroesse < 1600 B |
+| `test_r1_control_chain_integration` (22) | `thermal set` bei aktivem Lauf verweigert (Limits unveraendert, engere Grenze greift weiter); verweigerte Konfiguration setzt weder Invalid-Episode noch Trendhistorie zurueck; `thermal clear` im Lauf sperrt den Peltier sofort, Nachlauf bleibt, kein stiller Wiederanlauf; ohne Run-Zustand verweigert |
+| `test_peltier_composition_guard` (9) | Bootlog-Wortlaute (`initial_off`, `not a physical inhibit`, Kettenstatus), Trial-Banner (`EXTERNAL_PRECONDITION` …), alte falsche Texte nicht mehr vorhanden |
+
+| Pruefung (Fix-Code-HEAD `81c0afc`, Arbeitsbaum sauber) | Ergebnis |
+|---|---|
+| native Suite | **1942 Testfaelle, alle bestanden** |
+| `run_pre_ready_gates.sh self-check` | `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` (clang-format, clang-tidy) |
+| `build_esp_idf_profiles.py all --require-clean-source-tree` | PASS; Release 1 808 224 B, Bring-up 1 818 784 B; in beiden 0 Treffer fuer Trial-Strings, `not_connected_to_planner`, `real actuators: disabled`; Release enthaelt `real actuators: initial_off` |
+| Trial-Image `scripts/build_r1_control_trial.py --clean` | PASS, Source-HEAD `81c0afcb390b3ef1e01eb7e0224c9c4669d9924a` (sauber), `esp32_bringup` + `APP_R1_CONTROL_TRIAL`; `esp32_fermentationsschrank.bin` 1 832 912 B, **SHA-256 `1b0be67fcc25ab11392d1b9debb5e126d8364fbedc29e085b1130c07b91d7e08`**; Partitionstabelle SHA-256 `d7f180e4…ccd9d` (unveraendert); enthaelt `TRIAL_NOT_COMMISSIONED`, `EXTERNAL_PRECONDITION`, `real_gpio_bts7960_outputs_possible=YES`, `thermal set`, `trend_observation_pending`; Kopie `../hw-evidence-pr221/trial-image/esp32_fermentationsschrank.r221-corrected.bin`; **nicht geflasht** |
+
+Das fruehere Trial-Image (`86bf7eba…`, Source `67c7f08`) ist **ersetzt** und darf nicht geflasht werden. Der Bootloader des Builds wird bei
+einem App-only-Flash nicht geschrieben (sein Hash ist build-abhaengig: `38f987bc…`).
+
+**Verbleibende Einschraenkungen:** esp-clang-Static-Analysis der ESP-IDF-Profile und voller Pre-Ready-Lauf nicht ausgefuehrt; kein produktiver
+Rearm-Pfad nach einem Trip (Neustart + erneutes Setzen); der Firmware-Schutz ersetzt keine unabhaengige Absicherung; nach Boot/Konfiguration
+ist der Peltier fuer die Haelfte des Trendfensters gesperrt (Absicht, fail-closed); C1/C2 brauchen die genannten Owner-Gates.
