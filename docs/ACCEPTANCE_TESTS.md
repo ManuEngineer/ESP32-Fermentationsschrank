@@ -363,7 +363,8 @@ ist fuer PR C/D `NOT_RUN` bis zur konsolidierten Abnahme.
 Native Simulationen mit Fake-Bus und virtueller Zeit sowie ESP-IDF-Buildnachweise
 fuer den hardwareunabhaengigen Softwareumfang von Issue #30. Sie sind **kein**
 Hardwarenachweis: Die `HW-30-*`-Eintraege unten gehoeren zum Hardware-Folgeissue
-und stehen auf `NOT_RUN`. Die Plattform kennt nur technische Kanaele; Rollen
+(#190) und sind getrennte Hardware-Nachweise mit den dort einzeln dokumentierten
+`PASS`/`PARTIAL`/`NOT_RUN`-Staenden. Die Plattform kennt nur technische Kanaele; Rollen
 liegen in `fermentation_app` (ADR-013).
 
 | ID | Nachweis |
