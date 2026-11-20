@@ -3076,6 +3076,7 @@ fermentation::ActuationEvaluation evaluateProductionSafety(
         sensor.quality = device_platform::SensorQuality::Valid;
         selection.permission = fermentation::SensorPeltierPermission::Allowed;
         input.sensorEvidenceValidated = true;
+        input.thermalSafety = fermentation::ThermalSafetyStatus::Ok;
         input.peltierSensor = &sensor;
         input.sensorSelectionRuntime = &selection;
     }

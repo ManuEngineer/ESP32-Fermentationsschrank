@@ -351,6 +351,7 @@ void allowActuatorSafetyForTest(ActuatorPlanner& planner,
     input.sensorEvidenceValidated = true;
     input.explicitActivationRequested = true;
     input.plannerEvidenceValidated = true;
+    input.thermalSafety = ThermalSafetyStatus::Ok;
     sensor.quality = device_platform::SensorQuality::Valid;
     selection.permission = SensorPeltierPermission::Allowed;
     input.peltierSensor = &sensor;
@@ -3781,6 +3782,7 @@ void test_actuation_interlock_fault_forces_idle_after_allowed_output() {
     faultInput.sensorEvidenceValidated = true;
     faultInput.explicitActivationRequested = true;
     faultInput.plannerEvidenceValidated = true;
+    faultInput.thermalSafety = ThermalSafetyStatus::Ok;
     faultInput.peltierSensor = &fixture.safetySensor;
     faultInput.sensorSelectionRuntime = &fixture.safetySelection;
     faultInput.actuatorPlanner = &fixture.planner;
@@ -9249,6 +9251,7 @@ ActuationEvidence freshStartSafetyInput(
     input.processActivationApplied = processApplied;
     input.sensorEvidenceValidated = true;
     input.plannerEvidenceValidated = true;
+    input.thermalSafety = ThermalSafetyStatus::Ok;
     sensor.quality = device_platform::SensorQuality::Valid;
     selection.permission = SensorPeltierPermission::Allowed;
     input.peltierSensor = &sensor;

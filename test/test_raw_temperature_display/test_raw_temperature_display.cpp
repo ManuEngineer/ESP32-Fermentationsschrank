@@ -43,8 +43,9 @@ class ScriptedSource final : public device_platform::ITemperatureSource {
     [[nodiscard]] device_platform::TemperatureReading read() const override {
         const bool ok = status_ == device_platform::TemperatureSampleStatus::Ok;
         return device_platform::TemperatureReading::create(
-                   device_platform::SensorIdentity::create(rom_).identity, stamp_,
-                   status_, ok ? std::optional<double>{celsius_} : std::nullopt)
+                   device_platform::SensorIdentity::create(rom_).identity,
+                   stamp_, status_,
+                   ok ? std::optional<double>{celsius_} : std::nullopt)
             .reading.value();
     }
     std::uint64_t rom_{0x28A60000006C7248ULL};
@@ -107,10 +108,12 @@ void test_fresh_raw_value_is_shown_unqualified_and_never_valid() {
     rig.product.set(21.5);
     rig.publish();
     const auto snapshot = rig.application.uiSnapshot();
-    const auto& air = rig.view(snapshot, FermentationTemperatureRole::CabinetAir);
+    const auto& air =
+        rig.view(snapshot, FermentationTemperatureRole::CabinetAir);
     const auto& cooling =
         rig.view(snapshot, FermentationTemperatureRole::Cooling);
-    const auto& product = rig.view(snapshot, FermentationTemperatureRole::Product);
+    const auto& product =
+        rig.view(snapshot, FermentationTemperatureRole::Product);
     TEST_ASSERT_TRUE(air.valueCelsius.has_value());
     TEST_ASSERT_EQUAL_DOUBLE(44.75, *air.valueCelsius);
     TEST_ASSERT_EQUAL_DOUBLE(21.25, *cooling.valueCelsius);
@@ -169,7 +172,8 @@ void test_recovery_after_a_new_sample() {
     rig.air.set(31.0);
     rig.publish();
     const auto snapshot = rig.application.uiSnapshot();
-    const auto& air = rig.view(snapshot, FermentationTemperatureRole::CabinetAir);
+    const auto& air =
+        rig.view(snapshot, FermentationTemperatureRole::CabinetAir);
     TEST_ASSERT_TRUE(air.valueCelsius.has_value());
     TEST_ASSERT_EQUAL_DOUBLE(31.0, *air.valueCelsius);
 }
@@ -196,7 +200,8 @@ void test_raw_display_is_never_runtime_evidence_or_start_evidence() {
     FermentationUiCommandContext context2;
     context2.expected = other.application.uiSnapshot().revisions;
     context2.monotonicMillis = other.time.monotonicMillis();
-    const auto reference = other.application.prepareStartProgram(context2, start);
+    const auto reference =
+        other.application.prepareStartProgram(context2, start);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(reference.status),
                           static_cast<int>(before.status));
     TEST_ASSERT_FALSE(before.request.has_value());
@@ -207,7 +212,8 @@ void test_web_json_keeps_the_qualified_contract() {
     rig.air.set(44.75);
     rig.publish();
     const auto snapshot = rig.application.uiSnapshot();
-    const auto& air = rig.view(snapshot, FermentationTemperatureRole::CabinetAir);
+    const auto& air =
+        rig.view(snapshot, FermentationTemperatureRole::CabinetAir);
     TEST_ASSERT_TRUE(air.basis == TemperatureValueBasis::RawUnqualified);
     std::string json;
     TEST_ASSERT_TRUE(encodeWebApiTemperatures(snapshot, json));
