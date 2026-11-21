@@ -31,6 +31,10 @@ namespace fermentation {
     FermentationTemperatureRole role);
 [[nodiscard]] device_platform::TextKey sensorQualityTextKey(
     device_platform::SensorQuality quality);
+// Quality label of a shown temperature: a raw, unqualified value (fresh
+// technical reading, never `Valid`) gets its own label instead of "stale".
+[[nodiscard]] device_platform::TextKey temperatureQualityTextKey(
+    const TemperatureView& view);
 // Diagnostics page (#28 D1): reset cause as evidence text only (Sdio, Usb,
 // Jtag, Efuse and Other share one text) and a short sensor role for value rows
 // that can be visible without their role row.

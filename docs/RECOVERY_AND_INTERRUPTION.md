@@ -85,7 +85,7 @@ Ein produktgefuehrter Lauf wechselt nie still auf den Luftfuehler.
 
 1. Peltier vorlaeufig AUS.
 2. Schrankluftfuehler und alle Sicherheitsbedingungen pruefen.
-3. Sensorfehler sichtbar und akustisch melden.
+3. Sensorfehler sichtbar melden (akustisch entfaellt in R1, Ownerentscheid 2026-11-20 D7).
 4. Zeitpunkt, letzte gueltige Werte und Prozessphase protokollieren.
 5. Programmspezifische Ausfallstrategie anwenden.
 
@@ -126,7 +126,7 @@ markierten C2-Abschnitt.
 
 `WAITING_FOR_PRODUCT` besitzt eine programmspezifische Maximalzeit.
 
-- Beim Eintritt wird sichtbar und akustisch zum Einsetzen des Produkts
+- Beim Eintritt wird sichtbar (R1: kein akustischer Anteil, Ownerentscheid 2026-11-20 D7) zum Einsetzen des Produkts
   aufgefordert. Diese Meldung ist zugleich die Warnung vor Ablauf; eine zweite
   Warnschwelle ist fuer Release 1 nicht vorgesehen.
 - Das Produkt wird niemals automatisch als eingesetzt angenommen.

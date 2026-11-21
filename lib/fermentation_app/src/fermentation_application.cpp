@@ -1,5 +1,7 @@
 #include "fermentation_application.hpp"
 
+#include <cmath>
+
 #include "configuration_text.hpp"
 
 #include <algorithm>
@@ -271,12 +273,44 @@ bool FermentationApplication::attachActuationPorts(
     if (platformServices_ != nullptr) {
         return false;
     }
+    controlChainRequested_ = true;
     if (!ports.complete()) {
         return false;
     }
     controlPorts_ = ports;
     controlParameters_ = parameters;
     return true;
+}
+
+bool FermentationApplication::controlReadyForStart() {
+    if (!controlChainRequested_) {
+        return true;
+    }
+    if (controlChain_ == nullptr || timeSource_ == nullptr ||
+        configurationService_ == nullptr) {
+        return false;
+    }
+    if (classifyTemperatureControlParameters(
+            controlChain_->controller.parameters()) !=
+        TemperatureControlParametersValidation::Valid) {
+        return false;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return false;
+    }
+    const auto& planner =
+        runtime.lease.get().serviceConfiguration().actuatorPlannerParameters;
+    if (!planner.has_value() ||
+        classifyActuatorPlannerParameters(*planner) !=
+            ActuatorPlannerParametersValidation::Valid) {
+        return false;
+    }
+    // Freshly evaluated here (idempotent); a trip is latched and made visible
+    // by the next control tick.
+    return thermalSafety_
+               .evaluate(rawTemperatureSamples_, timeSource_->monotonicMillis())
+               .status == ThermalSafetyStatus::Ok;
 }
 
 bool FermentationApplication::buildControlChain() {
@@ -348,6 +382,13 @@ FermentationApplication::prepareStartProgram(
     if (configurationService_ == nullptr || runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
+    }
+    // Regulation readiness before any identity- or persistence-effective step
+    // (R1 trial plan S2): never start a run that would be active without
+    // effective regulation.
+    if (!controlReadyForStart()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
     }
     if (!context.expected.expectedProgramCatalogRevision.has_value()) {
         return requestFailure(
@@ -1302,6 +1343,73 @@ FermentationApplication::applySensorCommissioning(
         });
 }
 
+std::optional<FermentationActuatorPlannerSnapshot>
+FermentationApplication::actuatorPlannerParameters() const {
+    const auto guard = applicationCallSerializer_.enter();
+    if (configurationService_ == nullptr) {
+        return std::nullopt;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return std::nullopt;
+    }
+    FermentationActuatorPlannerSnapshot snapshot;
+    snapshot.revision = runtime.lease.get().serviceConfigurationRevision();
+    snapshot.parameters =
+        runtime.lease.get().serviceConfiguration().actuatorPlannerParameters;
+    return snapshot;
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applyActuatorPlannerParameters(
+    const std::optional<ActuatorPlannerParameters>& parameters,
+    const std::optional<ServiceConfigurationRevision>& expectedRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    if (configurationService_ == nullptr || runtimeRunState_ == nullptr) {
+        return {Preview::ConfigurationRuntimeUnavailable,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // The per-run snapshot is taken at the fresh start: never change the
+    // source while a run exists.
+    if (runtimeRunState_->activeProgramRun.has_value() ||
+        runtimeRunState_->activeManualRun.has_value()) {
+        return {Preview::NotAllowed, Commit::ConfigurationRuntimeFailure};
+    }
+    if (parameters.has_value() &&
+        classifyActuatorPlannerParameters(*parameters) !=
+            ActuatorPlannerParametersValidation::Valid) {
+        return {Preview::InvalidCandidate,
+                Commit::ConfigurationValidationFailure};
+    }
+    if (!expectedRevision.has_value()) {
+        return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
+    }
+    UserConfigurationRevision userRevision{0U};
+    {
+        const auto runtime = configurationService_->acquireRuntime();
+        if (runtime.status !=
+            RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            return {Preview::ConfigurationRuntimeUnavailable,
+                    Commit::ConfigurationRuntimeFailure};
+        }
+        if (runtime.lease.get().serviceConfigurationRevision() !=
+            *expectedRevision) {
+            return {Preview::StateChanged,
+                    Commit::ConfigurationConflictFailure};
+        }
+        userRevision = runtime.lease.get().userConfigurationRevision();
+    }
+    return commitConfigurationChange(
+        *configurationService_, userRevision,
+        {ChangeOriginKind::InternalSystem, 1U},
+        {ChangeOperationKind::NormalEdit, 1U},
+        [&parameters](ConfigurationPreviewBuildLease& lease) {
+            lease.serviceConfiguration().actuatorPlannerParameters = parameters;
+        });
+}
+
 ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(
     const FermentationUiProgramEditRequest& request,
     const std::optional<ProgramCatalogRevision>& expectedProgramCatalogRevision,
@@ -1489,6 +1597,9 @@ bool FermentationApplication::revalidatePreparedRequest(
     FermentationApplicationPreparedRequest& request) {
     const auto evidence = resolveRuntimeEvidence();
     bool valid = true;
+    // Re-evaluated at confirm time: a state jump between prepare and confirm
+    // (blocked/tripped thermal safety, lost parameters) refuses the start.
+    const bool controlReady = controlReadyForStart();
     const auto productEvidenceRegressed = [&request, &evidence] {
         return request.owningPlausibility_.has_value() &&
                request.owningPlausibility_->product.quality ==
@@ -1497,7 +1608,7 @@ bool FermentationApplication::revalidatePreparedRequest(
                    device_platform::SensorQuality::Valid;
     };
     std::visit(
-        [&request, &evidence, &valid,
+        [&request, &evidence, &valid, &controlReady,
          &productEvidenceRegressed](auto& prepared) {
             using Request = std::decay_t<decltype(prepared)>;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
@@ -1506,7 +1617,7 @@ bool FermentationApplication::revalidatePreparedRequest(
                 prepared.coolingSensorValid = evidence.coolingSensorValid;
                 prepared.productSensorValid = evidence.productSensorValid;
                 valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
-                        prepared.coolingSensorValid &&
+                        prepared.coolingSensorValid && controlReady &&
                         !(prepared.sensorMode == RunSensorMode::Product &&
                           productEvidenceRegressed());
             } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
@@ -1515,7 +1626,7 @@ bool FermentationApplication::revalidatePreparedRequest(
                 prepared.coolingSensorValid = evidence.coolingSensorValid;
                 prepared.productSensorValid = evidence.productSensorValid;
                 valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
-                        prepared.coolingSensorValid &&
+                        prepared.coolingSensorValid && controlReady &&
                         !(prepared.plan.sensorMode == RunSensorMode::Product &&
                           productEvidenceRegressed());
             } else if constexpr (std::is_same_v<Request, StopRequest>) {
@@ -1567,6 +1678,49 @@ void FermentationApplication::publishOwningRuntimeEvidence(
     ++runtimeEvidencePublications_;
 }
 
+void FermentationApplication::publishRawTemperatureSamples(
+    const RawTemperatureSamples& samples) {
+    const auto guard = applicationCallSerializer_.enter();
+    rawTemperatureSamples_ = samples;
+}
+
+ThermalSafetyConfigureResult FermentationApplication::configureThermalSafety(
+    const ThermalSafetyLimits& limits) {
+    const auto guard = applicationCallSerializer_.enter();
+    // The protection is never reconfigured while a run exists: a new
+    // configuration resets the trend history and the invalid-episode timer
+    // and could widen limits during a power phase. Without the run state
+    // "no active run" cannot be proven: fail closed (same predicate as the
+    // planner-parameter writer). A refused call changes nothing.
+    if (runtimeRunState_ == nullptr ||
+        runtimeRunState_->activeProgramRun.has_value() ||
+        runtimeRunState_->activeManualRun.has_value()) {
+        return ThermalSafetyConfigureResult::RunActiveOrUnknown;
+    }
+    return thermalSafety_.configure(limits);
+}
+
+ThermalSafetyEvaluation FermentationApplication::thermalSafetyEvaluation()
+    const {
+    const auto guard = applicationCallSerializer_.enter();
+    return thermalSafety_.last();
+}
+
+void FermentationApplication::clearThermalSafetyConfiguration() {
+    const auto guard = applicationCallSerializer_.enter();
+    thermalSafety_.clearConfiguration();
+    // Safety-directed: the unconfigured protection denies the Peltier
+    // permission at once (re-evaluated now, not on the next loop), the planner
+    // keeps its fan run-on, and a refused re-configuration during the run
+    // (see configureThermalSafety) means nothing can restart silently.
+    tickControlChain();
+}
+
+ThermalSafetyLimits FermentationApplication::thermalSafetyLimits() const {
+    const auto guard = applicationCallSerializer_.enter();
+    return thermalSafety_.limits();
+}
+
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     FermentationUiSnapshot snapshot;
     refreshUiSnapshot(snapshot);
@@ -1613,16 +1767,57 @@ void FermentationApplication::refreshUiSnapshot(
         return value.rawCelsius;
     };
     const auto evidence = resolveRuntimeEvidence();
+    // One monotonic reading under the serializer guard also decides the age of
+    // the raw display values; without a time source no raw value is shown.
+    const std::optional<std::uint64_t> displayNowMs =
+        timeSource_ != nullptr
+            ? std::optional<std::uint64_t>{timeSource_->monotonicMillis()}
+            : std::nullopt;
     input.temperatures.clear();
-    input.temperatures.push_back({FermentationTemperatureRole::CabinetAir,
-                                  valueOf(evidence.plausibility.air),
-                                  evidence.plausibility.air});
-    input.temperatures.push_back({FermentationTemperatureRole::Product,
-                                  valueOf(evidence.plausibility.product),
-                                  evidence.plausibility.product});
-    input.temperatures.push_back({FermentationTemperatureRole::Cooling,
-                                  valueOf(evidence.plausibility.cooling),
-                                  evidence.plausibility.cooling});
+    const auto addTemperature =
+        [&input, &valueOf, &displayNowMs](
+            FermentationTemperatureRole role,
+            const device_platform::SensorQualitySnapshot& qualified,
+            const std::optional<device_platform::TemperatureReading>& raw) {
+            const auto qualifiedValue = valueOf(qualified);
+            if (qualifiedValue.has_value() || !raw.has_value() ||
+                !displayNowMs.has_value()) {
+                input.temperatures.push_back(
+                    {role, qualifiedValue, qualified,
+                     TemperatureValueBasis::Qualified});
+                return;
+            }
+            // Fresh, successful technical reading without a quality judgement:
+            // shown as raw/unqualified; the quality stays Stale (never Valid).
+            const auto timestamp = raw->monotonicTimestampMs();
+            const bool fresh =
+                raw->status() == device_platform::TemperatureSampleStatus::Ok &&
+                raw->celsius().has_value() && std::isfinite(*raw->celsius()) &&
+                timestamp <= *displayNowMs &&
+                *displayNowMs - timestamp <= kRawDisplayMaxAgeMs;
+            if (!fresh) {
+                input.temperatures.push_back(
+                    {role, std::nullopt, qualified,
+                     TemperatureValueBasis::Qualified});
+                return;
+            }
+            device_platform::SensorQualitySnapshot snapshot;
+            snapshot.identity = raw->identity();
+            snapshot.quality = device_platform::SensorQuality::Stale;
+            snapshot.rawCelsius = raw->celsius();
+            snapshot.lastAcceptedSampleAgeMs = *displayNowMs - timestamp;
+            input.temperatures.push_back(
+                {role, raw->celsius(), snapshot,
+                 TemperatureValueBasis::RawUnqualified});
+        };
+    addTemperature(FermentationTemperatureRole::CabinetAir,
+                   evidence.plausibility.air, rawTemperatureSamples_.air);
+    addTemperature(FermentationTemperatureRole::Product,
+                   evidence.plausibility.product,
+                   rawTemperatureSamples_.product);
+    addTemperature(FermentationTemperatureRole::Cooling,
+                   evidence.plausibility.cooling,
+                   rawTemperatureSamples_.cooling);
     input.recoveryDisposition = recoveryDisposition_;
     input.persistenceLoadStatus = persistenceLoadStatus_;
     input.coordinatorState.reset();
@@ -2676,6 +2871,16 @@ void FermentationApplication::tickControlChain() {
     evidence.peltierSensor = &sensors.cooling;
     evidence.sensorSelectionRuntime = &run.sensorSelectionRuntime;
     evidence.actuatorPlanner = &chain.planner;
+    // Firmware temperature safety on the raw cooling-body/air readings,
+    // evaluated now (idempotent for identical samples and time).
+    const auto thermal = thermalSafety_.evaluate(rawTemperatureSamples_, now);
+    evidence.thermalSafety = thermal.status;
+    if (thermal.status == ThermalSafetyStatus::Tripped &&
+        lifecycleState_ != ApplicationLifecycleState::ServiceRequired) {
+        // Visible, latched safety fault in the existing fault path; the
+        // interlock stays denied and the planner keeps its fan semantics.
+        requireService(FaultCode::TemperatureSafetyLimit);
+    }
 
     ActuatorSafetyGateInput gate;
     gate.status = ActuationInterlock::evaluate(evidence).permission;

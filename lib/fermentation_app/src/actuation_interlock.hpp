@@ -11,6 +11,7 @@
 #include "run_persistence_coordinator.hpp"
 #include "sensor_quality_snapshot.hpp"
 #include "sensor_selection_types.hpp"
+#include "thermal_safety_supervisor.hpp"
 
 namespace fermentation {
 
@@ -24,6 +25,10 @@ enum class FaultCode : std::uint16_t {
     SafetySensorUnavailable = 0x0301U,
     ActuatorRequestWatchdog = 0x0401U,
     SystemProducerUnknown = 0x0501U,
+    // Firmware temperature safety (cooling body / cabinet air raw readings):
+    // limit, trend or invalid-reading latch, or not configured/blocked while a
+    // run is active (R1 trial plan S6).
+    TemperatureSafetyLimit = 0x0601U,
 };
 
 enum class SafetyActivationKind : std::uint8_t {
@@ -59,6 +64,9 @@ struct ActuationEvidence {
 
     const device_platform::SensorQualitySnapshot* peltierSensor{nullptr};
     const SensorSelectionRuntimeState* sensorSelectionRuntime{nullptr};
+    // Fail-closed default: no Peltier permission without an explicit `Ok` from
+    // the firmware temperature safety supervisor.
+    ThermalSafetyStatus thermalSafety{ThermalSafetyStatus::Unconfigured};
     // The planner remains the #23 watchdog authority. The interlock reads its
     // current latch but never stores a copy of it.
     const ActuatorPlanner* actuatorPlanner{nullptr};
@@ -71,7 +79,7 @@ struct ActuationEvaluation {
 
 class ActuationInterlock final {
    public:
-    static constexpr std::size_t kFaultCount = 8U;
+    static constexpr std::size_t kFaultCount = 9U;
 
     [[nodiscard]] static ActuationEvaluation evaluate(
         const ActuationEvidence& evidence);

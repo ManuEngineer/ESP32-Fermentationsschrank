@@ -171,7 +171,7 @@ Produktfuehler STALE oder FAILED
   -> Peltier zunaechst AUS
   -> Schrankluft- und Kuehlkoerpersensor pruefen
   -> Sicherheitsfreigaben pruefen
-  -> Benutzer sichtbar und akustisch informieren
+  -> Benutzer sichtbar informieren (akustisch entfaellt in R1, Ownerentscheid 2026-11-20 D7)
   -> programmabhaengige Wartezeit
   -> falls erlaubt automatisch oder bewusst auf Luftregelung wechseln
   -> niedrigere Regel- und Zeitkonfidenz sichtbar halten

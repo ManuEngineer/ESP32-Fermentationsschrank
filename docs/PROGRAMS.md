@@ -237,7 +237,7 @@ Qualifizieren der Zieltemperatur.
 
 Wird diese Zeit ueberschritten:
 
-- das Programm erzeugt eine sichtbare und akustische Warnung
+- das Programm erzeugt eine sichtbare Warnung (akustisch nur in einem spaeteren Release; R1: Summer entfaellt, Ownerentscheid 2026-11-20 D7)
 - die Regelung versucht standardmaessig weiter, sofern kein Sicherheitsfehler
   vorliegt
 - der Benutzer kann den Lauf fortsetzen beobachten oder abbrechen
@@ -248,6 +248,13 @@ ein harter Fehler. Harte Grenzen, Sensorfehler oder unplausibles Verhalten
 werden separat behandelt.
 
 ## Akustische Signale
+
+> **R1-Scopeentscheid (Owner 2026-11-20, D7): Der Summer entfaellt aus Release 1.**
+> Es gibt keine akustische Ausgabe, keinen Summer-Treiber und keine
+> Signalmuster; die unten stehenden Anforderungen sind historischer
+> Spezifikationsstand und gelten erst wieder, wenn ein Summer als neuer Scope
+> ausdruecklich beauftragt wird. In R1 werden alle genannten Ereignisse
+> ausschliesslich sichtbar (Banner/Meldungsliste) gemeldet.
 
 Fuer wichtige lokale Meldungen wird ein Pieper beziehungsweise Summer als
 zusaetzliche Hardware vorgesehen.
@@ -342,7 +349,7 @@ Die genaue Bedienung und maximale Anzahl werden spaeter festgelegt.
 - [x] abweichende Reaktion kann spaeter pro Programm konfigurierbar sein
 - [x] maximale Zielerreichungszeit pro Programm
 - [x] Zeitueberschreitung erzeugt Warnung und versucht standardmaessig weiter
-- [x] lokaler akustischer Signalgeber vorgesehen
+- [x] lokaler akustischer Signalgeber vorgesehen (R1: entfaellt, Ownerentscheid 2026-11-20 D7)
 - [x] Vorheizen pro Lauf ein- oder ausschaltbar
 - [x] nach Vorheizen zweiter Start zur Bestaetigung des eingesetzten Produkts
 - [x] Standardprogramme bearbeitbar und auf Werkseinstellung ruecksetzbar
@@ -358,7 +365,7 @@ Die genaue Bedienung und maximale Anzahl werden spaeter festgelegt.
 - maximale Zeit zum Erreichen der Zieltemperatur je Programm
 - Warnschwellen bei Temperaturabweichungen waehrend der Fermentation
 - Kuehlziel und Abschlussverhalten je Programm
-- Standardlautstaerke beziehungsweise Signalmuster des Summers
+- Standardlautstaerke beziehungsweise Signalmuster des Summers (R1: entfaellt)
 - endgueltiger Steckverbinder fuer den abnehmbaren Produktfuehler
 
 ## Implementiertes Release-1-Programmmodell

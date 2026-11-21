@@ -186,8 +186,8 @@ void FermentationUiProjector::projectInto(
     output.revisions = input.revisions;
     output.temperatures.reserve(input.temperatures.size());
     for (const auto& source : input.temperatures) {
-        output.temperatures.push_back(
-            TemperatureView{source.role, source.valueCelsius, source.quality});
+        output.temperatures.push_back(TemperatureView{
+            source.role, source.valueCelsius, source.quality, source.basis});
     }
     if (input.runState != nullptr) {
         output.messages.reserve(input.runState->messageCount);

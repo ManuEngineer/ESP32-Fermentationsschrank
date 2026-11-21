@@ -54,6 +54,7 @@ void validBootEvidence(ActuationEvidence& input,
     input.persistenceCoordinatorState = RunPersistenceCoordinatorState::Ready;
     input.activationPersistenceResult = RunPersistenceResultStatus::Applied;
     input.processActivationApplied = true;
+    input.thermalSafety = ThermalSafetyStatus::Ok;
     sensor.quality = device_platform::SensorQuality::Valid;
     selection.phase = SensorSelectionPhase::NormalProduct;
     selection.permission = SensorPeltierPermission::Allowed;
@@ -92,6 +93,68 @@ void validFallbackRecoveryEvidence(
     selection.permission = SensorPeltierPermission::Allowed;
     input.peltierSensor = &sensor;
     input.sensorSelectionRuntime = &selection;
+}
+
+// R1 trial plan S6: the firmware temperature safety is one more mandatory
+// evidence field; the default is fail-closed.
+void test_thermal_safety_must_be_ok_for_any_permission() {
+    for (const auto status :
+         {ThermalSafetyStatus::Unconfigured, ThermalSafetyStatus::Blocked,
+          ThermalSafetyStatus::Tripped}) {
+        ActuationEvidence input;
+        device_platform::SensorQualitySnapshot sensor;
+        SensorSelectionRuntimeState selection;
+        validBootEvidence(input, sensor, selection);
+        input.thermalSafety = status;
+        const auto result = ActuationInterlock::evaluate(input);
+        TEST_ASSERT_TRUE(result.permission !=
+                         ActuatorSafetyGateStatus::Allowed);
+        TEST_ASSERT_TRUE(result.faultCode == FaultCode::TemperatureSafetyLimit);
+    }
+    ActuationEvidence ok;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    validBootEvidence(ok, sensor, selection);
+    ok.thermalSafety = ThermalSafetyStatus::Ok;
+    TEST_ASSERT_TRUE(ActuationInterlock::evaluate(ok).permission ==
+                     ActuatorSafetyGateStatus::Allowed);
+}
+
+void test_default_thermal_safety_is_unconfigured_and_never_allows() {
+    ActuationEvidence input;
+    TEST_ASSERT_TRUE(input.thermalSafety == ThermalSafetyStatus::Unconfigured);
+}
+
+void test_tripped_is_observed_even_without_activation() {
+    ActuationEvidence input;
+    validOperationalStandbyEvidence(input);
+    input.thermalSafety = ThermalSafetyStatus::Tripped;
+    const auto result = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(result.permission != ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::TemperatureSafetyLimit);
+    // Not configured without any activation stays the quiet default.
+    ActuationEvidence idle;
+    validOperationalStandbyEvidence(idle);
+    TEST_ASSERT_TRUE(ActuationInterlock::evaluate(idle).faultCode ==
+                     FaultCode::None);
+}
+
+void test_temperature_fault_code_is_stable_and_counted() {
+    TEST_ASSERT_EQUAL_UINT16(0x0601U, ActuationInterlock::wireValue(
+                                          FaultCode::TemperatureSafetyLimit));
+    TEST_ASSERT_EQUAL_UINT32(9U, ActuationInterlock::kFaultCount);
+}
+
+void test_watchdog_reset_requires_thermal_safety_ok() {
+    ActuatorPlanner planner(ActuatorPlannerParameters{});
+    ActuationEvidence input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    validBootEvidence(input, sensor, selection);
+    input.actuatorPlanner = &planner;
+    input.thermalSafety = ThermalSafetyStatus::Blocked;
+    TEST_ASSERT_FALSE(
+        ActuationInterlock::resetRequestWatchdog(planner, 1U, input));
 }
 
 void test_missing_boot_evidence_is_safe_boot() {
@@ -204,6 +267,7 @@ void test_fresh_start_stays_unresolved_until_new_run_is_applied() {
     input.explicitActivationRequested = true;
     input.plannerEvidenceValidated = true;
     input.activationKind = SafetyActivationKind::FreshStart;
+    input.thermalSafety = ThermalSafetyStatus::Ok;
     sensor.quality = device_platform::SensorQuality::Valid;
     selection.phase = SensorSelectionPhase::NormalProduct;
     selection.permission = SensorPeltierPermission::Allowed;
@@ -959,6 +1023,11 @@ void teardown() {}
 
 void setup_suite() {
     UNITY_BEGIN();
+    RUN_TEST(test_thermal_safety_must_be_ok_for_any_permission);
+    RUN_TEST(test_default_thermal_safety_is_unconfigured_and_never_allows);
+    RUN_TEST(test_tripped_is_observed_even_without_activation);
+    RUN_TEST(test_temperature_fault_code_is_stable_and_counted);
+    RUN_TEST(test_watchdog_reset_requires_thermal_safety_ok);
     RUN_TEST(test_missing_boot_evidence_is_safe_boot);
     RUN_TEST(
         test_fallback_selection_required_never_allows_even_with_complete_evidence);

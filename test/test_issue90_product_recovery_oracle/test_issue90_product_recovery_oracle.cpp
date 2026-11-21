@@ -2931,6 +2931,7 @@ const char* safetyProjectionName(fermentation::RunLoadDisposition disposition,
         case FaultCode::ConfigurationRuntimeFailure:
         case FaultCode::SafetySensorUnavailable:
         case FaultCode::ActuatorRequestWatchdog:
+        case FaultCode::TemperatureSafetyLimit:
             return "UNRESOLVED";
         case FaultCode::None:
             break;
@@ -2977,6 +2978,8 @@ const char* faultCodeName(fermentation::FaultCode value) {
             return "ActuatorRequestWatchdog";
         case FaultCode::SystemProducerUnknown:
             return "SystemProducerUnknown";
+        case FaultCode::TemperatureSafetyLimit:
+            return "TemperatureSafetyLimit";
     }
     return "UnknownFaultCode";
 }
@@ -3076,6 +3079,7 @@ fermentation::ActuationEvaluation evaluateProductionSafety(
         sensor.quality = device_platform::SensorQuality::Valid;
         selection.permission = fermentation::SensorPeltierPermission::Allowed;
         input.sensorEvidenceValidated = true;
+        input.thermalSafety = fermentation::ThermalSafetyStatus::Ok;
         input.peltierSensor = &sensor;
         input.sensorSelectionRuntime = &selection;
     }

@@ -199,7 +199,7 @@ Safety-Wahrheit.
 
 - Peltier AUS
 - beide BTS7960-Richtungen AUS
-- keine Heiz-, Kuehl-, Luefter- oder Summer-Aktortests
+- keine Heiz-, Kuehl-, Luefter- oder Summer-Aktortests (R1: kein Summer, Ownerentscheid 2026-11-20 D7)
 - nur ein sicherheitsbedingt erforderlicher, bereits laufender Luefternachlauf
   darf nach expliziter Fehlerregel beendet werden
 
@@ -277,12 +277,12 @@ warten.
 ### Verhalten
 
 - Anzeige `Produkt einsetzen`
-- akustisches, quittierbares Signal
+- akustisches, quittierbares Signal (R1: entfaellt, nur sichtbare quittierbare Meldung; Ownerentscheid 2026-11-20 D7)
 - Temperaturregelung bleibt aktiv, soweit sicher und programmgemaess
 - Fermentationstimer laeuft nicht
 - pro Programm konfigurierbare maximale Wartezeit
 
-Die sichtbare und akustische Aufforderung beim Eintritt in
+Die sichtbare (R1: kein akustischer Anteil, Ownerentscheid 2026-11-20 D7) und akustische Aufforderung beim Eintritt in
 `WAITING_FOR_PRODUCT` ist zugleich die Warnung vor Ablauf der Wartezeit. Release
 1 besitzt keine zweite, davon getrennte Warnschwelle.
 
@@ -527,7 +527,7 @@ Lauf ist fachlich abgeschlossen und wartet auf Benutzerquittierung.
 - Peltier AUS
 - definierter Luefternachlauf
 - optische Meldung `PROGRAMM BEENDET`
-- kurzes akustisches Signalmuster
+- kurzes akustisches Signalmuster (R1: entfaellt, nur sichtbare Meldung; Ownerentscheid 2026-11-20 D7)
 - abgeschlossener Lauf und Ergebnisdaten bleiben sichtbar
 
 ```text

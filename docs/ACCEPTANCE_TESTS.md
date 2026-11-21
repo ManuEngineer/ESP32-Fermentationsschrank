@@ -414,7 +414,7 @@ erforderlich) und sind kein Teil von `scripts/run_pre_ready_gates.sh`.
 | HW-32-05 | `PASS` (2026-11-19, Bring-up-Image PR-HEAD `234ce8c096914c5b0c5f74d1726fc9650d307c5d`, SHA-256 `5cf00469645570afa0f29980a5ab81ab02f92466f197ce30a1f6f49a53c83913`, Evidence `docs/audits/ISSUE32_BOOT_DIAGNOSIS_EVIDENCE.md` Abschnitt PR #216, Plan-SHA `f93afa4bd01f7856a0e654a5e3d766cfdeb07c5a`): realer Aussenluefter OUT2/GPIO17, ein manueller Bring-up-only-Puls `pulse out2` (UART), Log `ISSUE32_PULSE channel=out2 state=ON` → `state=OFF result=PASS reason=TIMEOUT_OFF` (~3,0 s); **Owner-beobachtet:** AUS → EIN (~3 s) → AUS, richtiger Verbraucher, Innenluefter (OUT1) blieb AUS; nach dem Boot beide Luefter AUS. G2 App-only-Flash (Hash/`verify-flash` PASS, kein Erase/NVS/State-Store, kein Backup). Nicht Teil des PASS: Boot/EN-Reset als eigener Nachweis (`HW-32-02`), Dauerlauf/Nachlauf (`HW-32-03`, erst nach #35/#90), Summer OUT3, Stromaufnahme. OUT1-Nachweis `HW-32-04` gilt laut Ownerangabe fuer den realen Innenluefter; der OUT4-Test belegt OUT2 nicht. |
 | HW-32-01 | `NOT_RUN` (Hardware-Folgescope): Polaritaetsbestimmung je Kanal mit sicherer Einzel-/Ersatzlast; SSOT-Aenderung nur ueber eigenen Plan-/Owner-Gate-Scope. |
 | HW-32-02 | `NOT_RUN`: Boot-/Reset-/Brownout-Verhalten vor und nach `app_main` mit sicherem Einzelverbraucher (haengt an `external_bias`, `TBD_BOARD_CIRCUIT`). |
-| HW-32-03 | `NOT_RUN`: Kanal-/Verbraucherzuordnung Innenluefter, Aussenluefter, Summer; Aussenluefter-Nachlauf bei Sicherheitsabschaltung; Summertyp (aktiv/passiv), nichtblockierende Summermuster (offen, Ownerentscheid O3 = B). |
+| HW-32-03 | `NOT_RUN`: Kanal-/Verbraucherzuordnung Innenluefter, Aussenluefter, Summer; Aussenluefter-Nachlauf bei Sicherheitsabschaltung; Summertyp (aktiv/passiv), nichtblockierende Summermuster (offen, Ownerentscheid O3 = B). **Nachtrag 2026-11-20 (Ownerentscheid D7):** der Summerumfang (Typ, Muster, OUT3-Pulse, akustische Abnahme) ist `NOT_REQUIRED_R1 (Owner-Scopeentscheid)`, nicht `PASS`; Kanal-/Verbraucherzuordnung der Luefter und der Aussenluefter-Nachlauf bleiben offen und werden im integrierten Regelversuch nachgewiesen. |
 
 ### Issue #33 – BTS7960-H-Bruecke (Software, hardwarefrei)
 
@@ -441,6 +441,13 @@ Hosttests (`test/esp_idf_*_host`, Ruby erforderlich) sind kein Teil von
 | SIM-218-01 | Positive Kette ueber die echte `FermentationApplication`, den echten `ControlSensorEvidenceProducer` und den produktiven Evidenzbauer: expliziter Start (`Applied`) + frische Pflichtsensoren -> Regler -> Planner -> Aussenluefter EIN vor genau einer Bruecken-Richtung, mehr als ein aufeinanderfolgender Tick desselben committed Runs, Planner nimmt weitere Evaluationen an; STOP schaltet die Bruecke im Kommando selbst AUS, Aktivierung im selben Aufruf geloescht, Nachlauf endet, nichts schaltet erneut ein: `test_r1_control_chain_integration`. Alle Zahlenwerte sind Testfixtures (kein Produktwert, #35). |
 | SIM-218-02 | Negativ: Kuehlkoerpersensor faellt aus (nicht `Valid`), keine frische Evidenz (nichts publiziert), Aussenluefter-EIN verweigert, unsicherer Persistenzzustand (`ReadFailed`, `BlockedIndeterminate`), Fault-Phase, Neustart (`begin()`) mit altem `Applied`: Peltier AUS/gesperrt, nie beide Richtungen, Richtung nie ohne Aussenluefter: `test_r1_control_chain_integration`. |
 | SIM-218-03 | Produkt-Default und Lebensdauer: Regler-Parameter `Unconfigured` (mit/ohne Planner-Snapshot) -> kein Peltier, kein Aussenluefter; ohne Sensorqualitaetskonfiguration keine Evidenz, alle Sinks AUS; ohne `attachActuationPorts` kein Portzugriff und spaetes Anhaengen abgelehnt; endgueltiger Abbau (`begin()`-Wiederholung) beendet einen offenen Luefter-Nachlauf (beide Luefter und Bruecke AUS), der normale Lauf-STOP behaelt den Nachlauf: `test_r1_control_chain_integration`. Mutationen (Frische-Pflicht, Latch-Loeschung, finales Idle) lassen jeweils mindestens einen dieser Faelle fehlschlagen. |
+| SIM-R1-S1 | Rohwertanzeige (R1 Trial-Plan S1): frische technische DS18B20-Werte erscheinen lokal als `RawUnqualified` (Label `roh/raw/crudo`), nie `Valid`, nie Evidenz; fehlend/fehlerhaft/aelter als 5 s nicht angezeigt (Ablauf ohne neue Probe); Web-Vertrag unveraendert: `test_raw_temperature_display`, `test_renderer_boundary`. |
+| SIM-R1-S6 | Firmware-Temperaturschutz im Interlock: rohwertbasiert, Eingriffs-/Notgrenze, Trend, ungueltige Daten `Blocked`→Latch; `FaultCode 0x0601`, `thermalSafety` Pflicht fuer `Allowed` (Default fail-closed); Trip sperrt Peltier, sichtbar, Latch bis Neustart, Aussenluefter-Nachlauf planmaessig: `test_thermal_safety_supervisor`, `test_actuation_interlock`, `test_r1_control_chain_integration`. |
+| SIM-R1-S2 | Regelbereitschaft: Start (Prepare **und** Confirm) nur mit Kette, gueltigen PI-/Planner-Parametern und `thermalSafety==Ok`; Zustandssprung Prepare→Confirm verweigert; Programmstart vor Command-Identitaet verweigert: `test_r1_control_chain_integration`. |
+| SIM-R1-S3-S5 | Sensorqualitaet je Rolle; Planner-Writer (`Valid`/Clear, Revision, nicht bei aktivem Lauf, Persistenz, Werksreset); Trial-Profil (`Ki>0`), strikter Konsolenparser, Release-Guards (Trial nur im Bring-up-Flag, keine Lib kennt das Profil): `test_control_sensor_evidence`, `test_actuator_planner_writer`, `test_r1_trial_profile_and_commands`, `test_peltier_composition_guard`; Evidence [R1_SENSOR_DISPLAY_CONTROL_TRIAL_EVIDENCE](audits/R1_SENSOR_DISPLAY_CONTROL_TRIAL_EVIDENCE.md). |
+| HW-R1-C0 | `NOT_RUN` (Gate G-T + G-C0 `NOT_GRANTED`): Boot des Trial-/Anzeige-Images, echte Temperaturen auf dem Display, Peltierleistungspfad stromlos. |
+| HW-R1-C1 | `NOT_RUN` (Gate G-P1 + G-C1 `NOT_GRANTED`): Programmstart mit C1-Parametern inkl. Thermalschutzkonfiguration, BTS7960-Logik ohne Leistungsversorgung, Luefter OUT1/OUT2, Aussenluefter-Nachlauf, Fail-closed bei Sensorverlust/Trip (→ #32). |
+| HW-R1-C2 | `NOT_RUN` (Gate G-P2 + G-C2 `NOT_GRANTED`, `C2_PHYSICAL_PRECONDITIONS=NOT_VERIFIED`): beaufsichtigter Heiz-/Kuehlversuch mit unabhaengiger Hardware-Schutzebene **und** Firmware-Cutoff (→ #33/#34/#35). Summer entfaellt (`NOT_REQUIRED_R1`). |
 | HW-33-06 | `PASS` (2026-11-19, Bring-up-Image PR-HEAD `0fb91d155ca5cb742cd78d3f958347f66e40019b`, SHA-256 `ae4f2ca0807825af6fa50ee332fb25cce01f688a4e275f4029fdd11fe4493ef2`, Evidence `docs/audits/ISSUE33_BRIDGE_IDLE_EVIDENCE.md`, Plan-SHA `6d3b8c2f976bb80c543ec6968037e79a14fbceff`): unbelasteter Leerlauf-Brueckentest, Peltier und Verbraucher abgeklemmt, 12 V Ownerangabe; UART `bridge forward`/`bridge off`/`bridge reverse`/`bridge off`; **Owner-Multimeter** zwischen den zwei Ausgangsklemmen: forward ≈ +12 V, reverse ≈ −12 V, danach je ≈ 0 V; Software-Timeout (10 s) fuer beide Richtungen im Log belegt; Boot `bridge_ready=YES`, keine Automatik, kein Reset/Panic/WDT. `ESP-IDF`-Hosttest `esp_idf_shared_enable_bridge_host` 13/13 PASS. **Grenzen:** `ON_COMMANDED`/`OFF_COMMANDED` sind Befehlslogs; ≈ 0 V im hochohmigen OFF-Zustand ist kein Abschaltnachweis; kein Belastungs-/Sensor-/Peltier-Safety-Nachweis; `HW-33-01`–`-05` bleiben `NOT_RUN`, `REAL_PELTIER_TEST=NOT_RUN`, `ACTUATOR_RELEASE=NO`. |
 
 ### Issue #19 – lokaler Werksreset (R1-Pflicht, hardwarefrei)
@@ -595,7 +602,7 @@ GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
 
 Die Felder werden nur für den jeweiligen Scope geführt. Der #32-Scope führt
 kein separates `ADAPTER_SAFETY_VERIFICATION`; der produktionsnahe
-MOSFET-/Lüfter-/Summer-Adapterpfad gehört vollständig in
+MOSFET-/Lüfter-/Summer-Adapterpfad (Summer: R1 entfällt, Ownerentscheid 2026-11-20 D7) gehört vollständig in
 `FUNCTIONAL_HARDWARE_VERIFICATION`. Das separate Adapter-Safety-Feld ist dem
 #33-H-Brückenvertrag vorbehalten. `THERMAL_COMMISSIONING` bleibt ein späteres
 Commissioning-Gate und ist kein Ersatz für die funktionale Hardwareprüfung.
@@ -612,7 +619,7 @@ Commissioning-Gate und ist kein Ersatz für die funktionale Hardwareprüfung.
 - Raw-Touch-Kalibrierungsrecovery im 10-Sekunden-Fenster getrennt von
   PIN-unabhaengigem Vollreset; keine physische Bedienannahme
 - Innen- und Aussenluefter
-- Summer
+- Summer (R1: entfaellt, `NOT_REQUIRED_R1` – Ownerentscheid 2026-11-20 D7)
 - R_IS/L_IS sind für R1 nicht angeschlossen, nicht gemessen und nicht
   implementiert; sie sind kein Akzeptanzkriterium, kein Required Test und kein
   DoD-Gate. Eine spätere Verwendung erfordert ein eigenes Issue, einen
@@ -888,7 +895,7 @@ Jeder relevante Hardwarestand dokumentiert mindestens:
 5. BTS7960-Pulldowns/fail-low, Enable, Richtungen, Adapterinterlock und
    Abschaltung
 6. Innen- und Aussenluefter inklusive Nachlauf
-7. Summer
+7. Summer (R1: entfaellt, `NOT_REQUIRED_R1` – Ownerentscheid 2026-11-20 D7)
 8. drei DS18B20 mit Rolle und ROM-Adresse
 9. Bustopologie und Produkt-Hot-Plug
 10. Display, Touch und Kalibrierung

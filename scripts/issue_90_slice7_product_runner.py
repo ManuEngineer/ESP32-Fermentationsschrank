@@ -1104,7 +1104,10 @@ class ProductSerial:
                 continue
             lines.append(line)
             lowered = line.lower()
-            saw_actor_free |= "real actuators: disabled" in lowered
+            saw_actor_free |= (
+                "real actuators: disabled" in lowered
+                or "real actuators: initial_off" in lowered
+            )
             saw_ready |= "application: ready" in lowered
             source_marker = "source git sha:"
             if source_marker in lowered:

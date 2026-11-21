@@ -77,6 +77,7 @@ constexpr std::array<FaultCode, ActuationInterlock::kFaultCount>
         FaultCode::RunPersistenceUntrusted,
         FaultCode::ConfigurationRuntimeFailure,
         FaultCode::SafetySensorUnavailable,
+        FaultCode::TemperatureSafetyLimit,
         FaultCode::ActuatorRequestWatchdog,
 };
 
@@ -206,6 +207,13 @@ ActuationEvaluation ActuationInterlock::evaluate(
         (gateNeedsSensorEvidence && !hasFreshSensorEvidence(evidence)))
         observe(FaultCode::SafetySensorUnavailable);
 
+    // A trip is observed at all times; "not Ok" matters once an activation is
+    // requested (like the sensor evidence above).
+    if (evidence.thermalSafety == ThermalSafetyStatus::Tripped ||
+        (gateNeedsSensorEvidence &&
+         evidence.thermalSafety != ThermalSafetyStatus::Ok))
+        observe(FaultCode::TemperatureSafetyLimit);
+
     if (evidence.actuatorPlanner != nullptr &&
         evidence.actuatorPlanner->state().latchedWatchdogFault.has_value())
         observe(FaultCode::ActuatorRequestWatchdog);
@@ -250,6 +258,7 @@ bool ActuationInterlock::resetRequestWatchdog(
     if (!evidence.plannerEvidenceValidated) return false;
     if (!hasFreshConfigurationEvidence(evidence)) return false;
     if (!hasFreshSensorEvidence(evidence)) return false;
+    if (evidence.thermalSafety != ThermalSafetyStatus::Ok) return false;
     if (!evidence.persistenceValidated) return false;
     if (!evidence.persistenceLoadStatus.has_value()) return false;
     if (!isKnown(*evidence.persistenceLoadStatus)) return false;
@@ -391,6 +400,8 @@ ActuationInterlock::FaultMask ActuationInterlock::faultBit(
             return 1U << 6U;
         case FaultCode::SystemProducerUnknown:
             return 1U << 7U;
+        case FaultCode::TemperatureSafetyLimit:
+            return 1U << 8U;
         case FaultCode::None:
             return 0U;
     }
@@ -417,7 +428,9 @@ bool ActuationInterlock::activationEvidenceComplete(
            evidence.explicitActivationRequested &&
            evidence.plannerEvidenceValidated &&
            hasFreshConfigurationEvidence(evidence) &&
-           hasFreshSensorEvidence(evidence) && evidence.persistenceValidated &&
+           hasFreshSensorEvidence(evidence) &&
+           evidence.thermalSafety == ThermalSafetyStatus::Ok &&
+           evidence.persistenceValidated &&
            evidence.persistenceLoadStatus.has_value() &&
            isKnown(*evidence.persistenceLoadStatus) &&
            !isPersistenceSafeBoot(*evidence.persistenceLoadStatus) &&

@@ -147,7 +147,7 @@ Allgemeines Programm fuer Wasserkefir.
 - Vorheizen standardmaessig AUS
 - luftgefuehrter Betrieb als Standard
 - produktgefuehrter Betrieb optional
-- nach Ablauf standardmaessig beenden und akustisch sowie optisch melden
+- nach Ablauf standardmaessig beenden und optisch melden (akustisch entfaellt in R1, Ownerentscheid 2026-11-20 D7)
 - aktive Kuehlung nach Ablauf bleibt als aenderbare Option verfuegbar
 - konkrete Zieltemperatur, Dauer und optionale Kuehlwerte: `TBD_COMMISSIONING`
 

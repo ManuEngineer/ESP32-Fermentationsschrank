@@ -169,6 +169,14 @@ device_platform::TextKey sensorQualityTextKey(
     return fermentationTextKey("message-unknown");
 }
 
+device_platform::TextKey temperatureQualityTextKey(
+    const TemperatureView& view) {
+    if (view.basis == TemperatureValueBasis::RawUnqualified) {
+        return fermentationTextKey("quality-unqualified");
+    }
+    return sensorQualityTextKey(view.quality.quality);
+}
+
 device_platform::TextKey resetCauseTextKey(device_platform::ResetCause cause) {
     switch (cause) {
         case device_platform::ResetCause::Unknown:
@@ -222,7 +230,7 @@ namespace {
 
 // Immutable firmware texts: constexpr tables of string-literal views, so they
 // stay in read-only flash and are never copied into the heap.
-constexpr std::size_t kTextCount = 227U;
+constexpr std::size_t kTextCount = 228U;
 using device_platform::TextTranslation;
 
 constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
@@ -360,6 +368,7 @@ constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
     {"quality-valid", "valid"},
     {"quality-stale", "stale"},
     {"quality-failed", "failed"},
+    {"quality-unqualified", "raw"},
     {"label-cooling", "Cooling: "},
     {"label-hold", "Hold: "},
     {"field-target", "Target temp."},
@@ -593,6 +602,7 @@ constexpr std::array<TextTranslation, kTextCount> kGermanTexts{{
     {"quality-valid", "gueltig"},
     {"quality-stale", "veraltet"},
     {"quality-failed", "Fehler"},
+    {"quality-unqualified", "roh"},
     {"label-cooling", "Kuehlziel: "},
     {"label-hold", "Halten: "},
     {"field-target", "Zieltemp."},
@@ -827,6 +837,7 @@ constexpr std::array<TextTranslation, kTextCount> kSpanishTexts{{
     {"quality-valid", "valido"},
     {"quality-stale", "obsoleto"},
     {"quality-failed", "fallo"},
+    {"quality-unqualified", "crudo"},
     {"label-cooling", "Frio: "},
     {"label-hold", "Mantener: "},
     {"field-target", "Temp. objetivo"},

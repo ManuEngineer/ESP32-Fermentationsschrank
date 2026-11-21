@@ -177,7 +177,7 @@ Die Oberflaeche verwendet den technischen Begriff **`Quittieren`** und nicht
 
 `Stummschalten` bedeutet ausschliesslich:
 
-- das aktuelle akustische Signal beenden
+- das aktuelle akustische Signal beenden (R1: ohne Summer gibt es kein Signal; die Funktion beschraenkt sich auf die Meldungsbestaetigung, Ownerentscheid 2026-11-20 D7)
 - die sichtbare Meldung und ihre Ursache unveraendert lassen
 
 Beispiel bei ausfallendem Produktfuehler:
@@ -280,7 +280,7 @@ Regeln:
 - [x] STOP oeffnet direkt den Auswahl- und Bestaetigungsdialog
 - [x] `Produkt einsetzen` bietet `WEITER`, `Details` und `Abbrechen`
 - [x] hoechste Meldung als Banner, weitere Meldungen in priorisierter Liste
-- [x] akustisches Signal kann stummgeschaltet werden, Meldung bleibt erhalten
+- [x] akustisches Signal kann stummgeschaltet werden, Meldung bleibt erhalten (R1: kein Summer, Ownerentscheid 2026-11-20 D7)
 - [x] Bestaetigung von Meldungen wird als `Quittieren` bezeichnet
 - [x] automatischer Wiederanlauf blockiert nicht auf eine Quittierung
 - [x] automatischer Sensorwechsel bleibt auch nach Quittierung gekennzeichnet

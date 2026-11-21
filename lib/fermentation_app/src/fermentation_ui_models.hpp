@@ -90,10 +90,19 @@ enum class FermentationTemperatureRole : std::uint8_t {
     Cooling,
 };
 
+// How a shown temperature value was obtained. `RawUnqualified` is a fresh
+// technical reading without quality judgement; it is never `Valid` and never
+// evidence for start, control or safety.
+enum class TemperatureValueBasis : std::uint8_t {
+    Qualified,
+    RawUnqualified,
+};
+
 struct TemperatureView {
     FermentationTemperatureRole role{FermentationTemperatureRole::CabinetAir};
     std::optional<double> valueCelsius;
     device_platform::SensorQualitySnapshot quality;
+    TemperatureValueBasis basis{TemperatureValueBasis::Qualified};
 };
 
 struct MessageView {
@@ -215,6 +224,7 @@ struct FermentationUiTemperatureInput {
     FermentationTemperatureRole role{FermentationTemperatureRole::CabinetAir};
     std::optional<double> valueCelsius;
     device_platform::SensorQualitySnapshot quality;
+    TemperatureValueBasis basis{TemperatureValueBasis::Qualified};
 };
 
 struct FermentationUiServiceSource {

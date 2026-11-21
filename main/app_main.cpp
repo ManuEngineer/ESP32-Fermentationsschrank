@@ -54,6 +54,11 @@
 #include "issue_31_touch_calibration_provision.hpp"
 #endif
 
+#ifdef APP_R1_CONTROL_TRIAL
+#include "r1_control_trial_harness.hpp"
+#include "r1_control_trial_profile.hpp"
+#endif
+
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
 #include "issue_29_bringup_probe.hpp"
 #endif
@@ -230,7 +235,16 @@ void logBootSummary(const app_config::ProfilePolicy& policy,
              app_config::hardwareStateName(policy.startupHardwareState));
     ESP_LOGI(TAG, "actuator policy: %s",
              app_config::actuatorPolicyName(policy.actuatorPolicy));
-    ESP_LOGI(TAG, "real actuators: disabled");
+    // Truthful actuator status: the outputs start inactive and the policy flag
+    // is a build profile statement only. It is NOT a physical inhibit: where a
+    // control chain is attached, an explicit run with a granted permission can
+    // drive real GPIO/BTS7960 outputs. A power path that must stay dead has to
+    // be disconnected physically (external precondition).
+    ESP_LOGI(TAG,
+             "real actuators: initial_off; build policy flag only, "
+             "not a physical inhibit; real GPIO/BTS7960 outputs are possible "
+             "on an explicit run when permitted; disconnect the Peltier power "
+             "path physically if it must stay dead");
     if (!applicationStarted) {
         ESP_LOGE(TAG, "application: startup failed");
     } else if (applicationReady) {
@@ -580,21 +594,51 @@ bool updateProductUi(
     return touchPoll.freshPressEdge;
 }
 
+// The product always passes the named unconfigured constant; only the
+// dedicated, supervised R1 control-trial bring-up build (never the release)
+// injects the TRIAL_NOT_COMMISSIONED profile through the same single point.
+[[maybe_unused]] fermentation::ControlChainParameters
+selectedControlChainParameters() {
+#ifdef APP_R1_CONTROL_TRIAL
+    return fermentation::r1_trial::trialControlChainParameters();
+#else
+    return fermentation::kControlChainParametersUnconfiguredUntilIssue35;
+#endif
+}
+
 #if !defined(APP_ISSUE_32_OUTPUT_PULSE) && \
     !defined(APP_ISSUE_33_BRIDGE_IDLE_TEST)
 void attachControlChain(fermentation::FermentationApplication& application,
                         const fermentation::ActuatorPlanSinkPorts& ports) {
-    if (!application.attachActuationPorts(
-            ports,
-            fermentation::kControlChainParametersUnconfiguredUntilIssue35)) {
+    if (!application.attachActuationPorts(ports,
+                                          selectedControlChainParameters())) {
         ESP_LOGE(kTag, "control chain: attachActuationPorts rejected");
     }
 }
 #endif
 
+// Per-role sensor quality configuration: unconfigured (nullopt = no evidence,
+// no sensor can become Valid) in every product image; the trial profile only in
+// the supervised R1 control-trial bring-up build.
+fermentation::ControlSensorQualityConfigs selectedSensorQualityConfigs() {
+#ifdef APP_R1_CONTROL_TRIAL
+    return fermentation::r1_trial::trialSensorQualityConfigs();
+#else
+    const std::optional<device_platform::SensorQualityConfig>
+        kSensorQualityConfigUnconfiguredUntilIssue35 = std::nullopt;
+    return fermentation::ControlSensorQualityConfigs{
+        kSensorQualityConfigUnconfiguredUntilIssue35,
+        kSensorQualityConfigUnconfiguredUntilIssue35,
+        kSensorQualityConfigUnconfiguredUntilIssue35};
+#endif
+}
+
 void publishControlSensorEvidence(
     fermentation::FermentationApplication& application,
     fermentation::ControlSensorEvidenceProducer& producer) {
+    // Raw readings first (unqualified local display, firmware temperature
+    // safety); they are never runtime evidence.
+    application.publishRawTemperatureSamples(producer.readRawSamples());
     if (const auto evidence =
             producer.sample(application.publishedProcessState()
                                 .value_or(fermentation::ProcessRuntimeState{})
@@ -671,18 +715,30 @@ extern "C" void app_main(void) {
     // their inactive level, in this order, and starts the bridge only after
     // all three succeeded; otherwise the bridge stays unstarted and refuses
     // every enable request. The LOW levels are the SSOT design state and no
-    // proof of module polarity or boot/reset hardware behaviour. The bridge is
-    // deliberately not connected to the actuator planner or driver, and
-    // nothing in this product calls its direction commands. R_IS/L_IS
-    // (GPIO34/35) are disabled and unwired in R1.
+    // proof of module polarity or boot/reset hardware behaviour. Since #219 the
+    // bridge is attached to the application-owned control chain (planner and
+    // driver, see attachControlChain) except in the manual #32/#33 harness
+    // builds; only that chain issues direction commands, and only for an
+    // explicit run with a granted permission. R_IS/L_IS (GPIO34/35) are
+    // disabled and unwired in R1.
     device_platform_esp_idf::EspIdfSharedEnableBridge peltierBridge(
         r1_pins::kBtsEnablePin, r1_pins::kBtsEnablePolarity,
         r1_pins::kBtsRpwmPin, r1_pins::kBtsRpwmPolarity, r1_pins::kBtsLpwmPin,
         r1_pins::kBtsLpwmPolarity);
     const bool peltierBridgeReady = peltierBridge.begin();
-    ESP_LOGI(kTag, "peltier bridge: %s",
-             peltierBridgeReady ? "ready_all_off_not_connected_to_planner"
-                                : "not_ready_fail_closed");
+#if !defined(APP_ISSUE_32_OUTPUT_PULSE) && \
+    !defined(APP_ISSUE_33_BRIDGE_IDLE_TEST)
+    constexpr const char* kBridgeChainState = "attached_to_control_chain";
+#else
+    constexpr const char* kBridgeChainState = "not_attached_manual_harness";
+#endif
+    ESP_LOGI(
+        kTag,
+        "peltier bridge: %s chain=%s (initial all-off is not a power "
+        "inhibit; real direction outputs possible on an explicit run "
+        "when permitted)",
+        peltierBridgeReady ? "ready_initial_all_off" : "not_ready_fail_closed",
+        kBridgeChainState);
 
     const esp_err_t defaultNvsStatus = nvs_flash_init();
     if (defaultNvsStatus != ESP_OK) {
@@ -876,17 +932,22 @@ extern "C" void app_main(void) {
     // Per-role sensor evidence for the control chain (Issue #218). The quality
     // configuration is TBD_COMMISSIONING (#35): without it no evidence is
     // produced and no sensor can become Valid (fail-closed).
-    const std::optional<device_platform::SensorQualityConfig>
-        kSensorQualityConfigUnconfiguredUntilIssue35 = std::nullopt;
     fermentation::ControlSensorEvidenceProducer controlSensorEvidence(
         ds18b20Sampler.source(fermentation::kChamberAirChannel),
         ds18b20Sampler.source(fermentation::kHeatsinkChannel),
         ds18b20Sampler.source(fermentation::kProductChannel), timeSource,
-        kSensorQualityConfigUnconfiguredUntilIssue35);
+        selectedSensorQualityConfigs());
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
     fermentation::issue_30_commissioning::Harness issue30Harness(
         application, ds18b20Sampler, timeSource);
     issue30Harness.start();
+#endif
+#ifdef APP_R1_CONTROL_TRIAL
+    // Supervised R1 control trial (TRIAL_NOT_COMMISSIONED): console for the
+    // planner parameters and the firmware temperature safety limits.
+    fermentation::r1_trial::Harness r1TrialHarness(
+        application, controlSensorEvidence, timeSource);
+    r1TrialHarness.start();
 #endif
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
     // Manual bring-up-only HIGH=ON test of single outputs (OUT1 inner fan,
@@ -934,6 +995,9 @@ extern "C" void app_main(void) {
 #endif
 #ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
         issue30Harness.update();
+#endif
+#ifdef APP_R1_CONTROL_TRIAL
+        r1TrialHarness.update();
 #endif
 #ifdef APP_ISSUE_32_OUTPUT_PULSE
         issue32Harness.update();

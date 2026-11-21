@@ -2111,6 +2111,28 @@ fermentation::FermentationUiSnapshot diagnosticsSnapshot(
     return snapshot;
 }
 
+// R1 trial plan S1: a raw, unqualified temperature gets its own quality label
+// ("raw"/"roh"/"crudo"), never "stale"/"valid", and its raw value is shown.
+void test_raw_unqualified_temperature_has_its_own_quality_label() {
+    using fermentation::FermentationTemperatureRole;
+    for (const auto* locale : {"en", "de", "es"}) {
+        auto snapshot =
+            diagnosticsSnapshot(FermentationTemperatureRole::CabinetAir,
+                                device_platform::SensorQuality::Stale, 21.34,
+                                std::nullopt, std::nullopt, 1200U);
+        snapshot.temperatures.front().basis =
+            fermentation::TemperatureValueBasis::RawUnqualified;
+        const auto screen = diagnosticsScreenAt(snapshot, 4U, locale);
+        const auto row = diagnosticsRow(screen, 0U);
+        TEST_ASSERT_TRUE(
+            rowHasText(row, localized(locale, "quality-unqualified")));
+        TEST_ASSERT_FALSE(rowHasText(row, localized(locale, "quality-stale")));
+        TEST_ASSERT_FALSE(rowHasText(row, localized(locale, "quality-valid")));
+        TEST_ASSERT_TRUE(
+            rowHasText(row, localized(locale, "value-raw") + "21.3"));
+    }
+}
+
 void test_diagnostics_fixed_rows_show_reset_cause_fault_and_state() {
     struct Mapping {
         device_platform::ResetCause cause;
@@ -3404,6 +3426,7 @@ int main() {
     RUN_TEST(test_diagnostics_state_row_shows_the_established_process_state);
     RUN_TEST(test_diagnostics_numbers_are_never_truncated_and_fit_the_field);
     RUN_TEST(test_diagnostics_value_rows_are_self_contained_when_isolated);
+    RUN_TEST(test_raw_unqualified_temperature_has_its_own_quality_label);
     RUN_TEST(
         test_diagnostics_rows_stay_within_the_304px_budget_in_every_window);
     RUN_TEST(test_diagnostics_text_keys_exist_in_all_locales);

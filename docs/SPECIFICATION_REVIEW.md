@@ -174,6 +174,14 @@ Freigaben bleiben bei #34/#35 und den jeweiligen Hardware-/Safety-Ownern.
   Service-UI/Mock-Aktor-Sequenz (#28), nur bei konkretem Zusatznutzen; keine
   zweite Boot-/Safetyentscheidung und keine Ersatzqualifikation fuer Hardware.
 - `FUTURE_BEI_BEDARF`: Web-Favicon (#204), keine R1-Releasepflicht.
+- **R1-Scopeentscheid Summer (Owner 2026-11-20, D7): Der Summer entfaellt aus R1.**
+  Es gibt keinen Summer-Treiber, keine Signalmuster, keine OUT3-Pulse und keine
+  akustische Pflichtabnahme. OUT3/GPIO26 bleibt softwareseitig AUS/unbenutzt; der
+  generische Ausgangsadapter und das Boardprofil bleiben unveraendert. Sichtbare
+  Warn-/Fehlermeldungen und automatische Sicherheitsabschaltungen bleiben Pflicht;
+  Akustik ist kein Voraussetzungsgate fuer R1. Ein spaeterer Summer waere ein neuer,
+  ausdruecklich beauftragter Release-Scope. Aeltere Aussagen ueber akustische
+  Meldungen in den Fachdokumenten gelten fuer R1 mit diesem Vorbehalt.
 
 `R2_VORGEMERKT` benennt eine spaetere Bewertung, keine automatische R2-Pflicht.
 `R2_KANDIDAT` und `FUTURE_BEI_BEDARF` enthalten keine Release-Zusage. Es werden

@@ -9,6 +9,8 @@
 
 #include "boot_classification.hpp"
 #include "process_state_machine.hpp"
+#include "raw_temperature_samples.hpp"
+#include "thermal_safety_supervisor.hpp"
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
 #include "factory_reset_flow.hpp"
@@ -254,6 +256,13 @@ struct FermentationSensorCommissioningSnapshot {
     std::optional<SensorCommissioningRecord> record;
 };
 
+// Persisted actuator planner parameters (service configuration) with the
+// service revision a later change refers to (R1 trial plan S4).
+struct FermentationActuatorPlannerSnapshot {
+    ServiceConfigurationRevision revision{0U};
+    std::optional<ActuatorPlannerParameters> parameters;
+};
+
 class FermentationApplication {
    public:
     FermentationApplication() noexcept;
@@ -347,6 +356,18 @@ class FermentationApplication {
     // runtime exists (unbound).
     [[nodiscard]] std::optional<FermentationSensorCommissioningSnapshot>
     sensorCommissioning() const;
+    // Actuator planner parameters in the ServiceConfiguration (R1 trial plan
+    // S4, owner decision D2). Written only through preview, revision
+    // validation and confirmation, never while a run is active, and only with
+    // `Valid` parameters; `nullopt` clears them (a later fresh start then has
+    // no planner snapshot and stays refused). No UI/Web caller exists; the
+    // canonical read path of a run stays FreshStartSnapshotProvenance.
+    [[nodiscard]] ApplicationConfigurationChangeResult
+    applyActuatorPlannerParameters(
+        const std::optional<ActuatorPlannerParameters>& parameters,
+        const std::optional<ServiceConfigurationRevision>& expectedRevision);
+    [[nodiscard]] std::optional<FermentationActuatorPlannerSnapshot>
+    actuatorPlannerParameters() const;
     // Owning ProgramCatalog mutation for the local program management (Issue
     // #172, S6): usage evidence comes from the runtime run state, never from
     // the UI; preview, validation and confirmation run through the
@@ -377,6 +398,22 @@ class FermentationApplication {
     // and web adapters never provide runtime evidence.
     void publishOwningRuntimeEvidence(
         const CrossRolePlausibilityContext& evidence);
+    // Technical raw readings of the three roles, published once per main-loop
+    // iteration. Read by the local UI projection (unqualified display, never
+    // `Valid`) and by the firmware temperature safety supervisor; it is never
+    // runtime evidence for start admission, control, persistence or the
+    // interlock's sensor judgement.
+    void publishRawTemperatureSamples(const RawTemperatureSamples& samples);
+    // Firmware temperature safety (R1 trial plan S6). The product never calls
+    // this: the supervisor stays `Unconfigured` and the Peltier permission
+    // stays denied. Only an owner-approved trial/commissioning composition may
+    // set limits (volatile; a latched trip refuses it until the next restart).
+    [[nodiscard]] ThermalSafetyConfigureResult configureThermalSafety(
+        const ThermalSafetyLimits& limits);
+    [[nodiscard]] ThermalSafetyEvaluation thermalSafetyEvaluation() const;
+    // Removes the (volatile) limits again; never clears a latched trip.
+    void clearThermalSafetyConfiguration();
+    [[nodiscard]] ThermalSafetyLimits thermalSafetyLimits() const;
     // Optional R1 control chain (#218). Must be called before begin(); only
     // abstract ports and the single regulator parameter injection point are
     // accepted. Returns false after begin() or for incomplete ports. Without
@@ -720,6 +757,12 @@ class FermentationApplication {
     std::unique_ptr<RunCommandState> pendingRecoverySource_;
     std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
     CrossRolePlausibilityContext owningRuntimeEvidence_{};
+    RawTemperatureSamples rawTemperatureSamples_{};
+    ThermalSafetySupervisor thermalSafety_;
+    // Set by every pre-begin attachActuationPorts() attempt: this composition
+    // intends to regulate, so a start needs a ready control chain (R1 trial
+    // plan S2). Compositions that never attach ports keep the old behaviour.
+    bool controlChainRequested_{false};
     mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
     mutable FermentationUiProjectionInput uiProjectionInput_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
@@ -755,6 +798,10 @@ class FermentationApplication {
     std::uint64_t lastControlTickMillis_{0U};
 
     [[nodiscard]] bool buildControlChain();
+    // Start admission: chain present, valid PI and planner parameters and an
+    // `Ok` firmware temperature safety on fresh, currently evaluated raw
+    // samples. Always true for a composition without control ports.
+    [[nodiscard]] bool controlReadyForStart();
     // Final teardown: outputs off through the existing driver, then the chain
     // is destroyed (see ControlChain::shutdownOutputs).
     [[nodiscard]] bool replaceRunPersistenceCoordinator(
