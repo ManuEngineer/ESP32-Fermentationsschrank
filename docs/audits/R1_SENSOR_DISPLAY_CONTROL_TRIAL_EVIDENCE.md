@@ -159,3 +159,23 @@ Anstieg loest weiter `Tripped/CoolingRiseRate` aus; 600-s-Fenster und unregelmae
 | Trial-Image (`build_r1_control_trial.py --clean`, Source-HEAD `307c38281447243a1abed5a226cfa337bff3e9a3`) | PASS; `esp32_fermentationsschrank.bin` 1 832 944 B, **SHA-256 `bbaaa7643fc60786eeeb9b44daa3ffddcae8643d6bf88b06dd5c844f86004cec`**; Partitionstabelle SHA-256 `d7f180e4…ccd9d`: `nvs 0x9000/24K`, `phy_init 0xf000/4K`, `factory 0x10000/3008K`, `state_store 0x300000/1M`; Kopie `../hw-evidence-pr221/trial-image/esp32_fermentationsschrank.r221-4-final.bin`; **nicht geflasht** |
 
 **Dieses Image (`bbaaa764…`) ersetzt `fdd0bf30…`, `1b0be67f…` und `86bf7eba…`; nur sein Hash gilt als Review-Vorlage fuer das Flash-Gate.**
+
+## C0-Versuch 2026-11-21: BLOCKED, kein Flash (Adapterdefekt vermutet)
+
+Gate G-T/G-C0 wurde vom Owner fuer App-Image SHA-256 `bbaaa7643fc60786eeeb9b44daa3ffddcae8643d6bf88b06dd5c844f86004cec` erteilt; die fuenf Aufbaupunkte des
+Gatepakets §4 hat der Owner bestaetigt (Peltier-Leistungspfad getrennt: Ownerangabe, Details nicht erfragt). Image-Datei, Groesse (1 832 944 B) und SHA-256
+wurden vor dem Versuch lokal gegen den Kandidaten geprueft: identisch.
+
+| Pruefung | Ergebnis |
+|---|---|
+| `esptool read-flash` (0x8000), `--before default-reset`, `chip-id`, `no-reset`, `usb-reset`, bis 15 Verbindungsversuche, mehrfach auch nach Neustecken aller Kabel | immer `No serial data received` |
+| passiver Mitschnitt nach reinem EN-Reset (115200, 74880, 921600 Baud, je 6–10 s) | 0 Bytes |
+| Owner beobachtet bei Portzugriffen Wechsel Bootloader/Normalstart | DTR/RTS-Leitungen wirken |
+| Loopback TXD–RXD am FT232 (`/dev/ttyUSB0`, `0403:6001`, Serie `A5069RR4`): pyserial und `stty`/`cat`, 9600–460800 Baud | 0 Bytes zurueck; Treiber `ftdi_sio` geladen, Port oeffnet, Schreiben ohne Fehler |
+
+Befund: Datenstrecke des FT232-Adapters empfaengt nicht; Defekt des Adapters wahrscheinlich (Owner: Adapter war am Vortag ungewoehnlich warm). Es gibt keinen
+weiteren Adapter, der Test wurde vom Owner abgebrochen.
+
+Nicht ausgefuehrt: Partitionstabelle lesen, Vorher-/Nachher-Hashes, `write-flash`, `verify-flash`, Bootbeobachtung, Display-/Sensorpruefung.
+**`FLASH=NOT_RUN`, `C0=BLOCKED` (Hardware/Adapter), C1=NOT_RUN, C2=BLOCKED.** Auf dem Geraet wurde nichts geschrieben. Hashgebundene Freigabe fuer
+`bbaaa764…` bleibt bestehen, solange Image und Aufbau unveraendert sind; nach Adapterersatz zuerst Loopback, dann Verbindung zum ESP32, dann Ablauf aus dem Gatepaket.
